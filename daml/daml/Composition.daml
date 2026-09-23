@@ -1,0 +1,190 @@
+-- | Core composition lifecycle: Propose → Accept → Settle → Receipt.
+-- Atomicity is guaranteed by Daml transaction semantics (R-ATOM-1/2).
+-- Per-leg privacy is enforced by observer scoping (R-PRIV-1/2/3).
+module Composition where
+
+import ComposableAsset
+import DA.Foldable (forA_)
+import DA.Set (Set)
+import qualified DA.Set as Set
+import DA.Time (getTime)
+
+-- | One proposed transfer leg. Visibility is scoped to provider + receiver
+-- when the concrete asset contracts are disclosed; proposal observers see
+-- the high-level schedule but not unrelated asset payloads.
+data LegSpec = LegSpec with
+    legId : Text
+    instrumentId : Text
+    amount : Decimal
+    provider : Party
+    receiver : Party
+    assetCid : ContractId ComposableAsset
+  deriving (Eq, Show)
+
+data LegStatus = LegPending | LegSettled | LegFailed
+  deriving (Eq, Show)
+
+data LegSummary = LegSummary with
+    legId : Text
+    instrumentId : Text
+    status : LegStatus
+  deriving (Eq, Show)
+
+-- | Proposed multi-leg deal. Reject/Expire/Accept choices.
+template CompositionProposal
+  with
+    operator : Party
+    proposer : Party
+    counterparties : [Party]
+    legs : [LegSpec]
+    description : Text
+    expiresAt : Time
+  where
+    signatory proposer, operator
+    observer counterparties
+    ensure
+      length legs >= 2
+      && length counterparties >= 1
+
+    choice RejectProposal : ()
+      with
+        reason : Text
+      controller head counterparties
+      do
+        pure ()
+
+    choice ExpireProposal : ()
+      controller operator
+      do
+        now <- getTime
+        assertMsg "proposal has not expired" (now >= expiresAt)
+        pure ()
+
+    nonconsuming choice AcceptProposal : ContractId AcceptanceTracker
+      with
+        acceptor : Party
+        trackerCid : Optional (ContractId AcceptanceTracker)
+      controller operator, acceptor
+      do
+        assertMsg "acceptor must be a counterparty" (elem acceptor counterparties)
+        case trackerCid of
+          None ->
+            create AcceptanceTracker with
+              operator
+              proposalCid = self
+              proposer
+              required = Set.fromList counterparties
+              accepted = Set.fromList [acceptor]
+              legs
+              description
+          Some cid -> do
+            exercise cid RecordAcceptance with acceptor
+
+-- | Tracks which counterparties have accepted; gates settlement.
+template AcceptanceTracker
+  with
+    operator : Party
+    proposalCid : ContractId CompositionProposal
+    proposer : Party
+    required : Set Party
+    accepted : Set Party
+    legs : [LegSpec]
+    description : Text
+  where
+    signatory operator
+    observer Set.toList required
+    ensure not (Set.null required)
+
+    choice RecordAcceptance : ContractId AcceptanceTracker
+      with
+        acceptor : Party
+      controller operator, acceptor
+      do
+        assertMsg "not a required party" (Set.member acceptor required)
+        create AcceptanceTracker with
+          operator
+          proposalCid
+          proposer
+          required
+          accepted = Set.insert acceptor accepted
+          legs
+          description
+
+    choice FinalizeAgreement : ContractId CompositionAgreement
+      controller operator
+      do
+        assertMsg "not all counterparties have accepted"
+          (Set.isSubsetOf required accepted)
+        create CompositionAgreement with
+          operator
+          parties = Set.insert proposer required
+          legs
+          description
+          acceptedBy = accepted
+
+-- | Co-signed deal. Atomic Settle maps Transfer over every leg, then emits receipt.
+template CompositionAgreement
+  with
+    operator : Party
+    parties : Set Party
+    legs : [LegSpec]
+    description : Text
+    acceptedBy : Set Party
+  where
+    signatory operator
+    observer Set.toList parties
+    ensure length legs >= 2
+
+    choice Settle : ContractId SettlementReceipt
+      controller operator
+      do
+        now <- getTime
+        -- R-ATOM-1: all Transfers run in this single transaction.
+        -- Any failure aborts the whole tx — no half-settled state (R-ATOM-2).
+        forA_ legs $ \leg -> do
+          exercise leg.assetCid Transfer with newOwner = leg.receiver
+        let summaries = map (\l -> LegSummary with
+              legId = l.legId
+              instrumentId = l.instrumentId
+              status = LegSettled) legs
+        create SettlementReceipt with
+          operator
+          participants = parties
+          settledAt = now
+          description
+          legSummaries = summaries
+          regulators = Set.empty
+
+    choice SettleWithRegulator : ContractId SettlementReceipt
+      with
+        regulator : Party
+      controller operator
+      do
+        now <- getTime
+        forA_ legs $ \leg -> do
+          exercise leg.assetCid Transfer with newOwner = leg.receiver
+        let summaries = map (\l -> LegSummary with
+              legId = l.legId
+              instrumentId = l.instrumentId
+              status = LegSettled) legs
+        create SettlementReceipt with
+          operator
+          participants = parties
+          settledAt = now
+          description
+          legSummaries = summaries
+          regulators = Set.fromList [regulator]
+
+-- | Proof a composition settled.
+-- Regulators observe the receipt + leg statuses but NOT asset payloads (R-PRIV-2).
+template SettlementReceipt
+  with
+    operator : Party
+    participants : Set Party
+    settledAt : Time
+    description : Text
+    legSummaries : [LegSummary]
+    regulators : Set Party
+  where
+    signatory operator
+    observer (Set.toList participants ++ Set.toList regulators)

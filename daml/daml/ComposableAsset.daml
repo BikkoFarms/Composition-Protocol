@@ -1,0 +1,21 @@
+-- | Minimal CIP-0056-shaped asset interface.
+-- Any token that implements ComposableAsset can be a composition leg.
+module ComposableAsset where
+
+data ComposableAssetView = ComposableAssetView with
+    owner : Party
+    instrumentId : Text
+    amount : Decimal
+  deriving (Eq, Show)
+
+data TransferResult = TransferResult with
+    newAssetCid : ContractId ComposableAsset
+  deriving (Eq, Show)
+
+interface ComposableAsset where
+  viewtype ComposableAssetView
+
+  choice Transfer : TransferResult
+    with
+      newOwner : Party
+    controller (view this).owner

@@ -1,0 +1,191 @@
+-- | Daml Script acceptance tests for atomicity + per-leg privacy.
+-- Gates: testAtomicSwap, testAtomicRevert, testAuditorCannotSeeLegs.
+module Test where
+
+import ComposableAsset
+import Composition
+import MockToken
+import Daml.Script
+
+allocateParties : Script (Party, Party, Party, Party, Party)
+allocateParties = do
+  operator <- allocateParty "Operator"
+  alice <- allocateParty "Alice"       -- borrower / proposer
+  bob <- allocateParty "Bob"           -- lender
+  oracle <- allocateParty "Oracle"
+  regulator <- allocateParty "Regulator"
+  pure (operator, alice, bob, oracle, regulator)
+
+mintToken : Party -> Party -> Text -> Decimal -> Script (ContractId MockToken)
+mintToken issuer owner instrumentId amount =
+  submitMulti [issuer, owner] [] do
+    createCmd MockToken with
+      owner
+      issuer
+      instrumentId
+      amount
+
+-- | R-ATOM-1/2 happy path: 2 parties, 2 assets, atomic end state.
+testAtomicSwap : Script ()
+testAtomicSwap = do
+  (operator, alice, bob, _oracle, _reg) <- allocateParties
+  aliceUsd <- mintToken operator alice "USDCx" 100.0
+  bobCbtc <- mintToken operator bob "CBTC" 1.0
+
+  let legs =
+        [ LegSpec with
+            legId = "cash"
+            instrumentId = "USDCx"
+            amount = 100.0
+            provider = alice
+            receiver = bob
+            assetCid = toInterfaceContractId aliceUsd
+        , LegSpec with
+            legId = "collateral"
+            instrumentId = "CBTC"
+            amount = 1.0
+            provider = bob
+            receiver = alice
+            assetCid = toInterfaceContractId bobCbtc
+        ]
+
+  proposalCid <- submitMulti [operator, alice] [bob] do
+    createCmd CompositionProposal with
+      operator
+      proposer = alice
+      counterparties = [bob]
+      legs
+      description = "atomic swap demo"
+      expiresAt = time (date 2099 Jan 1) 00:00:00
+
+  trackerCid <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with
+      acceptor = bob
+      trackerCid = None
+
+  agreementCid <- submit operator do
+    exerciseCmd trackerCid FinalizeAgreement
+
+  receiptCid <- submit operator do
+    exerciseCmd agreementCid Settle
+
+  Some receipt <- queryContractId operator receiptCid
+  assertMsg "both legs settled" (length receipt.legSummaries == 2)
+  pure ()
+
+-- | Forced failure: Settle with a consumed/wrong asset must fully revert.
+testAtomicRevert : Script ()
+testAtomicRevert = do
+  (operator, alice, bob, _oracle, _reg) <- allocateParties
+  aliceUsd <- mintToken operator alice "USDCx" 50.0
+  bobCbtc <- mintToken operator bob "CBTC" 1.0
+
+  -- Consume Alice's USDCx before settle so Transfer fails.
+  _ <- submit alice do
+    exerciseCmd (toInterfaceContractId aliceUsd) Transfer with newOwner = bob
+
+  let legs =
+        [ LegSpec with
+            legId = "cash"
+            instrumentId = "USDCx"
+            amount = 50.0
+            provider = alice
+            receiver = bob
+            assetCid = toInterfaceContractId aliceUsd
+        , LegSpec with
+            legId = "collateral"
+            instrumentId = "CBTC"
+            amount = 1.0
+            provider = bob
+            receiver = alice
+            assetCid = toInterfaceContractId bobCbtc
+        ]
+
+  proposalCid <- submitMulti [operator, alice] [bob] do
+    createCmd CompositionProposal with
+      operator
+      proposer = alice
+      counterparties = [bob]
+      legs
+      description = "revert demo"
+      expiresAt = time (date 2099 Jan 1) 00:00:00
+
+  trackerCid <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with
+      acceptor = bob
+      trackerCid = None
+
+  agreementCid <- submit operator do
+    exerciseCmd trackerCid FinalizeAgreement
+
+  -- Settle must fail; Bob must still hold CBTC (no partial settle).
+  submitMustFail operator do
+    exerciseCmd agreementCid Settle
+
+  bobTokens <- query @MockToken bob
+  assertMsg "bob still holds CBTC after revert" (length bobTokens == 1)
+  pure ()
+
+-- | R-PRIV-1/2/3: regulator sees SettlementReceipt, zero MockToken legs.
+testAuditorCannotSeeLegs : Script ()
+testAuditorCannotSeeLegs = do
+  (operator, alice, bob, oracle, regulator) <- allocateParties
+  collateral <- mintToken operator alice "CBTC" 2.0
+  cash <- mintToken operator bob "USDCx" 10000.0
+  attestation <- mintToken operator oracle "ATTEST" 1.0
+
+  let legs =
+        [ LegSpec with
+            legId = "collateral"
+            instrumentId = "CBTC"
+            amount = 2.0
+            provider = alice
+            receiver = bob
+            assetCid = toInterfaceContractId collateral
+        , LegSpec with
+            legId = "cash"
+            instrumentId = "USDCx"
+            amount = 10000.0
+            provider = bob
+            receiver = alice
+            assetCid = toInterfaceContractId cash
+        , LegSpec with
+            legId = "attestation"
+            instrumentId = "ATTEST"
+            amount = 1.0
+            provider = oracle
+            receiver = bob
+            assetCid = toInterfaceContractId attestation
+        ]
+
+  proposalCid <- submitMulti [operator, alice] [bob, oracle] do
+    createCmd CompositionProposal with
+      operator
+      proposer = alice
+      counterparties = [bob, oracle]
+      legs
+      description = "trade-finance composition"
+      expiresAt = time (date 2099 Jan 1) 00:00:00
+
+  tracker1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with
+      acceptor = bob
+      trackerCid = None
+
+  tracker2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposalCid AcceptProposal with
+      acceptor = oracle
+      trackerCid = Some tracker1
+
+  agreementCid <- submit operator do
+    exerciseCmd tracker2 FinalizeAgreement
+
+  receiptCid <- submit operator do
+    exerciseCmd agreementCid SettleWithRegulator with regulator
+
+  -- MONEY SHOT: regulator ACS has receipt, zero MockToken contracts.
+  regTokens <- query @MockToken regulator
+  assertMsg "regulator visibleTokens must be []" (null regTokens)
+
+  Some _receipt <- queryContractId regulator receiptCid
+  pure ()

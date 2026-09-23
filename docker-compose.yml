@@ -1,0 +1,39 @@
+services:
+  backend:
+    image: node:22-bookworm
+    working_dir: /app/backend
+    volumes:
+      - ./:/app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      # Uncomment for shared DevNet:
+      # - LEDGER_API_URL=https://ledger-api-json.participant.hackcanton-01.devnet.naas.noders.services
+      # - LEDGER_API_TOKEN=
+
+  frontend:
+    image: node:22-bookworm
+    working_dir: /app/frontend
+    volumes:
+      - ./:/app
+    command: sh -c "npm install && npm run dev -H 0.0.0.0"
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+    depends_on:
+      - backend
+
+  oracle:
+    image: node:22-bookworm
+    working_dir: /app
+    volumes:
+      - ./:/app
+    command: node mocks/oracle/server.mjs
+    ports:
+      - "4002:4002"
+
+  # Canton Sandbox / LocalNet: use canton-devkit separately.
+  # JSON Ledger API expected on host :7575 for LEDGER_API_URL=http://host.docker.internal:7575

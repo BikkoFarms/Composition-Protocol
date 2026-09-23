@@ -1,0 +1,14 @@
+node_modules/
+.next/
+dist/
+build/
+.env
+.env.local
+*.log
+.daml/
+daml/.daml/
+daml/dist/
+**/*.dar
+.DS_Store
+Thumbs.db
+Composition_Protocol_*.txt

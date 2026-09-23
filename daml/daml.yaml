@@ -1,0 +1,12 @@
+sdk-version: 3.3.0
+name: composition
+source: daml
+version: 0.1.0
+dependencies:
+  - daml-prim
+  - daml-stdlib
+  - daml-script
+build-options:
+  - --target=2.1
+test-dependencies:
+  - daml-script
