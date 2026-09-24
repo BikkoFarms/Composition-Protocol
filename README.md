@@ -227,22 +227,25 @@ To connect the backend to an active Canton participant node via the JSON Ledger 
 
 ---
 
+---
+
 ## 6. Verification & Automated Test Gates
 
 All core protocol guarantees are verified across two distinct test layers:
 
 ### 1. Node.js Backend Gate Suite
-Verifies atomicity, revert integrity, regulator privacy, and M-of-N threshold logic:
+Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshold logic, and judge metrics:
 ```bash
 cd backend
 npm test
 ```
-**Test Results:**
-- `testAtomicSwap` — 2+ legs settle all-or-nothing (Pass)
-- `testAtomicRevert` — failed leg leaves no half-state (Pass)
-- `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (Pass)
-- `R-GOV-1 below threshold rejected` — execution blocked with < M approvals (Pass)
-- `R-GOV-1 at threshold succeeds` — execution unlocked with == M approvals (Pass)
+**Automated Gate Results (6/6 Passing):**
+- `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
+- `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
+- `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
+- `R-GOV-1 below threshold rejected` — execution blocked with < M approvals **[Pass]**
+- `R-GOV-1 at threshold succeeds` — execution unlocked with == M approvals (`R-GOV-2`) **[Pass]**
+- `Judge Metrics` — throughput, average legs/deal, and success/revert rates **[Pass]**
 
 ### 2. Daml Script Test Suite
 Verifies on-ledger sub-transaction semantics and Canton stakeholder visibility (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
@@ -267,22 +270,37 @@ daml test
 | **Daml Smart Contracts** | Complete | `ComposableAsset`, `Composition`, `Governance`, `MockToken` |
 | **Daml Script Test Gates** | Complete | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, and governance |
-| **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries |
-| **Backend Test Gates** | Passing (5/5) | `npm test` passing in `backend/` |
+| **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC |
+| **Backend Test Gates** | Passing (6/6) | `npm test` passing in `backend/` |
 | **Frontend Next.js Views** | Complete | 6 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`) |
 | **Mock Oracle Service** | Complete | `mocks/oracle/server.mjs` serving price/grade feeds on port `:4002` |
-| **Agentic Environment** | Initialized | `.ai/rules.md`, `.ai/skills.json`, and `.ai/skills/` operational |
-| **Shared DevNet DAR Deploy** | Ready | Build scripts & OIDC token flow ready; pending live participant upload |
+| **Agentic Environment** | Operational | `.ai/rules.md`, `.ai/skills.json`, `.ai/context.md`, `.ai/ai.md`, and modular skills |
+| **Documentation Hub** | Complete | Architecture, API reference, Judging guide, Implementation plan, Context, AI guide |
 
 ---
 
-## 8. Pre-existing Code Disclosure
+## 8. Documentation Hub & Deep Dives
+
+- [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Technical blueprint, Mermaid lifecycle diagrams, sub-transaction privacy models, and failure modes.
+- [**docs/PROTOCOL.md**](docs/PROTOCOL.md) — Protocol Interface (PI) specification, Daml smart contract interfaces, wire payloads, and Canton sub-transaction privacy.
+- [**docs/API.md**](docs/API.md) — Complete REST API reference, request/response schemas, query parameters, and cURL examples.
+- [**docs/JUDGING.md**](docs/JUDGING.md) — HackCanton Season 3 evaluation guide, 3-minute quick walkthrough, and criteria matrix.
+- [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) — Full FR/SR requirements audit matrix cross-referencing PRD/SRD specifications.
+- [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
+- [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.
+- [**docs/DEVNET.md**](docs/DEVNET.md) — Shared HackCanton DevNet node connection, Keycloak OIDC token flow, and DAR deployment.
+- [**docs/JOURNAL.md**](docs/JOURNAL.md) — Daily AI-guided hackathon engineering log (judging artifact).
+
+---
+
+## 9. Pre-existing Code Disclosure
 
 Per HackCanton Season 3 official guidelines: Any contracts or code created prior to **September 18, 2026** must be disclosed.  
 **This repository's initial delivery-phase commit represents the first public codebase**—no prior private DAR or codebase is claimed as in-window work. The evaluation window runs from **September 18 to October 9, 2026**.
 
 ---
 
-## 9. License
+## 10. License
 
 Distributed under the Apache 2.0 License. See [LICENSE](LICENSE) for details.
+

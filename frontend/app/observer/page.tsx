@@ -1,5 +1,16 @@
 "use client";
 
+/**
+ * Observer Money Shot Page — Proving Canton Sub-Transaction Privacy
+ *
+ * Demonstrates the core privacy guarantee of Canton (R-PRIV-1, R-PRIV-2, R-PRIV-3):
+ * - Two views of the SAME ledger state: Participant (Bob) vs Regulator.
+ * - Bob holds the transferred asset tokens in his Active Contract Set (ACS).
+ * - Regulator holds the SettlementReceipt (metadata, timestamp, leg status).
+ * - Regulator's token ACS is strictly EMPTY: `visibleTokens: []`.
+ * - Canton sub-transaction privacy cryptographically isolates non-observer contracts.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
