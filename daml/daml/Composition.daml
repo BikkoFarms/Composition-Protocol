@@ -53,6 +53,13 @@ template CompositionProposal
       do
         pure ()
 
+    -- | Proposer cancellation choice: enables proposer to cleanly withdraw
+    -- an unfinalized deal if market conditions or counterparties change.
+    choice CancelProposal : ()
+      controller proposer
+      do
+        pure ()
+
     choice ExpireProposal : ()
       controller operator
       do
@@ -174,6 +181,14 @@ template CompositionAgreement
           description
           legSummaries = summaries
           regulators = Set.fromList [regulator]
+
+    -- | Agreement cancellation / unwind choice: allows operator to cleanly void an un-settled agreement.
+    choice CancelAgreement : ()
+      with
+        reason : Text
+      controller operator
+      do
+        pure ()
 
 -- | Proof a composition settled.
 -- Regulators observe the receipt + leg statuses but NOT asset payloads (R-PRIV-2).

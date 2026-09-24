@@ -8,12 +8,15 @@
 - Next: `daml test` on SDK 3.3; wire OIDC + upload DAR to shared DevNet; book builder interviews.
 
 ## 2026-09-24
-- **MVP:** one-click pitch demo (`/demo`, `POST /compositions/demo/run-full`).
+- **MVP:** One-click pitch demo (`/demo`, `POST /compositions/demo/run-full`).
 - **Metrics:** `/metrics` UI + `POST /compositions/demo/load` (50 settlements evidence).
-- **BitSafe secondary:** Daml `Governance` + `TestGovernance`; demo 2-of-3 UI at `/governance`.
-- **Validation:** Node gate tests (`npm test` in backend) for atomicity, revert, auditor privacy, M-of-N.
-- **GTM/DevNet:** `scripts/oidc-token.mjs` + `docs/DEVNET.md`.
-- **Design:** adopted Lattice (parchment / forest ink / pastel specimen cards) across all role views — `docs/DESIGN.md`.
+- **BitSafe secondary:** Daml `Governance` + `TestGovernance`; demo 2-of-3 UI at `/governance`, plus `EmergencyVeto` / `ProtocolCircuitBreaker`.
+- **Validation:** Backend gate suites covering atomicity, revert, privacy, M-of-N, veto, circuit breaker.
+- **Design:** Lattice (parchment / forest ink / pastel specimen cards) — `docs/DESIGN.md`.
 - **Interviews:** `docs/INTERVIEWS.md` guide for Metrics criterion.
 - **OIDC:** backend `/admin/refresh-token` + health `ledgerReachable`.
-- Next: install Daml SDK → `daml test` green; upload DAR to Noders DevNet; run 3–5 builder interviews from the guide.
+- **Mission Control:** `/admin` portal (latency ping, ledger/demo toggle, treasury mint, reset).
+- **Oracle:** `mocks/oracle/server.mjs` — spot quotes + HMAC-SHA256 warehouse certificates on :4002.
+- **Docs:** `CONTRIBUTING.md`, `docs/RISK_ASSESSMENT.md`, judging alignment for Track 1 + BitSafe.
+- **GTM/DevNet:** `scripts/oidc-token.mjs` + `docs/DEVNET.md` + live e2e runner.
+- Next: upload DAR to Noders DevNet; run 3–5 builder interviews; live judging walkthrough.

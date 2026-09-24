@@ -15,6 +15,7 @@ const links = [
   { href: "/observer", label: "Observer" },
   { href: "/governance", label: "Governance" },
   { href: "/metrics", label: "Metrics" },
+  { href: "/admin", label: "Admin" },
 ];
 
 export default function RootLayout({ children }: { children: ReactNode }) {

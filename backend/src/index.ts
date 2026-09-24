@@ -5,6 +5,7 @@ import { fetchAccessToken, oidcFromEnv } from "./oidc.js";
 import { assetsRouter } from "./routes/assets.js";
 import { compositionsRouter } from "./routes/compositions.js";
 import { auditRouter } from "./routes/audit.js";
+import { adminRouter } from "./routes/admin.js";
 
 /**
  * Composition Protocol Backend API Gateway
@@ -78,6 +79,7 @@ app.post("/admin/refresh-token", async (_req, res) => {
 app.use("/assets", assetsRouter);
 app.use("/compositions", compositionsRouter);
 app.use("/audit", auditRouter);
+app.use("/admin", adminRouter);
 
 app.listen(port, async () => {
   console.log(

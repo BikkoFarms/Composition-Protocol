@@ -331,3 +331,44 @@ Records a governor signature on a pending deal.
 Attempts execution of the governed settlement.
 - If `approvals < threshold`: Returns `HTTP 409 Conflict` (`below threshold — governed action rejected`).
 - If `approvals >= threshold`: Returns `HTTP 200 OK` and executes atomic settlement.
+
+### `POST /compositions/governance/:id/veto`
+Allows an authorized committee governor to abort an open deal prior to execution.
+```json
+{
+  "governor": "Gov1",
+  "reason": "Collateral valuation anomaly"
+}
+```
+
+---
+
+## 7. Institutional Risk Controls & Cancellation
+
+### `POST /compositions/:id/cancel`
+Allows the deal proposer to cleanly withdraw an un-settled deal.
+```json
+{
+  "caller": "Alice"
+}
+```
+
+### `GET /compositions/circuit-breaker/state`
+Returns the active state of the emergency circuit breaker:
+```json
+{
+  "isHalted": false,
+  "haltReason": null,
+  "haltedBy": null,
+  "updatedAt": "2026-09-24T12:00:00.000Z"
+}
+```
+
+### `POST /compositions/circuit-breaker/toggle`
+Triggers or resets an institutional emergency circuit breaker halt:
+```json
+{
+  "caller": "Operator",
+  "reason": "Oracle inspection outage"
+}
+```

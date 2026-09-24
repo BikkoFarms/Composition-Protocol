@@ -46,6 +46,7 @@ ComposableAsset (Interface)
         └── choice Transfer : TransferResult
 
 CompositionProposal (signatory: proposer, operator; observer: counterparties)
+  ├── choice CancelProposal : ()
   ├── choice RejectProposal : ()
   ├── choice ExpireProposal : ()
   └── nonconsuming choice AcceptProposal : ContractId AcceptanceTracker
@@ -55,6 +56,7 @@ AcceptanceTracker (signatory: operator; observer: required)
   └── choice FinalizeAgreement : ContractId CompositionAgreement
 
 CompositionAgreement (signatory: operator; observer: parties)
+  ├── choice CancelAgreement : ()
   ├── choice Settle : ContractId SettlementReceipt
   └── choice SettleWithRegulator : ContractId SettlementReceipt
 
@@ -62,24 +64,34 @@ SettlementReceipt (signatory: operator; observer: participants ++ regulators)
 
 GovernedSettlement (signatory: operator; observer: governors)
   ├── choice ApproveGoverned : ContractId GovernedSettlement
+  ├── choice EmergencyVeto : ()
   └── choice ExecuteGoverned : ContractId SettlementReceipt
+
+ProtocolCircuitBreaker (signatory: operator; observer: governors)
+  ├── choice PauseSettlements : ContractId ProtocolCircuitBreaker
+  └── choice ResumeSettlements : ContractId ProtocolCircuitBreaker
 ```
 
 ---
 
 ## 5. Verification & Acceptance Testing Gates
 
-All changes, extensions, or refactors must satisfy the following automated acceptance gates:
+All changes, extensions, or refactors must satisfy the following automated acceptance gates (enforced via `npm test` in `backend/`):
 
-1. **`testAtomicSwap`:**
-   - Multi-party, multi-asset swap executes to completion.
-   - All leg assets transfer cleanly in one transaction.
-2. **`testAtomicRevert`:**
-   - Forced failure in one leg (e.g. pre-consumed asset) causes full transaction abort.
-   - Counterparty tokens remain untouched (zero partial settlement).
-3. **`testAuditorCannotSeeLegs` (The "Money Shot"):**
-   - Regulator ACS contains `SettlementReceipt`.
-   - Regulator ACS contains exactly 0 `MockToken` or leg contracts (`visibleTokens == []`).
-4. **`testGovernedBelowThreshold` & `testGovernedAtThreshold`:**
-   - Governed deal fails to execute with < M signatures.
-   - Governed deal succeeds upon reaching M signatures.
+1. **`testAtomicSwap`:** Multi-party swap executes in 1 atomic transaction.
+2. **`testAtomicRevert`:** Forced failure in one leg causes 100% rollback with zero partial balance.
+3. **`testAuditorCannotSeeLegs` (The "Money Shot"):** Regulator ACS contains `SettlementReceipt` and strictly 0 token contracts (`visibleTokens == []`).
+4. **`testGovernedBelowThreshold`:** Governed deal fails to execute with < M signatures.
+5. **`testGovernedAtThreshold`:** Governed deal succeeds upon reaching M signatures.
+6. **`testEmergencyVeto`:** Governor can unilaterally abort a pending deal if suspicious activity is detected.
+7. **`testCircuitBreaker`:** Global circuit breaker prevents settlements when triggered.
+
+---
+
+## 6. References & Engineering Guides
+
+- Contributor Onboarding: [CONTRIBUTING.md](file:///c:/Users/user/Desktop/Composition-Protocol/CONTRIBUTING.md)
+- Complete Risk Audit: [docs/RISK_ASSESSMENT.md](file:///c:/Users/user/Desktop/Composition-Protocol/docs/RISK_ASSESSMENT.md)
+- Architecture Blueprint: [docs/ARCHITECTURE.md](file:///c:/Users/user/Desktop/Composition-Protocol/docs/ARCHITECTURE.md)
+- HackCanton Judging Guide: [docs/JUDGING.md](file:///c:/Users/user/Desktop/Composition-Protocol/docs/JUDGING.md)
+

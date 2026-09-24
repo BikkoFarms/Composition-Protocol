@@ -1,9 +1,9 @@
 /**
  * In-memory composition engine for LocalNet UI demos when no ledger is configured.
  * Mirrors Propose → Accept → Settle / Revert and per-party ACS visibility (R-PRIV).
- * BitSafe extension: M-of-N governed settlement (R-GOV-1/2).
+ * BitSafe extension: M-of-N governed settlement (R-GOV-1/2) + Emergency Circuit Breaker.
  */
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 export type PartyId =
   | "Operator"
@@ -30,6 +30,7 @@ export type LegSpec = {
   provider: PartyId;
   receiver: PartyId;
   assetCid: string;
+  cantonDomain?: string;
 };
 
 export type CompositionStatus =
@@ -38,7 +39,8 @@ export type CompositionStatus =
   | "accepted"
   | "awaiting_governance"
   | "settled"
-  | "reverted";
+  | "reverted"
+  | "cancelled";
 
 export type Composition = {
   id: string;
@@ -53,6 +55,9 @@ export type Composition = {
   legs: LegSpec[];
   description: string;
   status: CompositionStatus;
+  dealHash?: string;
+  collateralRatio?: string;
+  ltvPercent?: number;
   settledAt?: string;
   legSummaries?: { legId: string; instrumentId: string; status: string }[];
   forceFail?: boolean;
@@ -66,6 +71,14 @@ export type Governance = {
   threshold: number;
   approvals: PartyId[];
   status: "open" | "executed" | "rejected";
+  vetoReason?: string;
+};
+
+export type CircuitBreakerState = {
+  isHalted: boolean;
+  haltReason: string | null;
+  haltedBy: string | null;
+  updatedAt: string;
 };
 
 export type SettlementEvent = {
@@ -108,6 +121,12 @@ export class DemoStore {
   compositions = new Map<string, Composition>();
   governances = new Map<string, Governance>();
   events: SettlementEvent[] = [];
+  circuitBreaker: CircuitBreakerState = {
+    isHalted: false,
+    haltReason: null,
+    haltedBy: null,
+    updatedAt: new Date().toISOString(),
+  };
 
   private _rawMetrics = {
     compositionsSettled: 0,
@@ -238,6 +257,24 @@ export class DemoStore {
       }
     }
     const id = randomUUID();
+    const dealHash = createHash("sha256")
+      .update(JSON.stringify({ proposer: input.proposer, counterparties: input.counterparties, legs: input.legs }))
+      .digest("hex");
+
+    // Institutional collateral valuation (e.g. 1 CBTC = $65,000 reference valuation vs USDCx loan)
+    let collateralRatio: string | undefined;
+    let ltvPercent: number | undefined;
+    const cbtcLeg = input.legs.find((l) => l.instrumentId === "CBTC");
+    const usdcLeg = input.legs.find((l) => l.instrumentId === "USDCx");
+    if (cbtcLeg && usdcLeg) {
+      const cbtcVal = Number(cbtcLeg.amount) * 65000;
+      const loanVal = Number(usdcLeg.amount);
+      if (loanVal > 0) {
+        collateralRatio = `${Math.round((cbtcVal / loanVal) * 100)}%`;
+        ltvPercent = Number(((loanVal / cbtcVal) * 100).toFixed(1));
+      }
+    }
+
     const c: Composition = {
       id,
       proposalCid: `prop-${id}`,
@@ -251,6 +288,9 @@ export class DemoStore {
       legs: input.legs,
       description: input.description,
       status: "proposed",
+      dealHash,
+      collateralRatio,
+      ltvPercent,
       forceFail: input.forceFail,
       requireGovernance: input.requireGovernance,
     };
@@ -258,7 +298,7 @@ export class DemoStore {
     return c;
   }
 
-  /** Seed standard 3-leg African commodity trade-finance topology. */
+  /** Seed standard 3-leg African commodity trade-finance topology with Canton domain routing. */
   proposeTradeFinance(opts?: {
     forceFail?: boolean;
     requireGovernance?: boolean;
@@ -288,6 +328,7 @@ export class DemoStore {
           provider: "Alice",
           receiver: "Bob",
           assetCid: collateral.contractId,
+          cantonDomain: "canton-domain-rwa-01.eu",
         },
         {
           legId: "cash",
@@ -296,6 +337,7 @@ export class DemoStore {
           provider: "Bob",
           receiver: "Alice",
           assetCid: cash.contractId,
+          cantonDomain: "canton-domain-liquidity-02.us",
         },
         {
           legId: "attestation",
@@ -304,6 +346,7 @@ export class DemoStore {
           provider: "Oracle",
           receiver: "Bob",
           assetCid: attest.contractId,
+          cantonDomain: "canton-domain-oracle-03.global",
         },
       ],
     });
@@ -322,11 +365,38 @@ export class DemoStore {
     return c;
   }
 
+  /** Proposer cancellation before execution */
+  cancel(compositionId: string, caller: PartyId): Composition {
+    const c = this.require(compositionId);
+    if (c.status === "settled") throw new Error("cannot cancel settled composition");
+    if (c.proposer !== caller && caller !== "Operator") {
+      throw new Error(`only proposer ${c.proposer} or Operator can cancel`);
+    }
+    c.status = "cancelled";
+    return c;
+  }
+
+  /** Toggle emergency circuit breaker for institutional halts */
+  toggleCircuitBreaker(caller: PartyId, reason?: string): CircuitBreakerState {
+    const isNowHalted = !this.circuitBreaker.isHalted;
+    this.circuitBreaker = {
+      isHalted: isNowHalted,
+      haltReason: isNowHalted ? (reason ?? "Emergency governor circuit breaker triggered") : null,
+      haltedBy: isNowHalted ? caller : null,
+      updatedAt: new Date().toISOString(),
+    };
+    return this.circuitBreaker;
+  }
+
   /**
-   * Atomic settle. If requireGovernance, creates GovernedSettlement and blocks
-   * until M-of-N approvals (R-GOV-1).
+   * Atomic settle. Enforces circuit breaker, governance gates, and all-or-nothing execution.
    */
   settle(compositionId: string, withRegulator = true): Composition {
+    if (this.circuitBreaker.isHalted) {
+      throw new Error(
+        `settlement rejected: protocol circuit breaker is active (${this.circuitBreaker.haltReason ?? "emergency halt"})`,
+      );
+    }
     const c = this.require(compositionId);
     if (c.status !== "accepted" && c.status !== "awaiting_governance") {
       throw new Error("composition not fully accepted");
@@ -460,6 +530,30 @@ export class DemoStore {
     gov.status = "executed";
     this._rawMetrics.governedSettlements += 1;
     return settled;
+  }
+
+  /** Institutional Emergency Veto: Allows named governor to abort an open deal */
+  vetoGovernance(governanceId: string, governor: PartyId, reason: string): Governance {
+    const gov = this.requireGov(governanceId);
+    if (gov.status !== "open") throw new Error("governance not open");
+    if (!gov.governors.includes(governor)) {
+      throw new Error(`${governor} is not a named governor`);
+    }
+    gov.status = "rejected";
+    gov.vetoReason = reason;
+    const c = this.require(gov.compositionId);
+    c.status = "reverted";
+    this._rawMetrics.governanceRejections += 1;
+    this._rawMetrics.compositionsReverted += 1;
+    this.recordEvent({
+      id: c.id,
+      type: "reverted",
+      timestamp: new Date().toISOString(),
+      legs: c.legs.length,
+      description: `${c.description} (Vetoed by ${governor}: ${reason})`,
+      governanceCid: gov.id,
+    });
+    return gov;
   }
 
   /** Pitch path: propose → accept all → settle → money-shot payload. */
