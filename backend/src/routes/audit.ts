@@ -17,7 +17,7 @@ auditRouter.get("/view/:party", (req, res) => {
 });
 
 auditRouter.get("/metrics", (_req, res) => {
-  res.json(demoStore.metrics);
+  res.json(demoStore.getMetrics());
 });
 
 /** Side-by-side money-shot payload for the pitch demo. */
