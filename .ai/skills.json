@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "composition-protocol-agent-skills",
+  "version": "1.0.0",
+  "description": "Agent capabilities for Composition Protocol: Daml template development, Canton Ledger API v2 integration, Express routing, and atomicity/privacy test gates.",
+  "skills": [
+    {
+      "id": "build-daml-templates",
+      "name": "Build & Refine Daml Templates",
+      "description": "Author, compile, and validate Daml 3.x smart contracts conforming to CIP-0056 and atomic multi-asset composition patterns.",
+      "capabilities": [
+        "Create and modify ComposableAsset interface implementations",
+        "Maintain CompositionProposal, AcceptanceTracker, and CompositionAgreement lifecycle contracts",
+        "Implement SettlementReceipt with strict observer privacy scoping",
+        "Build M-of-N GovernedSettlement templates for BitSafe decentralization",
+        "Execute 'daml build' and compile DAR artifacts"
+      ],
+      "constraints": [
+        "Strictly adhere to Daml 3.x syntax and --target=2.1 compiler target",
+        "All asset transfers within an agreement must run in a single atomic transaction choice",
+        "Never disclose raw token contract IDs or payloads to observer/regulator parties"
+      ],
+      "references": [
+        "daml/daml/ComposableAsset.daml",
+        "daml/daml/Composition.daml",
+        "daml/daml/Governance.daml",
+        "daml/daml/MockToken.daml"
+      ]
+    },
+    {
+      "id": "integrate-ledger-api-bridge",
+      "name": "Integrate Canton Ledger API v2 Bridge",
+      "description": "Interface Node.js/TypeScript backend with Canton JSON Ledger API v2 (:7575) or fallback to the in-memory demoStore.",
+      "capabilities": [
+        "Construct Ledger API v2 submit-and-wait commands for contract creation and choice exercise",
+        "Query Active Contract Sets (ACS) filtered by party offset and template ID",
+        "Encode data types correctly: Decimal as JSON string, Date as YYYY-MM-DD, Optional as value|null",
+        "Handle OIDC token authentication against Keycloak endpoints",
+        "Maintain synchronization between in-memory demo store and live ledger client"
+      ],
+      "constraints": [
+        "Port defaults to 7575 for local Canton JSON API and 4000 for Express backend",
+        "Ensure fallback to demoStore when LEDGER_API_URL is unset",
+        "Validate party identifiers and token metadata prior to dispatching ledger commands"
+      ],
+      "references": [
+        "backend/src/ledger.ts",
+        "backend/src/demoStore.ts",
+        "scripts/oidc-token.mjs"
+      ]
+    },
+    {
+      "id": "setup-express-routes",
+      "name": "Setup & Extend Express Routes",
+      "description": "Implement RESTful and demo orchestration endpoints in Express for frontend consumption.",
+      "capabilities": [
+        "Manage /compositions lifecycle endpoints: propose, accept, settle, and demo load generation",
+        "Manage /governance endpoints: open, approve, and execute M-of-N deals",
+        "Serve /audit and /audit/money-shot endpoints for side-by-side privacy verification",
+        "Manage /assets endpoints for minting and token inventory queries",
+        "Support CORS and JSON payloads with comprehensive error status mapping (400, 404, 409)"
+      ],
+      "constraints": [
+        "Maintain atomic revert error responses (HTTP 409) with atomic: true flag",
+        "Provide real-time metrics tracking on settlements, reverts, and leg counts",
+        "Ensure demo routes support forceFail and requireGovernance flags"
+      ],
+      "references": [
+        "backend/src/routes/compositions.ts",
+        "backend/src/routes/assets.ts",
+        "backend/src/routes/audit.ts"
+      ]
+    },
+    {
+      "id": "run-verification-tests",
+      "name": "Run Atomicity, Privacy & Governance Tests",
+      "description": "Execute automated acceptance tests verifying all core protocol invariants.",
+      "capabilities": [
+        "Run backend test suite using tsx --test src/demoStore.test.ts",
+        "Verify testAtomicSwap: all-or-nothing multi-leg settlement",
+        "Verify testAtomicRevert: zero half-settled state when an individual leg fails",
+        "Verify testAuditorCannotSeeLegs: regulator ACS has visibleTokens: [] and valid SettlementReceipt",
+        "Verify R-GOV-1 & R-GOV-2: M-of-N below-threshold rejection and at-threshold execution",
+        "Execute Daml Script tests via daml test when Daml SDK 3.3.x is available"
+      ],
+      "constraints": [
+        "All 5 primary acceptance tests must pass before approving code merges",
+        "Zero regressions in privacy guarantees or atomicity behavior allowed"
+      ],
+      "references": [
+        "backend/src/demoStore.test.ts",
+        "daml/daml/Test.daml",
+        "daml/daml/TestGovernance.daml"
+      ]
+    }
+  ]
+}
