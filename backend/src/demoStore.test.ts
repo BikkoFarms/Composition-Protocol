@@ -77,4 +77,23 @@ describe("Composition Protocol demo gates", () => {
     assert.equal(settled.status, "settled");
     assert.equal(store.metrics.governedSettlements, 1);
   });
+
+  it("Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate", () => {
+    // 2 happy path deals (3 legs each)
+    store.runFullDemo();
+    store.runFullDemo();
+    // 1 forced revert deal
+    store.runFullDemo({ forceFail: true });
+
+    const m = store.metrics;
+    assert.equal(m.compositionsSettled, 2);
+    assert.equal(m.compositionsReverted, 1);
+    assert.equal(m.totalAttempted, 3);
+    assert.equal(m.legsSettled, 6);
+    assert.equal(m.avgLegsPerComposition, 3.0);
+    assert.equal(m.successRate, 66.7);
+    assert.equal(m.revertRate, 33.3);
+    assert.ok(m.recentEvents.length >= 3);
+    assert.equal(m.unexpectedFailures, 0);
+  });
 });

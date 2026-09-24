@@ -41,6 +41,7 @@ app.get("/health", async (_req, res) => {
     mode: ledger ? "ledger" : "demo",
     ledgerConfigured: Boolean(ledger),
     ledgerReachable,
+    ledgerUrl: ledger ? ledger.getBaseUrl() : null,
     oidcConfigured: Boolean(oidc),
     package: "composition-protocol",
     design: "lattice",

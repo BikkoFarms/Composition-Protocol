@@ -68,6 +68,16 @@ export type Governance = {
   status: "open" | "executed" | "rejected";
 };
 
+export type SettlementEvent = {
+  id: string;
+  type: "settled" | "reverted" | "governed";
+  timestamp: string;
+  legs: number;
+  description: string;
+  receiptCid?: string | null;
+  governanceCid?: string | null;
+};
+
 export type Metrics = {
   compositionsSettled: number;
   compositionsReverted: number;
@@ -75,6 +85,11 @@ export type Metrics = {
   unexpectedFailures: number;
   governedSettlements: number;
   governanceRejections: number;
+  totalAttempted: number;
+  avgLegsPerComposition: number;
+  successRate: number;
+  revertRate: number;
+  recentEvents: SettlementEvent[];
 };
 
 const parties: PartyId[] = [
@@ -92,7 +107,9 @@ export class DemoStore {
   tokens = new Map<string, Token>();
   compositions = new Map<string, Composition>();
   governances = new Map<string, Governance>();
-  metrics: Metrics = {
+  events: SettlementEvent[] = [];
+
+  private _rawMetrics = {
     compositionsSettled: 0,
     compositionsReverted: 0,
     legsSettled: 0,
@@ -100,6 +117,62 @@ export class DemoStore {
     governedSettlements: 0,
     governanceRejections: 0,
   };
+
+  get metrics(): Metrics {
+    return this.getMetrics();
+  }
+
+  getMetrics(): Metrics {
+    const totalAttempted =
+      this._rawMetrics.compositionsSettled + this._rawMetrics.compositionsReverted;
+    const avgLegsPerComposition =
+      this._rawMetrics.compositionsSettled > 0
+        ? Number(
+            (
+              this._rawMetrics.legsSettled / this._rawMetrics.compositionsSettled
+            ).toFixed(2),
+          )
+        : 0;
+    const successRate =
+      totalAttempted > 0
+        ? Number(
+            (
+              (this._rawMetrics.compositionsSettled / totalAttempted) *
+              100
+            ).toFixed(1),
+          )
+        : 100.0;
+    const revertRate =
+      totalAttempted > 0
+        ? Number(
+            (
+              (this._rawMetrics.compositionsReverted / totalAttempted) *
+              100
+            ).toFixed(1),
+          )
+        : 0.0;
+
+    return {
+      compositionsSettled: this._rawMetrics.compositionsSettled,
+      compositionsReverted: this._rawMetrics.compositionsReverted,
+      legsSettled: this._rawMetrics.legsSettled,
+      unexpectedFailures: this._rawMetrics.unexpectedFailures,
+      governedSettlements: this._rawMetrics.governedSettlements,
+      governanceRejections: this._rawMetrics.governanceRejections,
+      totalAttempted,
+      avgLegsPerComposition,
+      successRate,
+      revertRate,
+      recentEvents: [...this.events],
+    };
+  }
+
+  recordEvent(event: SettlementEvent) {
+    this.events.unshift(event);
+    if (this.events.length > 25) {
+      this.events.pop();
+    }
+  }
 
   constructor() {
     this.seed();
@@ -109,7 +182,8 @@ export class DemoStore {
     this.tokens.clear();
     this.compositions.clear();
     this.governances.clear();
-    this.metrics = {
+    this.events = [];
+    this._rawMetrics = {
       compositionsSettled: 0,
       compositionsReverted: 0,
       legsSettled: 0,
@@ -277,14 +351,28 @@ export class DemoStore {
   private executeSettle(c: Composition, withRegulator: boolean): Composition {
     if (c.forceFail) {
       c.status = "reverted";
-      this.metrics.compositionsReverted += 1;
+      this._rawMetrics.compositionsReverted += 1;
+      this.recordEvent({
+        id: c.id,
+        type: "reverted",
+        timestamp: new Date().toISOString(),
+        legs: c.legs.length,
+        description: `${c.description} (forced revert)`,
+      });
       throw new Error("atomic settle reverted: leg Transfer failed");
     }
     for (const leg of c.legs) {
       const tok = this.tokens.get(leg.assetCid);
       if (!tok || tok.owner !== leg.provider) {
         c.status = "reverted";
-        this.metrics.compositionsReverted += 1;
+        this._rawMetrics.compositionsReverted += 1;
+        this.recordEvent({
+          id: c.id,
+          type: "reverted",
+          timestamp: new Date().toISOString(),
+          legs: c.legs.length,
+          description: `${c.description} (leg ${leg.legId} failed)`,
+        });
         throw new Error(`atomic settle reverted: leg ${leg.legId} failed`);
       }
     }
@@ -300,8 +388,17 @@ export class DemoStore {
       instrumentId: l.instrumentId,
       status: "LegSettled",
     }));
-    this.metrics.compositionsSettled += 1;
-    this.metrics.legsSettled += c.legs.length;
+    this._rawMetrics.compositionsSettled += 1;
+    this._rawMetrics.legsSettled += c.legs.length;
+    this.recordEvent({
+      id: c.id,
+      type: c.requireGovernance ? "governed" : "settled",
+      timestamp: c.settledAt,
+      legs: c.legs.length,
+      description: c.description,
+      receiptCid: c.receiptCid,
+      governanceCid: c.governanceCid,
+    });
     void withRegulator;
     return c;
   }
@@ -351,7 +448,7 @@ export class DemoStore {
     const gov = this.requireGov(governanceId);
     if (gov.status !== "open") throw new Error("governance not open");
     if (gov.approvals.length < gov.threshold) {
-      this.metrics.governanceRejections += 1;
+      this._rawMetrics.governanceRejections += 1;
       throw new Error(
         `below threshold: ${gov.approvals.length}/${gov.threshold} — governed action rejected`,
       );
@@ -361,7 +458,7 @@ export class DemoStore {
     c.status = "accepted";
     const settled = this.executeSettle(c, true);
     gov.status = "executed";
-    this.metrics.governedSettlements += 1;
+    this._rawMetrics.governedSettlements += 1;
     return settled;
   }
 
