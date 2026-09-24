@@ -129,7 +129,12 @@ Traditional transparent blockchains require complex zero-knowledge (ZK) circuits
 - **Participant ACS (Bob):** Sees his inbound `CBTC` collateral, outbound `USDCx` debit, inbound `ATTEST` certificate, and the `SettlementReceipt`.
 - **Observer ACS (Regulator):** Queries Canton's Active Contract Set (ACS) at the ledger end offset. Because `MockToken` instances declare only leg stakeholders, Canton's domain sequencer **never projects token contract data to the regulator's node**.
 - **Audit Outcome:**
-  $$\text{Regulator ACS} \implies \left\{ \begin{array}{ll} \texttt{visibleTokens} & = \mathbf{[]} \\ \texttt{settlementReceipts} & = \mathbf{[Receipt]} \end{array} \right.$$
+  ```text
+  Regulator Active Contract Set (ACS) Query Result:
+  ├── visibleTokens:        []        (0 token contracts disclosed — cryptographic exclusion)
+  └── settlementReceipts:   [Receipt] (Immutable audit proof with timestamp and leg statuses)
+  ```
+  $$\text{Regulator ACS} \implies \{ \text{visibleTokens: []}, \; \text{settlementReceipts: [Receipt]} \}$$
 
 ---
 

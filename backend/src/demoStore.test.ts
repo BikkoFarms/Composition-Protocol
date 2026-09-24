@@ -139,4 +139,13 @@ describe("Composition Protocol demo gates", () => {
     assert.ok(c.ltvPercent);
     assert.ok(c.legs[0].cantonDomain);
   });
+
+  it("Operator Treasury Direct Minting — issues new composable assets to party ACS", () => {
+    const minted = store.mint("Alice", "cETH", "15.5");
+    assert.equal(minted.owner, "Alice");
+    assert.equal(minted.instrumentId, "cETH");
+    assert.equal(minted.amount, "15.5");
+    const aliceTokens = store.listTokens("Alice");
+    assert.ok(aliceTokens.some((t) => t.instrumentId === "cETH" && t.amount === "15.5"));
+  });
 });

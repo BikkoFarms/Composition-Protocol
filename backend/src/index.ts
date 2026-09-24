@@ -4,6 +4,7 @@ import { ledgerFromEnv } from "./ledger.js";
 import { assetsRouter } from "./routes/assets.js";
 import { compositionsRouter } from "./routes/compositions.js";
 import { auditRouter } from "./routes/audit.js";
+import { adminRouter } from "./routes/admin.js";
 
 /**
  * Composition Protocol Backend API Gateway
@@ -49,6 +50,7 @@ app.get("/health", (_req, res) => {
 app.use("/assets", assetsRouter);
 app.use("/compositions", compositionsRouter);
 app.use("/audit", auditRouter);
+app.use("/admin", adminRouter);
 
 app.listen(port, () => {
   console.log(`Composition Protocol API on :${port} (mode=${mode})`);

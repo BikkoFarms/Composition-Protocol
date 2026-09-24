@@ -31,6 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <Link href="/observer">Observer (Money Shot)</Link>
                 <Link href="/governance">BitSafe Governance</Link>
                 <Link href="/metrics">Protocol Metrics</Link>
+                <Link href="/admin" style={{ color: "#c4b5fd" }}>Admin Console</Link>
               </nav>
 
               <div className="live-badge" title="Canton Sub-Transaction Privacy Active">

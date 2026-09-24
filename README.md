@@ -139,10 +139,11 @@ Composition-Protocol/
 │   │   ├── counterparty/   # Lender (Bob) & Oracle acceptance portal
 │   │   ├── observer/       # Regulator / Auditor ACS zero-leak verification
 │   │   ├── governance/     # BitSafe 2-of-3 multi-sig approval dashboard
-│   │   └── metrics/        # Real-time protocol performance & load metrics
+│   │   ├── metrics/        # Real-time protocol performance & load metrics
+│   │   └── admin/          # Principal Architect & Operator Mission Control
 │   └── lib/api.ts          # API client wrapper
 ├── mocks/
-│   └── oracle/             # Mock Price & Grade Oracle server (:4002)
+│   └── oracle/             # Live Commodity Oracle & Cryptographic Attestation service (:4002)
 ├── scripts/
 │   └── oidc-token.mjs      # Keycloak OIDC token generator for shared DevNet
 ├── docs/                   # PRD, SRD, DevNet, and hackathon journal
@@ -269,11 +270,11 @@ daml test
 |:---|:---:|:---|
 | **Daml Smart Contracts** | Complete | `ComposableAsset`, `Composition`, `Governance`, `MockToken` |
 | **Daml Script Test Gates** | Complete | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV |
-| **Backend Express API** | Complete | REST routes for assets, compositions, audit, and governance |
+| **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, and admin |
 | **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC |
-| **Backend Test Gates** | Passing (6/6) | `npm test` passing in `backend/` |
-| **Frontend Next.js Views** | Complete | 6 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`) |
-| **Mock Oracle Service** | Complete | `mocks/oracle/server.mjs` serving price/grade feeds on port `:4002` |
+| **Backend Test Gates** | Passing (11/11) | `npm test` passing in `backend/` in 551ms |
+| **Frontend Next.js Views** | Complete | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
+| **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
 | **Agentic Environment** | Operational | `.ai/rules.md`, `.ai/skills.json`, `.ai/context.md`, `.ai/ai.md`, and modular skills |
 | **Documentation Hub** | Complete | Architecture, API reference, Judging guide, Implementation plan, Context, AI guide |
 
