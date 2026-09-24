@@ -19,6 +19,11 @@ app.get("/health", (_req, res) => {
     ok: true,
     mode,
     ledgerConfigured: Boolean(ledger),
+    ledgerUrl: ledger ? ledger.getBaseUrl() : null,
+    oidcConfigured: Boolean(
+      process.env.LEDGER_API_TOKEN ||
+        (process.env.OIDC_CLIENT_ID && process.env.OIDC_USERNAME),
+    ),
     package: "composition-protocol",
   });
 });
