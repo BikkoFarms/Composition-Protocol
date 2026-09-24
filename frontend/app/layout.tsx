@@ -18,9 +18,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               Composition Protocol
             </Link>
             <nav>
+              <Link href="/demo">Demo</Link>
               <Link href="/proposer">Proposer</Link>
               <Link href="/counterparty">Counterparty</Link>
               <Link href="/observer">Observer</Link>
+              <Link href="/governance">Governance</Link>
+              <Link href="/metrics">Metrics</Link>
             </nav>
           </header>
           <main>{children}</main>

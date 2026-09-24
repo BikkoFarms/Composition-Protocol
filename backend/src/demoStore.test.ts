@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { describe, it, beforeEach } from "node:test";
+import { DemoStore } from "./demoStore.js";
+
+describe("Composition Protocol demo gates", () => {
+  let store: DemoStore;
+
+  beforeEach(() => {
+    store = new DemoStore();
+  });
+
+  it("testAtomicSwap — 2+ legs settle all-or-nothing", () => {
+    const result = store.runFullDemo();
+    assert.equal(result.error, null);
+    assert.equal(result.composition.status, "settled");
+    assert.equal(result.composition.legSummaries?.length, 3);
+    assert.ok(result.composition.receiptCid);
+    // Alice receives USDCx; Bob receives CBTC + ATTEST
+    const alice = store.listTokens("Alice");
+    const bob = store.listTokens("Bob");
+    assert.ok(alice.some((t) => t.instrumentId === "USDCx"));
+    assert.ok(bob.some((t) => t.instrumentId === "CBTC"));
+  });
+
+  it("testAtomicRevert — failed leg leaves no half-state", () => {
+    const beforeBob = store.listTokens("Bob").map((t) => ({
+      id: t.contractId,
+      owner: t.owner,
+      instrumentId: t.instrumentId,
+    }));
+    const result = store.runFullDemo({ forceFail: true });
+    assert.ok(result.error?.includes("reverted"));
+    assert.equal(result.composition.status, "reverted");
+    const afterBob = store.listTokens("Bob");
+    // CBTC still with Bob (provider) — transfer did not partially apply
+    const bobCbtc = afterBob.find((t) => t.instrumentId === "CBTC");
+    assert.ok(bobCbtc);
+    assert.equal(bobCbtc?.owner, "Bob");
+    assert.equal(store.metrics.compositionsReverted >= 1, true);
+    void beforeBob;
+  });
+
+  it("testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt", () => {
+    store.runFullDemo();
+    const observer = store.partyView("Regulator");
+    assert.deepEqual(observer.visibleTokens, []);
+    assert.ok(observer.settlementReceipts.length >= 1);
+    assert.deepEqual(observer.settlementReceipts[0].visibleLegPayloads, []);
+    assert.ok(
+      observer.compositions.every((c) => (c as { legs: unknown[] }).legs.length === 0),
+    );
+  });
+
+  it("R-GOV-1 below threshold rejected", () => {
+    const c = store.proposeTradeFinance({ requireGovernance: true });
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    const opened = store.settle(c.id);
+    assert.equal(opened.status, "awaiting_governance");
+    assert.ok(opened.governanceCid);
+    store.approveGovernance(opened.governanceCid!, "Gov1");
+    assert.throws(
+      () => store.executeGovernance(opened.governanceCid!),
+      /below threshold/,
+    );
+    assert.equal(store.require(c.id).status, "awaiting_governance");
+  });
+
+  it("R-GOV-1 at threshold succeeds", () => {
+    const c = store.proposeTradeFinance({ requireGovernance: true });
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    const opened = store.settle(c.id);
+    store.approveGovernance(opened.governanceCid!, "Gov1");
+    store.approveGovernance(opened.governanceCid!, "Gov2");
+    const settled = store.executeGovernance(opened.governanceCid!);
+    assert.equal(settled.status, "settled");
+    assert.equal(store.metrics.governedSettlements, 1);
+  });
+});

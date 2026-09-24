@@ -1,0 +1,103 @@
+-- | BitSafe LocalNet demos: below-threshold reject, at-threshold accept.
+module TestGovernance where
+
+import Composition
+import ComposableAsset
+import Governance
+import MockToken
+import Daml.Script
+
+setupSwap : Script (Party, Party, Party, Party, ContractId CompositionAgreement)
+setupSwap = do
+  operator <- allocateParty "Operator"
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  regulator <- allocateParty "Regulator"
+  aliceUsd <- submitMulti [operator, alice] [] do
+    createCmd MockToken with
+      owner = alice
+      issuer = operator
+      instrumentId = "USDCx"
+      amount = 100.0
+  bobCbtc <- submitMulti [operator, bob] [] do
+    createCmd MockToken with
+      owner = bob
+      issuer = operator
+      instrumentId = "CBTC"
+      amount = 1.0
+  let legs =
+        [ LegSpec with
+            legId = "cash"
+            instrumentId = "USDCx"
+            amount = 100.0
+            provider = alice
+            receiver = bob
+            assetCid = toInterfaceContractId aliceUsd
+        , LegSpec with
+            legId = "collateral"
+            instrumentId = "CBTC"
+            amount = 1.0
+            provider = bob
+            receiver = alice
+            assetCid = toInterfaceContractId bobCbtc
+        ]
+  proposalCid <- submitMulti [operator, alice] [bob] do
+    createCmd CompositionProposal with
+      operator
+      proposer = alice
+      counterparties = [bob]
+      legs
+      description = "gov demo"
+      expiresAt = time (date 2099 Jan 1) 00:00:00
+  trackerCid <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with
+      acceptor = bob
+      trackerCid = None
+  agreementCid <- submit operator do
+    exerciseCmd trackerCid FinalizeAgreement
+  pure (operator, alice, bob, regulator, agreementCid)
+
+-- | R-GOV-1 failure: Execute below threshold must fail.
+testGovernedBelowThreshold : Script ()
+testGovernedBelowThreshold = do
+  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  g3 <- allocateParty "Gov3"
+  factory <- submit operator do
+    createCmd GovernanceFactory with operator
+  govCid <- submit operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid
+      governors = [g1, g2, g3]
+      threshold = 2
+      regulator
+  govCid2 <- submitMulti [operator, g1] [] do
+    exerciseCmd govCid ApproveGoverned with governor = g1
+  submitMustFail operator do
+    exerciseCmd govCid2 ExecuteGoverned
+  pure ()
+
+-- | R-GOV-1 success: at threshold Execute succeeds.
+testGovernedAtThreshold : Script ()
+testGovernedAtThreshold = do
+  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  g3 <- allocateParty "Gov3"
+  factory <- submit operator do
+    createCmd GovernanceFactory with operator
+  govCid <- submit operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid
+      governors = [g1, g2, g3]
+      threshold = 2
+      regulator
+  gov1 <- submitMulti [operator, g1] [] do
+    exerciseCmd govCid ApproveGoverned with governor = g1
+  gov2 <- submitMulti [operator, g2] [] do
+    exerciseCmd gov1 ApproveGoverned with governor = g2
+  receiptCid <- submit operator do
+    exerciseCmd gov2 ExecuteGoverned
+  Some _ <- queryContractId operator receiptCid
+  pure ()

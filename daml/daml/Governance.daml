@@ -1,0 +1,73 @@
+-- | BitSafe Decentralization challenge: M-of-N governed settlement (R-GOV-1/2).
+-- Settlement MUST NOT execute below threshold and MUST succeed once met.
+module Governance where
+
+import Composition
+import DA.Set (Set)
+import qualified DA.Set as Set
+
+-- | Gates Settle behind an M-of-N approval set of named operators.
+template GovernedSettlement
+  with
+    operator : Party
+    agreementCid : ContractId CompositionAgreement
+    governors : Set Party
+    threshold : Int
+    approvals : Set Party
+    regulator : Party
+  where
+    signatory operator
+    observer Set.toList governors
+    ensure
+      threshold >= 1
+      && threshold <= Set.size governors
+      && Set.size governors >= 1
+
+    choice ApproveGoverned : ContractId GovernedSettlement
+      with
+        governor : Party
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        assertMsg "already approved" (not (Set.member governor approvals))
+        create GovernedSettlement with
+          operator
+          agreementCid
+          governors
+          threshold
+          approvals = Set.insert governor approvals
+          regulator
+
+    -- | R-GOV-1: rejects when approvals < threshold.
+    choice ExecuteGoverned : ContractId SettlementReceipt
+      controller operator
+      do
+        assertMsg "below threshold — governed action must not execute"
+          (Set.size approvals >= threshold)
+        exercise agreementCid SettleWithRegulator with regulator
+
+-- | Factory: wrap an agreement in governed settlement control.
+template GovernanceFactory
+  with
+    operator : Party
+  where
+    signatory operator
+
+    nonconsuming choice OpenGovernedSettlement : ContractId GovernedSettlement
+      with
+        agreementCid : ContractId CompositionAgreement
+        governors : [Party]
+        threshold : Int
+        regulator : Party
+      controller operator
+      do
+        let govSet = Set.fromList governors
+        assertMsg "threshold out of range"
+          (threshold >= 1 && threshold <= Set.size govSet)
+        create GovernedSettlement with
+          operator
+          agreementCid
+          governors = govSet
+          threshold
+          approvals = Set.empty
+          regulator

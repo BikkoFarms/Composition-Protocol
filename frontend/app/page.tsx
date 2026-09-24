@@ -12,11 +12,14 @@ export default function HomePage() {
         commodity trade finance.
       </p>
       <div className="hero-actions">
-        <Link className="btn" href="/proposer">
-          Open proposer
+        <Link className="btn" href="/demo">
+          Run pitch demo
         </Link>
         <Link className="btn" href="/observer">
           Observer money shot
+        </Link>
+        <Link className="btn" href="/governance">
+          BitSafe M-of-N
         </Link>
       </div>
       <div className="grid grid-2">

@@ -58,12 +58,24 @@ cd frontend && npm install && npm run dev
 node mocks/oracle/server.mjs
 ```
 
-Open [http://localhost:3000](http://localhost:3000):
+Open [http://localhost:3000/demo](http://localhost:3000/demo) for the one-click pitch, or:
 
 1. **Proposer** → Propose trade-finance deal  
 2. **Counterparty** → Accept as Bob, then Oracle  
 3. **Proposer** → Settle atomically  
 4. **Observer** → money shot: empty `visibleTokens`, receipt present  
+
+BitSafe M-of-N: [http://localhost:3000/governance](http://localhost:3000/governance)  
+Metrics evidence: [http://localhost:3000/metrics](http://localhost:3000/metrics)
+
+## Tests
+
+```bash
+cd backend && npm test          # atomicity, privacy, M-of-N gates (demo store)
+cd daml && daml test            # requires Daml SDK 3.3.x
+```
+
+See [docs/DEVNET.md](docs/DEVNET.md) for OIDC + shared DevNet wiring.
 
 ## Daml build & test
 
