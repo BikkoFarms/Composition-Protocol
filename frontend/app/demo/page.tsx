@@ -141,7 +141,7 @@ export default function DemoPage() {
           </span>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.85rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 180px), 1fr))", gap: "0.85rem" }}>
           <div style={{ padding: "0.85rem 1rem", borderRadius: "8px", background: step >= 1 ? "rgba(16, 185, 129, 0.15)" : "rgba(255, 255, 255, 0.03)", border: step >= 1 ? "1px solid rgba(16, 185, 129, 0.4)" : "1px solid var(--line-glass)", transition: "all 0.3s ease" }}>
             <span className="mono" style={{ fontSize: "0.72rem", color: step >= 1 ? "#6ee7b7" : "var(--subtle)" }}>STEP 01</span>
             <p style={{ margin: "0.25rem 0 0", fontWeight: 600, fontSize: "0.9rem", color: step >= 1 ? "#fff" : "var(--muted)" }}>

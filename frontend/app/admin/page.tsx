@@ -204,7 +204,7 @@ export default function AdminPage() {
         </div>
 
         {/* Canton Node Latency Pill */}
-        <div className="panel" style={{ padding: "0.85rem 1.25rem", minWidth: "260px" }}>
+        <div className="panel" style={{ padding: "0.85rem 1.25rem", flex: "1 1 240px", maxWidth: "100%" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: "0.78rem", color: "var(--muted)", textTransform: "uppercase" }}>Node Latency</span>
             <span className={`tag ${ping?.ok ? "ok" : "warn"}`}>
