@@ -197,3 +197,53 @@ compositionsRouter.post("/:id/settle", (req, res) => {
   }
 });
 
+/**
+ * POST /compositions/:id/cancel
+ * Proposer cancellation choice: clean withdrawal before settlement.
+ */
+compositionsRouter.post("/:id/cancel", (req, res) => {
+  try {
+    const caller = ((req.body as { caller?: PartyId })?.caller ?? "Alice") as PartyId;
+    const c = demoStore.cancel(req.params.id, caller);
+    res.json(c);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * GET /compositions/circuit-breaker/state
+ * Returns active emergency circuit breaker state.
+ */
+compositionsRouter.get("/circuit-breaker/state", (_req, res) => {
+  res.json(demoStore.circuitBreaker);
+});
+
+/**
+ * POST /compositions/circuit-breaker/toggle
+ * Institutional emergency halt/resume trigger.
+ */
+compositionsRouter.post("/circuit-breaker/toggle", (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { caller?: PartyId; reason?: string };
+    const state = demoStore.toggleCircuitBreaker(body.caller ?? "Operator", body.reason);
+    res.json(state);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * POST /compositions/governance/:id/veto
+ * Institutional Emergency Veto: named governor aborts open governed deal.
+ */
+compositionsRouter.post("/governance/:id/veto", (req, res) => {
+  try {
+    const { governor, reason } = req.body as { governor: PartyId; reason: string };
+    const gov = demoStore.vetoGovernance(req.params.id, governor, reason ?? "Governance veto executed");
+    res.json(gov);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+

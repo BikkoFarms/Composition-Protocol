@@ -180,6 +180,48 @@ template GovernedSettlement
         assertMsg "below threshold — governed action must not execute"
           (Set.size approvals >= threshold)
         exercise agreementCid SettleWithRegulator with regulator
+
+    -- | Institutional Emergency Veto: Allows named governor to abort an open deal
+    choice EmergencyVeto : ()
+      with
+        governor : Party
+        reason : Text
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        pure ()
+
+-- | Institutional Safety: Protocol Circuit Breaker for emergency halts
+template ProtocolCircuitBreaker
+  with
+    operator : Party
+    governors : Set Party
+    isHalted : Bool
+    haltReason : Optional Text
+  where
+    signatory operator
+    observer Set.toList governors
+
+    choice TriggerEmergencyHalt : ContractId ProtocolCircuitBreaker
+      with
+        governor : Party
+        reason : Text
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        create this with
+          isHalted = True
+          haltReason = Some reason
+
+    choice ResumeProtocol : ContractId ProtocolCircuitBreaker
+      with
+        governor : Party
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        create this with
+          isHalted = False
+          haltReason = None
 ```
 
 ---

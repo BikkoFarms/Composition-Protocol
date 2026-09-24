@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * Protocol Metrics & Audit Telemetry Dashboard
+ *
+ * Real-time monitoring for HackCanton evaluation:
+ * - Settlement throughput (target ≥50 deals)
+ * - Multi-asset complexity (average legs/deal)
+ * - 100% atomic integrity and revert accounting
+ * - Live settlement event stream
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 
@@ -84,8 +94,7 @@ export default function MetricsPage() {
         body: JSON.stringify({ forceFail: true }),
       });
       await refresh();
-    } catch (e) {
-      // 409 Conflict is expected for atomic revert
+    } catch {
       await refresh();
     } finally {
       setBusy(false);
@@ -93,84 +102,100 @@ export default function MetricsPage() {
   }
 
   const meetsFiftyCriterion = (metrics?.compositionsSettled ?? 0) >= 50;
+  const progressPercent = Math.min(100, Math.round(((metrics?.compositionsSettled ?? 0) / 50) * 100));
 
   return (
     <div>
-      <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "1rem", marginBottom: "2rem" }}>
         <div>
-          <h1>On-chain protocol metrics</h1>
+          <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0.3rem 0.8rem", borderRadius: "9999px", background: "rgba(16, 185, 129, 0.12)", border: "1px solid rgba(16, 185, 129, 0.3)", marginBottom: "0.85rem" }}>
+            <span className="pulse-dot" />
+            <span className="mono" style={{ fontSize: "0.78rem", color: "#6ee7b7", fontWeight: 600 }}>
+              Live Telemetry · HackCanton On-Chain Evidence
+            </span>
+          </div>
+          <h1>On-Chain Protocol Metrics</h1>
           <p className="lede">
-            HackCanton Metrics validation criteria: multi-asset throughput, deal complexity,
-            and 100% atomic settlement integrity.
+            Quantitative verification of multi-asset throughput, deal complexity, cross-domain routing, and 100% atomic integrity.
           </p>
         </div>
-        <div style={{ textAlign: "right" }}>
-          <span className={`tag ${meetsFiftyCriterion ? "ok" : "warn"}`}>
-            {meetsFiftyCriterion ? "✓ Criterion Met (≥50 Settled)" : "Criterion: Target ≥50 Deals"}
+
+        <div style={{ textAlign: "right", minWidth: "220px" }}>
+          <span className={`tag ${meetsFiftyCriterion ? "ok" : "warn"}`} style={{ fontSize: "0.85rem", padding: "0.35rem 0.8rem" }}>
+            {meetsFiftyCriterion ? "✓ Criterion Met (≥50 Settled)" : `Target Progress: ${metrics?.compositionsSettled ?? 0}/50`}
           </span>
+          <div style={{ width: "100%", height: "6px", background: "rgba(255,255,255,0.08)", borderRadius: "9999px", marginTop: "0.6rem", overflow: "hidden" }}>
+            <div style={{ width: `${progressPercent}%`, height: "100%", background: "linear-gradient(90deg, #10b981, #06b6d4)", transition: "width 0.4s ease" }} />
+          </div>
         </div>
       </div>
 
-      <div className="row" style={{ marginBottom: "1.5rem" }}>
+      <div className="hero-actions">
         <button className="primary" disabled={busy} onClick={settleFifty}>
-          {busy ? "Executing..." : "Run 50 settlements (HackCanton Evidence)"}
+          {busy ? "Executing Batch..." : "⚡ Execute 50 Batch Settlements (Proof)"}
         </button>
         <button disabled={busy} onClick={triggerHappyPath}>
-          +1 Settle deal (3 legs)
+          +1 Settle Deal (3 Legs)
         </button>
         <button className="danger" disabled={busy} onClick={triggerRevert}>
-          +1 Force atomic revert
+          +1 Force Atomic Revert
         </button>
       </div>
 
-      {error && <p className="err">{error}</p>}
+      {error && <div className="err">{error}</div>}
 
       {metrics && (
         <>
-          <div className="grid grid-2" style={{ marginBottom: "1.5rem" }}>
-            <div className="panel">
-              <h2>Total Compositions Settled</h2>
-              <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
-                <p style={{ fontFamily: "var(--font-display)", fontSize: "2.8rem", margin: 0, color: "var(--ok)" }}>
+          <div className="grid grid-2" style={{ marginBottom: "1.75rem" }}>
+            <div className="panel panel-glow-accent">
+              <h2 style={{ fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase" }}>
+                Total Compositions Settled
+              </h2>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", margin: "0.4rem 0" }}>
+                <p style={{ fontFamily: "var(--font-display)", fontSize: "3.2rem", fontWeight: 800, margin: 0, color: "#6ee7b7" }}>
                   {metrics.compositionsSettled}
                 </p>
                 <span className="mono" style={{ color: "var(--muted)" }}>
-                  / {metrics.totalAttempted} attempted
+                  / {metrics.totalAttempted} attempted deals
                 </span>
               </div>
-              <p style={{ color: "var(--muted)", margin: "0.5rem 0 0", fontSize: "0.88rem" }}>
-                All legs executed in a single atomic Daml transaction (R-ATOM-1)
+              <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.88rem" }}>
+                100% executed in a single atomic Daml transaction (R-ATOM-1)
               </p>
             </div>
 
-            <div className="panel">
-              <h2>Average Legs / Deal</h2>
-              <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
-                <p style={{ fontFamily: "var(--font-display)", fontSize: "2.8rem", margin: 0, color: "var(--accent)" }}>
+            <div className="panel panel-glow-cyan">
+              <h2 style={{ fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase" }}>
+                Average Complexity / Deal
+              </h2>
+              <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", margin: "0.4rem 0" }}>
+                <p style={{ fontFamily: "var(--font-display)", fontSize: "3.2rem", fontWeight: 800, margin: 0, color: "#67e8f9" }}>
                   {metrics.avgLegsPerComposition.toFixed(2)}
                 </p>
                 <span className="mono" style={{ color: "var(--muted)" }}>
-                  legs avg ({metrics.legsSettled} total legs settled)
+                  legs/deal ({metrics.legsSettled} total legs settled)
                 </span>
               </div>
-              <p style={{ color: "var(--muted)", margin: "0.5rem 0 0", fontSize: "0.88rem" }}>
-                Multi-asset topology: Collateral, Liquidity Cash, and Oracle Grade
+              <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.88rem" }}>
+                Multi-asset topology: Collateral (CBTC), Cash (USDCx), & Inspection (ATTEST)
               </p>
             </div>
 
             <div className="panel">
-              <h2>Settlement Integrity Rates</h2>
-              <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.5rem" }}>
+              <h2 style={{ fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase" }}>
+                Settlement Integrity Rates
+              </h2>
+              <div style={{ display: "flex", gap: "2rem", marginTop: "0.6rem" }}>
                 <div>
-                  <span className="mono" style={{ fontSize: "1.6rem", color: "var(--ok)", fontWeight: "bold" }}>
+                  <span className="mono" style={{ fontSize: "1.8rem", color: "#6ee7b7", fontWeight: 800 }}>
                     {metrics.successRate.toFixed(1)}%
                   </span>
                   <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
                     Success Rate
                   </p>
                 </div>
-                <div style={{ borderLeft: "1px solid var(--line)", paddingLeft: "1.5rem" }}>
-                  <span className="mono" style={{ fontSize: "1.6rem", color: metrics.revertRate > 0 ? "var(--warn)" : "var(--muted)", fontWeight: "bold" }}>
+                <div style={{ borderLeft: "1px solid var(--line-glass)", paddingLeft: "2rem" }}>
+                  <span className="mono" style={{ fontSize: "1.8rem", color: metrics.revertRate > 0 ? "var(--warn)" : "var(--muted)", fontWeight: 800 }}>
                     {metrics.revertRate.toFixed(1)}%
                   </span>
                   <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -178,32 +203,34 @@ export default function MetricsPage() {
                   </p>
                 </div>
               </div>
-              <p style={{ color: "var(--muted)", margin: "0.75rem 0 0", fontSize: "0.85rem" }}>
+              <p style={{ color: "var(--muted)", margin: "0.85rem 0 0", fontSize: "0.85rem" }}>
                 {metrics.compositionsReverted} deals cleanly aborted with zero half-states (R-ATOM-2)
               </p>
             </div>
 
             <div className="panel">
-              <h2>BitSafe Governance & Safety</h2>
-              <div style={{ display: "flex", gap: "1.5rem", marginTop: "0.5rem" }}>
+              <h2 style={{ fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase" }}>
+                BitSafe Governance & Safety
+              </h2>
+              <div style={{ display: "flex", gap: "2rem", marginTop: "0.6rem" }}>
                 <div>
-                  <span className="mono" style={{ fontSize: "1.6rem", color: "var(--accent)", fontWeight: "bold" }}>
+                  <span className="mono" style={{ fontSize: "1.8rem", color: "#fde047", fontWeight: 800 }}>
                     {metrics.governedSettlements}
                   </span>
                   <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
                     Governed Settled
                   </p>
                 </div>
-                <div style={{ borderLeft: "1px solid var(--line)", paddingLeft: "1.5rem" }}>
-                  <span className="mono" style={{ fontSize: "1.6rem", color: "var(--warn)", fontWeight: "bold" }}>
+                <div style={{ borderLeft: "1px solid var(--line-glass)", paddingLeft: "2rem" }}>
+                  <span className="mono" style={{ fontSize: "1.8rem", color: "var(--warn)", fontWeight: 800 }}>
                     {metrics.governanceRejections}
                   </span>
                   <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
                     R-GOV-1 Rejections
                   </p>
                 </div>
-                <div style={{ borderLeft: "1px solid var(--line)", paddingLeft: "1.5rem" }}>
-                  <span className="mono" style={{ fontSize: "1.6rem", color: "var(--ok)", fontWeight: "bold" }}>
+                <div style={{ borderLeft: "1px solid var(--line-glass)", paddingLeft: "2rem" }}>
+                  <span className="mono" style={{ fontSize: "1.8rem", color: "#6ee7b7", fontWeight: 800 }}>
                     {metrics.unexpectedFailures}
                   </span>
                   <p style={{ margin: "0.2rem 0 0", color: "var(--muted)", fontSize: "0.85rem" }}>
@@ -211,21 +238,26 @@ export default function MetricsPage() {
                   </p>
                 </div>
               </div>
-              <p style={{ color: "var(--muted)", margin: "0.75rem 0 0", fontSize: "0.85rem" }}>
+              <p style={{ color: "var(--muted)", margin: "0.85rem 0 0", fontSize: "0.85rem" }}>
                 M-of-N threshold multi-sig gates rigorously enforced
               </p>
             </div>
           </div>
 
+          {/* Live Settlement Event Feed */}
           <div className="panel">
-            <h2>Live Settlement Event Feed</h2>
-            <p className="mono" style={{ color: "var(--muted)", marginBottom: "0.75rem" }}>
-              Real-time audit log of settlement transactions recorded on the ledger:
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+              <h2>Live Settlement Event Feed (Audit Trail)</h2>
+              <span className="tag ok">Streaming</span>
+            </div>
+            <p className="mono" style={{ color: "var(--muted)", marginBottom: "1rem" }}>
+              Real-time audit log of settlement transactions recorded on Canton ledger:
             </p>
+
             {(!metrics.recentEvents || metrics.recentEvents.length === 0) ? (
-              <p className="mono" style={{ color: "var(--muted)" }}>
+              <div style={{ padding: "2rem", textAlign: "center", color: "var(--muted)", background: "rgba(0,0,0,0.25)", borderRadius: "8px" }} className="mono">
                 No recorded events yet. Click one of the buttons above to generate live transactions.
-              </p>
+              </div>
             ) : (
               <table>
                 <thead>
@@ -246,7 +278,7 @@ export default function MetricsPage() {
                             ev.type === "settled"
                               ? "ok"
                               : ev.type === "governed"
-                              ? "ok"
+                              ? "cyan"
                               : "danger"
                           }`}
                         >
@@ -255,10 +287,10 @@ export default function MetricsPage() {
                       </td>
                       <td className="mono">{ev.id.slice(0, 10)}…</td>
                       <td className="mono">{ev.legs}</td>
-                      <td className="mono" style={{ fontSize: "0.82rem" }}>
+                      <td className="mono" style={{ fontSize: "0.8rem", color: "var(--muted)" }}>
                         {new Date(ev.timestamp).toLocaleTimeString()}
                       </td>
-                      <td style={{ color: "var(--muted)" }}>{ev.description}</td>
+                      <td style={{ color: "#fff" }}>{ev.description}</td>
                     </tr>
                   ))}
                 </tbody>
