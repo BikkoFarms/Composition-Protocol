@@ -282,10 +282,12 @@ daml test
 
 ## 8. Documentation Hub & Deep Dives
 
+- [**CONTRIBUTING.md**](CONTRIBUTING.md) — Contributor onboarding, engineering rules, status matrix, and pre-commit checklists.
+- [**docs/RISK_ASSESSMENT.md**](docs/RISK_ASSESSMENT.md) — Rigorous protocol and operational risk assessment, invariant guarantees, and threat mitigations.
 - [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Technical blueprint, Mermaid lifecycle diagrams, sub-transaction privacy models, and failure modes.
 - [**docs/PROTOCOL.md**](docs/PROTOCOL.md) — Protocol Interface (PI) specification, Daml smart contract interfaces, wire payloads, and Canton sub-transaction privacy.
 - [**docs/API.md**](docs/API.md) — Complete REST API reference, request/response schemas, query parameters, and cURL examples.
-- [**docs/JUDGING.md**](docs/JUDGING.md) — HackCanton Season 3 evaluation guide, 3-minute quick walkthrough, and criteria matrix.
+- [**docs/JUDGING.md**](docs/JUDGING.md) — HackCanton Season 3 evaluation guide, Track 1 & BitSafe challenge alignment, and 3-minute quick walkthrough.
 - [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) — Full FR/SR requirements audit matrix cross-referencing PRD/SRD specifications.
 - [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
 - [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.

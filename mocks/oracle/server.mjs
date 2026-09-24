@@ -155,8 +155,15 @@ const server = http.createServer((req, res) => {
     });
     req.on("end", () => {
       try {
-        const { attestation, signature } = JSON.parse(body);
-        const expected = signAttestation(attestation);
+        const parsed = JSON.parse(body);
+        const data = parsed.attestation ?? parsed.payload;
+        const signature = parsed.signature;
+        if (!data || !signature) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: "Missing attestation or signature" }));
+          return;
+        }
+        const expected = signAttestation(data);
         const valid = expected === signature;
         res.end(JSON.stringify({ valid, oracleParty: "Oracle" }));
       } catch (err) {
