@@ -13,4 +13,7 @@
 - **BitSafe secondary:** Daml `Governance` + `TestGovernance`; demo 2-of-3 UI at `/governance`.
 - **Validation:** Node gate tests (`npm test` in backend) for atomicity, revert, auditor privacy, M-of-N.
 - **GTM/DevNet:** `scripts/oidc-token.mjs` + `docs/DEVNET.md`.
-- Next: install Daml SDK → `daml test` green; upload DAR to Noders DevNet; schedule 3–5 builder interviews.
+- **Design:** adopted Lattice (parchment / forest ink / pastel specimen cards) across all role views — `docs/DESIGN.md`.
+- **Interviews:** `docs/INTERVIEWS.md` guide for Metrics criterion.
+- **OIDC:** backend `/admin/refresh-token` + health `ledgerReachable`.
+- Next: install Daml SDK → `daml test` green; upload DAR to Noders DevNet; run 3–5 builder interviews from the guide.

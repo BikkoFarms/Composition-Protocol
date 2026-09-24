@@ -46,16 +46,20 @@ export default function ObserverPage() {
 
   return (
     <div>
-      <h1>Observer</h1>
+      <span className="pill">
+        Money shot
+        <span className="pill-arrow">→</span>
+      </span>
+      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Observer</h1>
       <p className="lede">
-        Money shot: same ledger, different party. The regulator sees that
-        settlement occurred — and cryptographically cannot see leg payloads.
-        <span className="mono"> visibleTokens: []</span>
+        Same ledger, different party. The regulator sees that settlement
+        occurred — and cannot see leg payloads.{" "}
+        <span className="mono">visibleTokens: []</span>
       </p>
       {error && <p className="err">{error}</p>}
 
       <div className="split">
-        <div className="panel">
+        <div className="card card-mint">
           <h2>Participant (Bob)</h2>
           {data && (
             <>
@@ -67,13 +71,13 @@ export default function ObserverPage() {
                   receipts: {data.participant.settlementReceipts.length}
                 </span>
               </p>
-              <pre className="mono" style={{ whiteSpace: "pre-wrap" }}>
+              <pre className="mono" style={{ marginTop: 12 }}>
                 {JSON.stringify(data.participant, null, 2)}
               </pre>
             </>
           )}
         </div>
-        <div className="panel">
+        <div className="card card-lavender">
           <h2>Regulator / Observer</h2>
           {data && (
             <>
@@ -101,17 +105,17 @@ export default function ObserverPage() {
                   {JSON.stringify(data.observer.visibleTokens, null, 2)}
                 </pre>
               )}
-              <h2 style={{ marginTop: "1rem" }}>SettlementReceipt</h2>
+              <h2 style={{ marginTop: 16 }}>SettlementReceipt</h2>
               {data.observer.settlementReceipts.length === 0 ? (
-                <p className="mono" style={{ color: "var(--muted)" }}>
+                <p className="mono muted">
                   No receipt yet — settle a composition first.
                 </p>
               ) : (
-                <pre className="mono" style={{ whiteSpace: "pre-wrap" }}>
+                <pre className="mono">
                   {JSON.stringify(data.observer.settlementReceipts, null, 2)}
                 </pre>
               )}
-              <p className="mono" style={{ color: "var(--muted)", marginTop: "1rem" }}>
+              <p className="mono muted" style={{ marginTop: 12 }}>
                 Proven by {data.observer.proof.test}
               </p>
             </>

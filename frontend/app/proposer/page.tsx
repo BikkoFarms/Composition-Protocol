@@ -74,23 +74,27 @@ export default function ProposerPage() {
 
   return (
     <div>
-      <h1>Proposer</h1>
+      <span className="pill">
+        Role · Proposer
+        <span className="pill-arrow">→</span>
+      </span>
+      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Proposer</h1>
       <p className="lede">
-        Alice (exporter) proposes a three-leg trade-finance composition:
-        CBTC collateral, USDCx cash, oracle attestation.
+        Alice (exporter) proposes a three-leg trade-finance composition: CBTC
+        collateral, USDCx cash, oracle attestation.
       </p>
       <div className="row">
         <button className="primary" disabled={busy} onClick={() => propose(false)}>
           Propose trade-finance deal
         </button>
         <button className="danger" disabled={busy} onClick={() => propose(true)}>
-          Propose failing deal (atomic revert)
+          Propose failing deal
         </button>
       </div>
       {error && <p className="err">{error}</p>}
 
       <div className="grid grid-2">
-        <div className="panel">
+        <div className="card card-mint">
           <h2>Alice visible tokens</h2>
           <table>
             <thead>
@@ -105,35 +109,34 @@ export default function ProposerPage() {
                 <tr key={t.contractId}>
                   <td>{t.instrumentId}</td>
                   <td>{t.amount}</td>
-                  <td>{t.contractId.slice(0, 12)}…</td>
+                  <td className="mono">{t.contractId.slice(0, 12)}…</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-        <div className="panel">
+        <div className="card">
           <h2>Compositions</h2>
           {comps.length === 0 && (
-            <p className="mono" style={{ color: "var(--muted)" }}>
-              No compositions yet.
-            </p>
+            <p className="mono muted">No compositions yet.</p>
           )}
           {comps.map((c) => (
-            <div key={c.id} style={{ marginBottom: "1rem" }}>
+            <div key={c.id} style={{ marginBottom: 16 }}>
               <div className="row">
                 <span className="tag">{c.status}</span>
-                <span className="mono">{c.id.slice(0, 8)}</span>
+                <span className="mono muted">{c.id.slice(0, 8)}</span>
               </div>
-              <p style={{ margin: "0.35rem 0", color: "var(--muted)" }}>
+              <p className="muted" style={{ margin: "6px 0", fontSize: 14 }}>
                 {c.description}
               </p>
-              <p className="mono">
+              <p className="mono muted">
                 accepted: [{c.accepted.join(", ") || "—"}] / required: [
                 {c.counterparties.join(", ")}]
               </p>
               {c.status === "accepted" && (
                 <button
-                  style={{ marginTop: "0.5rem" }}
+                  className="primary"
+                  style={{ marginTop: 8 }}
                   disabled={busy}
                   onClick={() => settle(c.id)}
                 >

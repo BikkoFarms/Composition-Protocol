@@ -80,10 +80,14 @@ export default function DemoPage() {
 
   return (
     <div>
-      <h1>Pitch demo</h1>
+      <span className="pill">
+        Pitch · &lt;5 min
+        <span className="pill-arrow">→</span>
+      </span>
+      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Pitch demo</h1>
       <p className="lede">
-        Under five minutes: propose a three-leg trade-finance composition,
-        settle atomically, then prove the observer cannot see legs.
+        Propose a three-leg trade-finance composition, settle atomically, then
+        prove the observer cannot see legs.
       </p>
 
       <div className="row">
@@ -101,19 +105,28 @@ export default function DemoPage() {
         </Link>
       </div>
 
-      <div className="panel" style={{ marginBottom: "1rem" }}>
+      <div className="card card-mint" style={{ marginBottom: 20 }}>
         <h2>Script</h2>
-        <ol className="mono" style={{ color: "var(--muted)", lineHeight: 1.7 }}>
-          <li style={{ color: step >= 1 ? "var(--ok)" : undefined }}>
+        <ol className="mono muted" style={{ lineHeight: 1.8, margin: 0, paddingLeft: 18 }}>
+          <li style={{ color: step >= 1 ? "var(--color-deep-forest)" : undefined }}>
             Propose collateral + USDCx + attestation
           </li>
-          <li style={{ color: step >= 2 ? "var(--ok)" : undefined }}>
+          <li style={{ color: step >= 2 ? "var(--color-deep-forest)" : undefined }}>
             Counterparties accept · AcceptanceTracker fills
           </li>
-          <li style={{ color: step >= 3 ? (error ? "var(--danger)" : "var(--ok)") : undefined }}>
+          <li
+            style={{
+              color:
+                step >= 3
+                  ? error
+                    ? "#7a2251"
+                    : "var(--color-deep-forest)"
+                  : undefined,
+            }}
+          >
             Settle — one atomic transaction
           </li>
-          <li style={{ color: step >= 4 ? "var(--accent)" : undefined }}>
+          <li style={{ color: step >= 4 ? "var(--color-deep-teal)" : undefined }}>
             MONEY SHOT — observer visibleTokens: []
           </li>
         </ol>
@@ -122,9 +135,9 @@ export default function DemoPage() {
       {error && <p className="err">{error}</p>}
 
       {loadStats && (
-        <div className="panel" style={{ marginBottom: "1rem" }}>
+        <div className="card card-lime" style={{ marginBottom: 20 }}>
           <h2>Load metrics</h2>
-          <p className="mono">
+          <p className="mono" style={{ margin: 0 }}>
             ran={loadStats.ran} settled={loadStats.metrics.compositionsSettled}{" "}
             reverted={loadStats.metrics.compositionsReverted} legs=
             {loadStats.metrics.legsSettled}
@@ -134,12 +147,12 @@ export default function DemoPage() {
 
       {result && (
         <div className="split">
-          <div className="panel">
+          <div className="card">
             <h2>Participant (Bob)</h2>
             <span className="tag ok">
               tokens: {result.moneyShot.participant.visibleTokens.length}
             </span>
-            <pre className="mono" style={{ whiteSpace: "pre-wrap", marginTop: "0.75rem" }}>
+            <pre className="mono" style={{ marginTop: 12 }}>
               {JSON.stringify(
                 {
                   status: result.composition.status,
@@ -151,17 +164,17 @@ export default function DemoPage() {
               )}
             </pre>
           </div>
-          <div className="panel">
+          <div className="card card-lavender">
             <h2>Observer (Regulator)</h2>
             {observerEmpty ? (
               <div className="empty-state">visibleTokens: []</div>
             ) : (
               <span className="tag warn">tokens present</span>
             )}
-            <p className="mono" style={{ color: "var(--muted)", marginTop: "0.75rem" }}>
+            <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
               {result.moneyShot.observer.privacy.claim}
             </p>
-            <pre className="mono" style={{ whiteSpace: "pre-wrap" }}>
+            <pre className="mono">
               {JSON.stringify(
                 {
                   visibleTokens: result.moneyShot.observer.visibleTokens,

@@ -106,10 +106,7 @@ Backend `ledger.ts` implements JSON Ledger API v2 `create` / `exercise` / ACS qu
 
 Per HackCanton S3 rules: any Daml contracts/tests predating **18 Sept 2026** must be disclosed here. **This repository’s initial delivery-phase commit is the first public codebase** — no prior private DAR is claimed as in-window work. Delivery window: **18 Sept – 9 Oct 2026**. Judges evaluate only in-window work.
 
-## Product docs
-
-- [docs/Composition_Protocol_PRD.pdf](docs/Composition_Protocol_PRD.pdf)
-- [docs/Composition_Protocol_SRD.pdf](docs/Composition_Protocol_SRD.pdf)
+Product docs: [PRD](docs/Composition_Protocol_PRD.pdf) · [SRD](docs/Composition_Protocol_SRD.pdf) · [Design (Lattice)](docs/DESIGN.md) · [DevNet](docs/DEVNET.md) · [Interviews](docs/INTERVIEWS.md)
 
 ## License
 

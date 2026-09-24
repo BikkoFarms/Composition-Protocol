@@ -27,9 +27,9 @@ export default function CounterpartyPage() {
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => {
-    const view = await api<{
-      compositions: Composition[];
-    }>(`/audit/view/${party}`);
+    const view = await api<{ compositions: Composition[] }>(
+      `/audit/view/${party}`,
+    );
     setComps(view.compositions.filter((c) => c.status !== "settled"));
   }, [party]);
 
@@ -55,10 +55,14 @@ export default function CounterpartyPage() {
 
   return (
     <div>
-      <h1>Counterparty</h1>
+      <span className="pill">
+        Role · Counterparty
+        <span className="pill-arrow">→</span>
+      </span>
+      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Counterparty</h1>
       <p className="lede">
-        Lender (Bob) and Oracle co-sign the proposal. AcceptanceTracker fills
-        until every required party has accepted — then Settle is unlocked.
+        Lender (Bob) and Oracle co-sign. AcceptanceTracker fills until every
+        required party has accepted — then Settle unlocks.
       </p>
       <div className="row">
         {ROLES.map((r) => (
@@ -73,49 +77,53 @@ export default function CounterpartyPage() {
       </div>
       {error && <p className="err">{error}</p>}
 
-      <div className="panel">
+      <div className="card card-lime">
         <h2>Open compositions for {party}</h2>
         {comps.length === 0 && (
-          <p className="mono" style={{ color: "var(--muted)" }}>
+          <p className="mono muted">
             Nothing to accept. Propose a deal from the Proposer view.
           </p>
         )}
         {comps.map((c) => (
-          <div key={c.id} style={{ marginBottom: "1.25rem" }}>
+          <div key={c.id} style={{ marginBottom: 20 }}>
             <div className="row">
               <span className={`tag ${c.status === "accepted" ? "ok" : "warn"}`}>
                 {c.status}
               </span>
-              <span className="mono">{c.description}</span>
+              <span className="muted" style={{ fontSize: 14 }}>
+                {c.description}
+              </span>
             </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Leg</th>
-                  <th>Asset</th>
-                  <th>Amount</th>
-                  <th>From → To</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.legs.map((l) => (
-                  <tr key={l.legId}>
-                    <td>{l.legId}</td>
-                    <td>{l.instrumentId}</td>
-                    <td>{l.amount}</td>
-                    <td>
-                      {l.provider} → {l.receiver}
-                    </td>
+            <div className="card" style={{ marginTop: 12, padding: 16 }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Leg</th>
+                    <th>Asset</th>
+                    <th>Amount</th>
+                    <th>From → To</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {c.legs.map((l) => (
+                    <tr key={l.legId}>
+                      <td>{l.legId}</td>
+                      <td>{l.instrumentId}</td>
+                      <td>{l.amount}</td>
+                      <td>
+                        {l.provider} → {l.receiver}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
             {!c.accepted.includes(party) &&
               c.counterparties.includes(party) &&
               c.status !== "reverted" && (
                 <button
                   className="primary"
-                  style={{ marginTop: "0.75rem" }}
+                  style={{ marginTop: 12 }}
                   disabled={busy}
                   onClick={() => accept(c.id)}
                 >
@@ -123,7 +131,7 @@ export default function CounterpartyPage() {
                 </button>
               )}
             {c.accepted.includes(party) && (
-              <p className="mono" style={{ color: "var(--ok)" }}>
+              <p className="mono" style={{ color: "var(--color-deep-forest)" }}>
                 Already accepted.
               </p>
             )}

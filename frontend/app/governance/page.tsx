@@ -88,7 +88,10 @@ export default function GovernancePage() {
     setBusy(true);
     setError(null);
     try {
-      await api(`/compositions/governance/${id}/execute`, { method: "POST", body: "{}" });
+      await api(`/compositions/governance/${id}/execute`, {
+        method: "POST",
+        body: "{}",
+      });
       await refresh();
     } catch (e) {
       setError(String((e as Error).message));
@@ -99,10 +102,16 @@ export default function GovernancePage() {
 
   return (
     <div>
-      <h1>BitSafe governance</h1>
+      <span className="pill">
+        BitSafe · 2-of-3
+        <span className="pill-arrow">→</span>
+      </span>
+      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>
+        BitSafe governance
+      </h1>
       <p className="lede">
-        M-of-N settlement control (2-of-3). Below threshold rejects; at threshold
-        settles. LocalNet-reproducible for the BitSafe Decentralization challenge.
+        M-of-N settlement control. Below threshold rejects; at threshold
+        settles. LocalNet-reproducible for the Decentralization challenge.
       </p>
 
       <div className="row">
@@ -122,33 +131,35 @@ export default function GovernancePage() {
       {error && <p className="err">{error}</p>}
 
       <div className="grid grid-2">
-        <div className="panel">
+        <div className="card card-mint">
           <h2>Compositions</h2>
-          {comps.length === 0 && (
-            <p className="mono" style={{ color: "var(--muted)" }}>
-              None yet.
-            </p>
-          )}
+          {comps.length === 0 && <p className="mono muted">None yet.</p>}
           {comps.map((c) => (
-            <div key={c.id} style={{ marginBottom: "0.85rem" }}>
+            <div key={c.id} style={{ marginBottom: 14 }}>
               <span className="tag">{c.status}</span>{" "}
-              <span className="mono">{c.id.slice(0, 8)}</span>
-              <p style={{ color: "var(--muted)", margin: "0.35rem 0" }}>
+              <span className="mono muted">{c.id.slice(0, 8)}</span>
+              <p className="muted" style={{ margin: "6px 0", fontSize: 14 }}>
                 {c.description}
               </p>
             </div>
           ))}
         </div>
-        <div className="panel">
+        <div className="card card-lavender">
           <h2>Governed settlements</h2>
+          {govs.length === 0 && (
+            <p className="mono muted">Open a governed deal to begin.</p>
+          )}
           {govs.map((g) => (
-            <div key={g.id} style={{ marginBottom: "1rem" }}>
-              <p className="mono">
-                {g.approvals.length}/{g.threshold} · [{g.approvals.join(", ") || "—"}] ·{" "}
-                {g.status}
+            <div key={g.id} style={{ marginBottom: 16 }}>
+              <p className="mono" style={{ marginTop: 0 }}>
+                {g.approvals.length}/{g.threshold} · [
+                {g.approvals.join(", ") || "—"}] · {g.status}
               </p>
               <div className="row">
-                <button disabled={busy || g.status !== "open"} onClick={() => approve(g.id)}>
+                <button
+                  disabled={busy || g.status !== "open"}
+                  onClick={() => approve(g.id)}
+                >
                   Approve as {governor}
                 </button>
                 <button
