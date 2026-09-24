@@ -1,5 +1,15 @@
 "use client";
 
+/**
+ * Proposer Dashboard — Alice (Commodity Exporter)
+ *
+ * Allows the deal initiator to:
+ * 1. Inspect their active asset portfolio (e.g. CBTC collateral tokens).
+ * 2. Propose new multi-asset compositions targeting specific counterparties.
+ * 3. Track counterparty acceptance across the Daml AcceptanceTracker lifecycle.
+ * 4. Execute atomic settlement once all counterparties have accepted.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 

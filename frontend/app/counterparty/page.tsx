@@ -1,5 +1,14 @@
 "use client";
 
+/**
+ * Counterparty Dashboard — Bob (Lender) & Oracle (Quality Inspection)
+ *
+ * Demonstrates the co-signing flow:
+ * 1. Counterparties inspect compositions where they are named participants.
+ * 2. Each counterparty reviews the leg specifications and co-signs using the Daml `AcceptProposal` choice.
+ * 3. The `AcceptanceTracker` accumulates signatures until all required counterparties agree, unlocking `FinalizeAgreement` and `Settle`.
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 

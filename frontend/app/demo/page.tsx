@@ -1,5 +1,16 @@
 "use client";
 
+/**
+ * Pitch Demo Page — HackCanton Season 3 Track 1 Demonstration
+ *
+ * Provides a 5-minute interactive walkthrough of the Composition Protocol:
+ * 1. Proposes a 3-leg trade-finance composition (CBTC collateral, USDCx liquidity cash, ATTEST grade).
+ * 2. Simulates counterparty acceptance via Daml AcceptanceTracker contract.
+ * 3. Finalizes deal via atomic Daml Settle choice (R-ATOM-1).
+ * 4. Displays side-by-side "Money Shot" proving regulator sees SettlementReceipt but visibleTokens: [] (R-PRIV-3).
+ * 5. Supports testing atomic revert (R-ATOM-2) where a failed leg aborts the entire deal cleanly with zero partial state.
+ */
+
 import { useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";

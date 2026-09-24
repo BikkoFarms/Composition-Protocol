@@ -6,6 +6,17 @@ import { assetsRouter } from "./routes/assets.js";
 import { compositionsRouter } from "./routes/compositions.js";
 import { auditRouter } from "./routes/audit.js";
 
+/**
+ * Composition Protocol Backend API Gateway
+ *
+ * Provides a unified REST API layer interfacing with both:
+ * 1. Live Canton JSON Ledger API v2 (when LEDGER_API_URL / credentials configured)
+ * 2. High-fidelity in-memory Daml ACS simulation (LocalNet demo store)
+ *
+ * Implements endpoints for Asset discovery, Multi-asset Composition lifecycle,
+ * BitSafe Decentralized Governance, and Regulator Audit ACS views.
+ */
+
 const app = express();
 const port = Number(process.env.PORT ?? 4000);
 
@@ -26,6 +37,9 @@ async function refreshLedgerToken() {
   }
 }
 
+/**
+ * Health check: execution mode, ledger reachability, OIDC status.
+ */
 app.get("/health", async (_req, res) => {
   let ledgerReachable: boolean | null = null;
   if (ledger) {
