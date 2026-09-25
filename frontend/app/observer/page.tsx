@@ -1,18 +1,13 @@
 "use client";
 
 /**
- * Observer Money Shot Page — Proving Canton Sub-Transaction Privacy
- *
- * Demonstrates the core privacy guarantee of Canton (R-PRIV-1, R-PRIV-2, R-PRIV-3):
- * - Two views of the SAME ledger state: Participant (Bob) vs Regulator.
- * - Bob holds the transferred asset tokens in his Active Contract Set (ACS).
- * - Regulator holds the SettlementReceipt (metadata, timestamp, leg status).
- * - Regulator's token ACS is strictly EMPTY: `visibleTokens: []`.
- * - Canton sub-transaction privacy cryptographically isolates non-observer contracts.
+ * Auditor desk — same ledger, different party. Human-first money shot.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import { SkeletonBlock } from "@/components/Skeleton";
 
 type MoneyShot = {
   participant: {
@@ -41,96 +36,157 @@ type MoneyShot = {
 export default function ObserverPage() {
   const [data, setData] = useState<MoneyShot | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     const shot = await api<MoneyShot>("/audit/money-shot");
     setData(shot);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    refresh().catch((e) => setError(String(e.message ?? e)));
+    refresh().catch((e) => {
+      setError(String(e.message ?? e));
+      setLoading(false);
+    });
     const id = setInterval(() => {
       refresh().catch(() => undefined);
-    }, 2000);
+    }, 3500);
     return () => clearInterval(id);
   }, [refresh]);
 
+  const receipt = data?.observer.settlementReceipts[0];
+
   return (
     <div>
-      <span className="pill">
-        Money shot
-        <span className="pill-arrow">→</span>
-      </span>
-      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Observer</h1>
-      <p className="lede">
-        Same ledger, different party. The regulator sees that settlement
-        occurred — and cannot see leg payloads.{" "}
-        <span className="mono">visibleTokens: []</span>
-      </p>
+      <div className="page-head">
+        <span className="pill">
+          Auditor desk
+          <span className="pill-arrow">→</span>
+        </span>
+        <h1 className="page-title">What the regulator sees</h1>
+        <p className="lede">
+          Same Canton ledger as the lender. Different party. You get proof that
+          settlement happened. You do not get the asset legs. That is ledger
+          privacy, not a UI filter.
+        </p>
+      </div>
+
       {error && <p className="err">{error}</p>}
 
       <div className="split">
         <div className="card card-mint">
-          <h2>Participant (Bob)</h2>
-          {data && (
+          <h2>Lender (participant)</h2>
+          {loading && !data ? (
+            <SkeletonBlock rows={5} />
+          ) : data ? (
             <>
-              <p>
-                <span className="tag ok">
-                  tokens: {data.participant.visibleTokens.length}
-                </span>{" "}
-                <span className="tag ok">
-                  receipts: {data.participant.settlementReceipts.length}
-                </span>
+              <p className="card-title" style={{ fontSize: 20 }}>
+                {data.participant.party}
               </p>
-              <pre className="mono" style={{ marginTop: 12 }}>
-                {JSON.stringify(data.participant, null, 2)}
-              </pre>
+              <div className="row">
+                <span className="tag ok">
+                  Tokens held: {data.participant.visibleTokens.length}
+                </span>
+                <span className="tag ok">
+                  Receipts: {data.participant.settlementReceipts.length}
+                </span>
+              </div>
+              <p className="muted" style={{ fontSize: 14 }}>
+                After a settled trade, the lender ACS includes the transferred
+                instruments. That is expected.
+              </p>
+              {data.participant.visibleTokens.length > 0 && (
+                <div className="asset-chips">
+                  {(data.participant.visibleTokens as { instrumentId?: string; amount?: string }[])
+                    .slice(0, 6)
+                    .map((t, i) => (
+                      <span key={i} className="tag cyan">
+                        {t.instrumentId ?? "asset"} · {t.amount ?? "—"}
+                      </span>
+                    ))}
+                </div>
+              )}
             </>
-          )}
+          ) : null}
         </div>
+
         <div className="card card-lavender">
-          <h2>Regulator / Observer</h2>
-          {data && (
+          <h2>Regulator (observer)</h2>
+          {loading && !data ? (
+            <SkeletonBlock rows={6} />
+          ) : data ? (
             <>
-              <p>
-                <span
-                  className={`tag ${data.observer.proof.visibleTokensEmpty ? "empty" : "warn"}`}
-                >
-                  visibleTokens: {JSON.stringify(data.observer.visibleTokens)}
-                </span>{" "}
-                <span
-                  className={`tag ${data.observer.proof.receiptPresent ? "ok" : "warn"}`}
-                >
-                  receipt:{" "}
-                  {data.observer.proof.receiptPresent ? "found" : "none"}
-                </span>
+              <p className="card-title" style={{ fontSize: 20 }}>
+                {data.observer.party}
               </p>
+              <div className="row">
+                <span
+                  className={`tag ${
+                    data.observer.proof.visibleTokensEmpty ? "empty" : "warn"
+                  }`}
+                >
+                  Tokens:{" "}
+                  {data.observer.proof.visibleTokensEmpty
+                    ? "none visible"
+                    : "leak detected"}
+                </span>
+                <span
+                  className={`tag ${
+                    data.observer.proof.receiptPresent ? "ok" : "warn"
+                  }`}
+                >
+                  Receipt:{" "}
+                  {data.observer.proof.receiptPresent ? "on file" : "waiting"}
+                </span>
+              </div>
+
               {data.observer.visibleTokens.length === 0 ? (
                 <div className="empty-state">
                   visibleTokens: []
                   <br />
-                  legs cryptographically excluded
+                  Legs cryptographically excluded
                 </div>
               ) : (
-                <pre className="mono">
-                  {JSON.stringify(data.observer.visibleTokens, null, 2)}
-                </pre>
+                <p className="err">Unexpected tokens in observer ACS.</p>
               )}
-              <h2 style={{ marginTop: 16 }}>SettlementReceipt</h2>
-              {data.observer.settlementReceipts.length === 0 ? (
-                <p className="mono muted">
-                  No receipt yet — settle a composition first.
+
+              <h2 style={{ marginTop: 20 }}>Settlement receipt</h2>
+              {!receipt ? (
+                <p className="muted" style={{ fontSize: 14 }}>
+                  No receipt yet.{" "}
+                  <Link className="link-arrow" href="/demo">
+                    Settle a trade
+                  </Link>{" "}
+                  to issue one.
                 </p>
               ) : (
-                <pre className="mono">
-                  {JSON.stringify(data.observer.settlementReceipts, null, 2)}
-                </pre>
+                <div className="receipt-card">
+                  <p className="card-title" style={{ fontSize: 17 }}>
+                    {receipt.description || "Composition settled"}
+                  </p>
+                  {receipt.settledAt && (
+                    <p className="mono muted" style={{ margin: "4px 0 10px" }}>
+                      {new Date(receipt.settledAt).toLocaleString()}
+                    </p>
+                  )}
+                  {receipt.legSummaries && receipt.legSummaries.length > 0 && (
+                    <ul className="ticket-legs compact">
+                      {receipt.legSummaries.map((leg) => (
+                        <li key={leg.legId}>
+                          <span>{leg.legId}</span>
+                          <strong>{leg.status}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <p className="mono muted" style={{ marginTop: 10, marginBottom: 0 }}>
+                    Proven by {data.observer.proof.test}
+                  </p>
+                </div>
               )}
-              <p className="mono muted" style={{ marginTop: 12 }}>
-                Proven by {data.observer.proof.test}
-              </p>
             </>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

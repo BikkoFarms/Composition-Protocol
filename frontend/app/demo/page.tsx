@@ -1,14 +1,8 @@
 "use client";
 
 /**
- * Pitch Demo Page — HackCanton Season 3 Track 1 Demonstration
- *
- * Provides a 5-minute interactive walkthrough of the Composition Protocol:
- * 1. Proposes a 3-leg trade-finance composition (CBTC collateral, USDCx liquidity cash, ATTEST grade).
- * 2. Simulates counterparty acceptance via Daml AcceptanceTracker contract.
- * 3. Finalizes deal via atomic Daml Settle choice (R-ATOM-1).
- * 4. Displays side-by-side "Money Shot" proving regulator sees SettlementReceipt but visibleTokens: [] (R-PRIV-3).
- * 5. Supports testing atomic revert (R-ATOM-2) where a failed leg aborts the entire deal cleanly with zero partial state.
+ * Settlement desk — product flow for proposing, settling, and proving privacy.
+ * Same backend demo endpoints; framed as a working desk, not a pitch script.
  */
 
 import { useState } from "react";
@@ -33,6 +27,14 @@ type RunFullResult = {
   };
 };
 
+const PHASES = [
+  { id: 0, label: "Ready", hint: "Ticket staged · cocoa export" },
+  { id: 1, label: "Proposed", hint: "Collateral + cash + attestation" },
+  { id: 2, label: "Accepted", hint: "Lender and oracle co-signed" },
+  { id: 3, label: "Settling", hint: "One atomic Canton transaction" },
+  { id: 4, label: "Settled", hint: "Receipt issued · privacy holds" },
+];
+
 export default function DemoPage() {
   const [result, setResult] = useState<RunFullResult | null>(null);
   const [loadStats, setLoadStats] = useState<{
@@ -41,31 +43,40 @@ export default function DemoPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [step, setStep] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const [mode, setMode] = useState<"idle" | "happy" | "revert">("idle");
 
-  async function runPitch(forceFail = false) {
+  async function settleTrade(forceFail = false) {
     setBusy(true);
     setError(null);
-    setStep(1);
+    setResult(null);
+    setMode(forceFail ? "revert" : "happy");
+    setPhase(1);
     try {
-      await new Promise((r) => setTimeout(r, 280));
-      setStep(2);
+      await new Promise((r) => setTimeout(r, 420));
+      setPhase(2);
+      await new Promise((r) => setTimeout(r, 320));
+      setPhase(3);
       const data = await api<RunFullResult>("/compositions/demo/run-full", {
         method: "POST",
         body: JSON.stringify({ forceFail }),
       });
-      setStep(forceFail ? 3 : 4);
       setResult(data);
-      if (data.error) setError(data.error);
+      if (data.error) {
+        setError(data.error);
+        setPhase(3);
+      } else {
+        setPhase(4);
+      }
     } catch (e) {
       setError(String((e as Error).message));
-      setStep(3);
+      setPhase(3);
     } finally {
       setBusy(false);
     }
   }
 
-  async function runFifty() {
+  async function runBatch() {
     setBusy(true);
     setError(null);
     try {
@@ -89,114 +100,188 @@ export default function DemoPage() {
     Array.isArray(result.moneyShot.observer.visibleTokens) &&
     result.moneyShot.observer.visibleTokens.length === 0;
 
+  const phaseLabel = PHASES.find((p) => p.id === phase)?.label ?? "Ready";
+
   return (
     <div>
-      <span className="pill">
-        Pitch · &lt;5 min
-        <span className="pill-arrow">→</span>
-      </span>
-      <h1 className="page-title">Pitch demo</h1>
-      <p className="lede">
-        Propose a three-leg trade-finance composition, settle atomically, then
-        prove the observer cannot see legs.
-      </p>
-
-      <div className="row">
-        <button className="primary" disabled={busy} onClick={() => runPitch(false)}>
-          Run full happy path
-        </button>
-        <button className="danger" disabled={busy} onClick={() => runPitch(true)}>
-          Run atomic revert
-        </button>
-        <button disabled={busy} onClick={runFifty}>
-          Settle 50 (metrics)
-        </button>
-        <Link className="btn" href="/governance">
-          BitSafe M-of-N
-        </Link>
-        <Link className="btn" href="/observer">
-          Observer →
-        </Link>
+      <div className="page-head">
+        <span className="pill">
+          Settlement desk
+          <span className="pill-arrow">→</span>
+        </span>
+        <h1 className="page-title">Settle a cocoa export</h1>
+        <p className="lede">
+          Open a three-leg ticket: CBTC collateral, USDCx cash, and grade
+          attestation. Counterparties accept. Settlement runs as one Canton
+          transaction, then the auditor proves they cannot see the legs.
+        </p>
       </div>
 
-      <div className="card card-mint" style={{ marginBottom: 20 }}>
-        <h2>Script</h2>
-        <ol className="step-list">
-          <li className={step >= 1 ? "done" : step === 1 ? "active" : ""}>
-            <span className="n">1</span>
-            Propose collateral + USDCx + attestation
-          </li>
-          <li className={step >= 2 ? "done" : ""}>
-            <span className="n">2</span>
-            Counterparties accept · AcceptanceTracker fills
-          </li>
-          <li
-            className={
-              step >= 3 ? (error ? "fail" : "done") : ""
-            }
-          >
-            <span className="n">3</span>
-            Settle — one atomic transaction
-          </li>
-          <li className={step >= 4 ? "done active" : ""}>
-            <span className="n">4</span>
-            MONEY SHOT — observer visibleTokens: []
-          </li>
-        </ol>
+      <div className="desk-layout">
+        <div className="card desk-panel">
+          <h2>Ticket</h2>
+          <p className="card-title" style={{ fontSize: 22, marginBottom: 4 }}>
+            West Africa cocoa · T+0
+          </p>
+          <p className="muted" style={{ marginBottom: 20, fontSize: 14 }}>
+            Status: <strong>{phaseLabel}</strong>
+            {mode === "revert" ? " · testing atomic revert" : ""}
+          </p>
+
+          <ul className="ticket-legs">
+            <li>
+              <span>Leg A · Collateral</span>
+              <strong>12.5 CBTC → Lender</strong>
+            </li>
+            <li>
+              <span>Leg B · Purchase</span>
+              <strong>850,000 USDCx → Exporter</strong>
+            </li>
+            <li>
+              <span>Leg C · Attestation</span>
+              <strong>Oracle grade · Pass</strong>
+            </li>
+          </ul>
+
+          <div className="phase-rail" role="list">
+            {PHASES.filter((p) => p.id > 0).map((p) => (
+              <div
+                key={p.id}
+                role="listitem"
+                className={`phase-chip ${
+                  phase > p.id ? "done" : phase === p.id ? "active" : ""
+                } ${error && phase === p.id ? "fail" : ""}`}
+              >
+                <span className="phase-n">{p.id}</span>
+                <div>
+                  <strong>{p.label}</strong>
+                  <span>{p.hint}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="row" style={{ marginBottom: 0, marginTop: 8 }}>
+            <button
+              className="primary"
+              disabled={busy}
+              onClick={() => settleTrade(false)}
+            >
+              {busy && mode === "happy" ? "Settling…" : "Settle this trade"}
+            </button>
+            <button
+              className="danger"
+              disabled={busy}
+              onClick={() => settleTrade(true)}
+            >
+              Test atomic revert
+            </button>
+          </div>
+          <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
+            Prefer role-by-role?{" "}
+            <Link className="link-arrow" href="/proposer">
+              Exporter
+            </Link>
+            {" · "}
+            <Link className="link-arrow" href="/counterparty">
+              Lender
+            </Link>
+            {" · "}
+            <Link className="link-arrow" href="/observer">
+              Auditor
+            </Link>
+          </p>
+        </div>
+
+        <div className="stack-sm desk-side">
+          <div className="card card-mint">
+            <h2>What you are proving</h2>
+            <ul className="proof-list">
+              <li>All three legs commit together or none do</li>
+              <li>Lender holds tokens after a happy path</li>
+              <li>Auditor holds a receipt with empty token ACS</li>
+            </ul>
+          </div>
+          <div className="card card-lime">
+            <h2>Load the desk</h2>
+            <p className="card-body" style={{ marginBottom: 14 }}>
+              Push fifty settlements to fill the activity board for judges.
+            </p>
+            <button disabled={busy} onClick={runBatch}>
+              Settle 50 tickets
+            </button>
+            {loadStats && (
+              <p className="mono" style={{ marginTop: 12, marginBottom: 0 }}>
+                {loadStats.ran} ran · {loadStats.metrics.compositionsSettled}{" "}
+                settled · {loadStats.metrics.legsSettled} legs
+              </p>
+            )}
+          </div>
+          <div className="card card-lavender">
+            <h2>BitSafe</h2>
+            <p className="card-body" style={{ marginBottom: 14 }}>
+              Need threshold signatures before cash moves?
+            </p>
+            <Link className="btn" href="/governance">
+              Open BitSafe desk
+            </Link>
+          </div>
+        </div>
       </div>
 
-      {error && <p className="err">{error}</p>}
-
-      {loadStats && (
-        <div className="card card-lime" style={{ marginBottom: 20 }}>
-          <h2>Load metrics</h2>
-          <p className="mono" style={{ margin: 0 }}>
-            ran={loadStats.ran} settled={loadStats.metrics.compositionsSettled}{" "}
-            reverted={loadStats.metrics.compositionsReverted} legs=
-            {loadStats.metrics.legsSettled}
+      {error && (
+        <div className="card card-blush" style={{ marginTop: 20 }}>
+          <h2>Atomic revert</h2>
+          <p className="err" style={{ marginBottom: 0 }}>
+            {error}
+          </p>
+          <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>
+            No partial state. Collateral, cash, and attestation all rolled back.
           </p>
         </div>
       )}
 
-      {result && (
-        <div className="split">
-          <div className="card">
-            <h2>Participant (Bob)</h2>
-            <span className="tag ok">
-              tokens: {result.moneyShot.participant.visibleTokens.length}
-            </span>
-            <pre className="mono" style={{ marginTop: 12 }}>
-              {JSON.stringify(
-                {
-                  status: result.composition.status,
-                  receipts: result.moneyShot.participant.settlementReceipts.length,
-                  tokens: result.moneyShot.participant.visibleTokens.length,
-                },
-                null,
-                2,
-              )}
-            </pre>
+      {result && !result.error && (
+        <div className="split" style={{ marginTop: 28 }}>
+          <div className="card card-mint">
+            <h2>Lender view</h2>
+            <p className="card-title" style={{ fontSize: 20 }}>
+              Assets received
+            </p>
+            <div className="row" style={{ marginBottom: 8 }}>
+              <span className="tag ok">
+                Tokens: {result.moneyShot.participant.visibleTokens.length}
+              </span>
+              <span className="tag ok">
+                Receipts:{" "}
+                {result.moneyShot.participant.settlementReceipts.length}
+              </span>
+            </div>
+            <p className="muted" style={{ fontSize: 14, margin: 0 }}>
+              Deal {result.composition.id.slice(0, 8)} ·{" "}
+              {result.composition.status}
+            </p>
           </div>
           <div className="card card-lavender">
-            <h2>Observer (Regulator)</h2>
+            <h2>Auditor view</h2>
+            <p className="card-title" style={{ fontSize: 20 }}>
+              Privacy check
+            </p>
             {observerEmpty ? (
-              <div className="empty-state">visibleTokens: []</div>
+              <div className="empty-state" style={{ marginTop: 8 }}>
+                visibleTokens: []
+                <br />
+                Legs not in auditor ACS
+              </div>
             ) : (
-              <span className="tag warn">tokens present</span>
+              <span className="tag warn">Unexpected tokens present</span>
             )}
             <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
               {result.moneyShot.observer.privacy.claim}
             </p>
-            <pre className="mono">
-              {JSON.stringify(
-                {
-                  visibleTokens: result.moneyShot.observer.visibleTokens,
-                  receipts: result.moneyShot.observer.settlementReceipts.length,
-                },
-                null,
-                2,
-              )}
-            </pre>
+            <Link className="link-arrow" href="/observer">
+              Open full auditor desk →
+            </Link>
           </div>
         </div>
       )}

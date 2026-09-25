@@ -17,7 +17,7 @@ const pages = [
 ];
 
 for (const [name, path] of pages) {
-  await page.goto(`http://localhost:3000${path}`, {
+  await page.goto(`http://localhost:3100${path}`, {
     waitUntil: "domcontentloaded",
     timeout: 60000,
   });

@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
+import { SkeletonBlock } from "@/components/Skeleton";
 
 type Composition = {
   id: string;
@@ -35,6 +37,7 @@ export default function GovernancePage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [activeGov, setActiveGov] =
     useState<(typeof GOVERNORS)[number]>("Gov1");
 
@@ -45,11 +48,15 @@ export default function GovernancePage() {
     }>("/compositions");
     setComps(data.compositions);
     setGovs(data.governances);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    refresh().catch((e) => setError(String(e.message ?? e)));
-    const timer = setInterval(() => refresh().catch(() => undefined), 2500);
+    refresh().catch((e) => {
+      setError(String(e.message ?? e));
+      setLoading(false);
+    });
+    const timer = setInterval(() => refresh().catch(() => undefined), 4000);
     return () => clearInterval(timer);
   }, [refresh]);
 
@@ -75,9 +82,7 @@ export default function GovernancePage() {
         body: JSON.stringify({}),
       });
       await refresh();
-      setSuccessMsg(
-        `Opened 2-of-3 governed deal for composition ${c.id.slice(0, 8)}`,
-      );
+      setSuccessMsg("Opened a 2-of-3 governed deal. Collect signatures below.");
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -95,7 +100,7 @@ export default function GovernancePage() {
         body: JSON.stringify({ governor: govName }),
       });
       await refresh();
-      setSuccessMsg(`Signature recorded for ${govName}`);
+      setSuccessMsg(`${govName} signed.`);
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -110,19 +115,16 @@ export default function GovernancePage() {
     try {
       const result = await api<Composition>(
         `/compositions/governance/${id}/execute`,
-        {
-          method: "POST",
-          body: "{}",
-        },
+        { method: "POST", body: "{}" },
       );
       await refresh();
       setSuccessMsg(
-        `R-GOV-2 enforced: threshold met — deal ${result.id.slice(0, 8)} settled atomically.`,
+        `Threshold met. Deal ${result.id.slice(0, 8)} settled atomically.`,
       );
     } catch (e) {
       const msg = String((e as Error).message);
       if (expectFail || msg.includes("below threshold")) {
-        setSuccessMsg(`R-GOV-1 enforced: execution safely rejected (${msg})`);
+        setSuccessMsg(`Blocked below threshold: ${msg}`);
       } else {
         setError(msg);
       }
@@ -166,7 +168,7 @@ export default function GovernancePage() {
           body: "{}",
         });
       } catch {
-        // Expected R-GOV-1 rejection
+        /* expected reject */
       }
 
       await api(`/compositions/governance/${govId}/approve`, {
@@ -181,7 +183,7 @@ export default function GovernancePage() {
 
       await refresh();
       setSuccessMsg(
-        "Full BitSafe demo verified: R-GOV-1 rejected at 1/2, R-GOV-2 succeeded at 2/2.",
+        "Walkthrough complete: rejected at 1/2, settled at 2/2.",
       );
     } catch (e) {
       setError(String((e as Error).message));
@@ -192,30 +194,33 @@ export default function GovernancePage() {
 
   return (
     <div>
-      <span className="pill">
-        BitSafe · 2-of-3
-        <span className="pill-arrow">→</span>
-      </span>
-      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>
-        BitSafe governance
-      </h1>
-      <p className="lede">
-        M-of-N threshold multi-sig for high-value compositions. Below threshold
-        rejects; at threshold settles — LocalNet-ready for the Decentralization
-        challenge.
-      </p>
+      <div className="page-head">
+        <span className="pill">
+          BitSafe · 2-of-3
+          <span className="pill-arrow">→</span>
+        </span>
+        <h1 className="page-title">Governed settlement</h1>
+        <p className="lede">
+          High-value tickets wait for threshold signatures. Sign as a governor,
+          try to execute early to prove rejection, then hit the threshold and
+          settle.
+        </p>
+      </div>
 
       <div className="row">
         <button className="primary" disabled={busy} onClick={startGoverned}>
-          Open 2-of-3 governed deal
+          Open governed deal
         </button>
         <button disabled={busy} onClick={runFullGovernanceDemo}>
-          Run R-GOV-1 & R-GOV-2 test flow
+          Walk through reject → approve → settle
         </button>
+        <Link className="btn" href="/demo">
+          Ungoverned desk
+        </Link>
       </div>
 
       <div className="card card-mint" style={{ marginBottom: 20 }}>
-        <h2>Active governor role</h2>
+        <h2>Acting as</h2>
         <div className="row" style={{ marginBottom: 0 }}>
           {GOVERNORS.map((g) => (
             <button
@@ -223,29 +228,23 @@ export default function GovernancePage() {
               className={activeGov === g ? "primary" : undefined}
               onClick={() => setActiveGov(g)}
             >
-              Act as {g}
+              {g}
             </button>
           ))}
         </div>
       </div>
 
-      {successMsg && (
-        <div className="card card-sage" style={{ marginBottom: 20 }}>
-          <p className="mono" style={{ margin: 0, color: "var(--color-deep-forest)" }}>
-            {successMsg}
-          </p>
-        </div>
-      )}
-
+      {successMsg && <div className="flash-ok">{successMsg}</div>}
       {error && <p className="err">{error}</p>}
 
       <div className="grid grid-2">
         <div className="card card-lavender">
-          <h2>Active governed deals ({govs.length})</h2>
-          {govs.length === 0 ? (
-            <p className="mono muted">
-              No governed deals open. Click &quot;Open 2-of-3 governed deal&quot;
-              above.
+          <h2>Open governed deals</h2>
+          {loading && govs.length === 0 ? (
+            <SkeletonBlock rows={5} />
+          ) : govs.length === 0 ? (
+            <p className="muted" style={{ fontSize: 14 }}>
+              No governed deals yet. Open one above.
             </p>
           ) : (
             govs.map((g) => {
@@ -254,18 +253,11 @@ export default function GovernancePage() {
               const hasActiveGovApproved = g.approvals.includes(activeGov);
 
               return (
-                <div
-                  key={g.id}
-                  className="card"
-                  style={{ marginBottom: 16, padding: 16 }}
-                >
-                  <div
-                    className="row"
-                    style={{ justifyContent: "space-between" }}
-                  >
-                    <span className="mono" style={{ fontWeight: 500 }}>
+                <div key={g.id} className="deal-card">
+                  <div className="deal-card-head">
+                    <strong>
                       {comp?.description || g.compositionId.slice(0, 8)}
-                    </span>
+                    </strong>
                     <span
                       className={`tag ${
                         g.status === "executed"
@@ -278,17 +270,12 @@ export default function GovernancePage() {
                       {g.status === "executed"
                         ? "Settled"
                         : isThresholdMet
-                          ? "Threshold met"
-                          : `Pending ${g.approvals.length}/${g.threshold}`}
+                          ? "Ready to execute"
+                          : `${g.approvals.length}/${g.threshold} signed`}
                     </span>
                   </div>
 
-                  <p className="mono muted" style={{ fontSize: 13 }}>
-                    Threshold: {g.threshold} of {g.governors.length} · Approvals: [
-                    {g.approvals.join(", ") || "none"}]
-                  </p>
-
-                  <div className="row">
+                  <div className="asset-chips">
                     {g.governors.map((govName) => {
                       const approved = g.approvals.includes(govName);
                       return (
@@ -296,14 +283,14 @@ export default function GovernancePage() {
                           key={govName}
                           className={`tag ${approved ? "ok" : "empty"}`}
                         >
-                          {approved ? `${govName} signed` : `${govName} pending`}
+                          {approved ? `${govName} ✓` : `${govName} · waiting`}
                         </span>
                       );
                     })}
                   </div>
 
                   {g.status === "open" && (
-                    <div className="row" style={{ marginTop: 8 }}>
+                    <div className="row" style={{ marginBottom: 0, marginTop: 12 }}>
                       {!hasActiveGovApproved && (
                         <button
                           className="primary"
@@ -319,7 +306,7 @@ export default function GovernancePage() {
                           disabled={busy}
                           onClick={() => execute(g.id, true)}
                         >
-                          Test R-GOV-1 (reject)
+                          Try execute early
                         </button>
                       )}
                       {isThresholdMet && (
@@ -328,19 +315,10 @@ export default function GovernancePage() {
                           disabled={busy}
                           onClick={() => execute(g.id, false)}
                         >
-                          Execute settlement (R-GOV-2)
+                          Execute settlement
                         </button>
                       )}
                     </div>
-                  )}
-
-                  {g.status === "executed" && (
-                    <p
-                      className="mono"
-                      style={{ color: "var(--color-deep-forest)", fontSize: 13 }}
-                    >
-                      Atomic multi-asset settlement finalized.
-                    </p>
                   )}
                 </div>
               );
@@ -349,27 +327,17 @@ export default function GovernancePage() {
         </div>
 
         <div className="card card-lime">
-          <h2>Composition registry</h2>
-          <p className="mono muted" style={{ marginBottom: 12 }}>
-            Underlying multi-asset deal states
-          </p>
-          {comps.length === 0 ? (
-            <p className="mono muted">No compositions recorded.</p>
+          <h2>Composition book</h2>
+          {loading && comps.length === 0 ? (
+            <SkeletonBlock rows={4} />
+          ) : comps.length === 0 ? (
+            <p className="muted" style={{ fontSize: 14 }}>
+              No compositions recorded yet.
+            </p>
           ) : (
-            comps.map((c) => (
-              <div
-                key={c.id}
-                style={{
-                  borderBottom:
-                    "1px solid color-mix(in srgb, var(--color-lichen-gray) 25%, transparent)",
-                  paddingBottom: 12,
-                  marginBottom: 12,
-                }}
-              >
-                <div
-                  className="row"
-                  style={{ justifyContent: "space-between" }}
-                >
+            comps.slice(0, 12).map((c) => (
+              <div key={c.id} className="book-row">
+                <div className="deal-card-head">
                   <span style={{ fontWeight: 500, fontSize: 14 }}>
                     {c.description}
                   </span>
@@ -382,24 +350,13 @@ export default function GovernancePage() {
                           : "ok"
                     }`}
                   >
-                    {c.status}
+                    {c.status.replaceAll("_", " ")}
                   </span>
                 </div>
-                <p className="mono muted" style={{ fontSize: 12, margin: "4px 0 0" }}>
-                  ID: {c.id}
+                <p className="mono muted" style={{ fontSize: 12, margin: 0 }}>
+                  {c.id.slice(0, 12)}…
+                  {c.requireGovernance ? " · BitSafe gate" : ""}
                 </p>
-                {c.requireGovernance && (
-                  <p
-                    className="mono"
-                    style={{
-                      color: "var(--color-deep-teal)",
-                      margin: "4px 0 0",
-                      fontSize: 12,
-                    }}
-                  >
-                    BitSafe governed deal (M-of-N gate active)
-                  </p>
-                )}
               </div>
             ))
           )}

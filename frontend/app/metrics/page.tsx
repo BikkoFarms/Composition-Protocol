@@ -95,28 +95,29 @@ export default function MetricsPage() {
 
   return (
     <div>
-      <span className="pill">
-        Metrics · Validation
-        <span className="pill-arrow">→</span>
-      </span>
-      <div
-        className="row"
-        style={{ justifyContent: "space-between", alignItems: "flex-start" }}
-      >
-        <div>
-          <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>
-            On-chain metrics
-          </h1>
-          <p className="lede">
-            Throughput, deal complexity, and atomic settlement integrity.
-            Target: ≥50 settlements, zero unexpected failures.
-          </p>
-        </div>
-        <span className={`tag ${meetsFiftyCriterion ? "ok" : "warn"}`}>
-          {meetsFiftyCriterion
-            ? "Criterion met (≥50 settled)"
-            : "Target ≥50 deals"}
+      <div className="page-head">
+        <span className="pill">
+          Activity
+          <span className="pill-arrow">→</span>
         </span>
+        <div
+          className="row"
+          style={{ justifyContent: "space-between", alignItems: "flex-start" }}
+        >
+          <div>
+            <h1 className="page-title">Settlement activity</h1>
+            <p className="lede">
+              Live counts from the desk: settled tickets, atomic reverts, and
+              BitSafe-gated deals. Target for the competition: at least 50
+              clean settlements.
+            </p>
+          </div>
+          <span className={`tag ${meetsFiftyCriterion ? "ok" : "warn"}`}>
+            {meetsFiftyCriterion
+              ? "≥50 settlements"
+              : "Need ≥50 settlements"}
+          </span>
+        </div>
       </div>
 
       <div className="row">

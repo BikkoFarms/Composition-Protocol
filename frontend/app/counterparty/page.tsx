@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 
 type Composition = {
@@ -64,15 +65,18 @@ export default function CounterpartyPage() {
 
   return (
     <div>
-      <span className="pill">
-        Role · Counterparty
-        <span className="pill-arrow">→</span>
-      </span>
-      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Counterparty</h1>
-      <p className="lede">
-        Lender (Bob) and Oracle co-sign. AcceptanceTracker fills until every
-        required party has accepted — then Settle unlocks.
-      </p>
+      <div className="page-head">
+        <span className="pill">
+          Lender desk
+          <span className="pill-arrow">→</span>
+        </span>
+        <h1 className="page-title">Review and co-sign</h1>
+        <p className="lede">
+          Switch between lender (Bob) and oracle. Review legs that name you,
+          then sign. Settlement unlocks only when every required party has
+          accepted.
+        </p>
+      </div>
       <div className="row">
         {ROLES.map((r) => (
           <button
@@ -80,17 +84,21 @@ export default function CounterpartyPage() {
             className={party === r ? "primary" : undefined}
             onClick={() => setParty(r)}
           >
-            Act as {r}
+            {r === "Bob" ? "Lender (Bob)" : "Oracle"}
           </button>
         ))}
       </div>
       {error && <p className="err">{error}</p>}
 
       <div className="card card-lime">
-        <h2>Open compositions for {party}</h2>
+        <h2>Inbox for {party === "Bob" ? "Lender" : "Oracle"}</h2>
         {comps.length === 0 && (
-          <p className="mono muted">
-            Nothing to accept. Propose a deal from the Proposer view.
+          <p className="muted" style={{ fontSize: 14 }}>
+            Nothing waiting.{" "}
+            <Link className="link-arrow" href="/proposer">
+              Ask the exporter to propose
+            </Link>
+            .
           </p>
         )}
         {comps.map((c) => (
@@ -136,12 +144,12 @@ export default function CounterpartyPage() {
                   disabled={busy}
                   onClick={() => accept(c.id)}
                 >
-                  Accept as {party}
+                  Accept as {party === "Bob" ? "Lender" : "Oracle"}
                 </button>
               )}
             {c.accepted.includes(party) && (
-              <p className="mono" style={{ color: "var(--color-deep-forest)" }}>
-                Already accepted.
+              <p style={{ color: "var(--color-deep-forest)", fontSize: 14 }}>
+                Signed. Waiting on the rest of the desk.
               </p>
             )}
           </div>

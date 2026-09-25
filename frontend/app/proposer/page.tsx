@@ -84,28 +84,31 @@ export default function ProposerPage() {
 
   return (
     <div>
-      <span className="pill">
-        Role · Proposer
-        <span className="pill-arrow">→</span>
-      </span>
-      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Proposer</h1>
-      <p className="lede">
-        Alice (exporter) proposes a three-leg trade-finance composition: CBTC
-        collateral, USDCx cash, oracle attestation.
-      </p>
+      <div className="page-head">
+        <span className="pill">
+          Exporter desk
+          <span className="pill-arrow">→</span>
+        </span>
+        <h1 className="page-title">Propose the composition</h1>
+        <p className="lede">
+          You are Alice, the cocoa exporter. Stage CBTC collateral, USDCx cash,
+          and an oracle grade into one ticket. When lenders accept, settle from
+          here.
+        </p>
+      </div>
       <div className="row">
         <button className="primary" disabled={busy} onClick={() => propose(false)}>
-          Propose trade-finance deal
+          Propose cocoa export
         </button>
         <button className="danger" disabled={busy} onClick={() => propose(true)}>
-          Propose failing deal
+          Propose broken ticket
         </button>
       </div>
       {error && <p className="err">{error}</p>}
 
       <div className="grid grid-2">
         <div className="card card-mint">
-          <h2>Alice visible tokens</h2>
+          <h2>Your holdings</h2>
           <table>
             <thead>
               <tr>
@@ -126,22 +129,26 @@ export default function ProposerPage() {
           </table>
         </div>
         <div className="card">
-          <h2>Compositions</h2>
+          <h2>Your tickets</h2>
           {comps.length === 0 && (
-            <p className="mono muted">No compositions yet.</p>
+            <p className="muted" style={{ fontSize: 14 }}>
+              No tickets yet. Propose a cocoa export to start.
+            </p>
           )}
           {comps.map((c) => (
-            <div key={c.id} style={{ marginBottom: 16 }}>
-              <div className="row">
-                <span className="tag">{c.status}</span>
+            <div key={c.id} className="deal-card">
+              <div className="deal-card-head">
+                <span className="tag">{c.status.replaceAll("_", " ")}</span>
                 <span className="mono muted">{c.id.slice(0, 8)}</span>
               </div>
               <p className="muted" style={{ margin: "6px 0", fontSize: 14 }}>
                 {c.description}
               </p>
-              <p className="mono muted">
-                accepted: [{c.accepted.join(", ") || "—"}] / required: [
-                {c.counterparties.join(", ")}]
+              <p className="muted" style={{ fontSize: 13 }}>
+                Accepted {c.accepted.length}/{c.counterparties.length}
+                {c.accepted.length
+                  ? ` · ${c.accepted.join(", ")}`
+                  : " · waiting on counterparties"}
               </p>
               {c.status === "accepted" && (
                 <button
@@ -150,7 +157,7 @@ export default function ProposerPage() {
                   disabled={busy}
                   onClick={() => settle(c.id)}
                 >
-                  Settle atomically
+                  Settle now
                 </button>
               )}
             </div>
