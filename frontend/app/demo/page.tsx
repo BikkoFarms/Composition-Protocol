@@ -95,7 +95,7 @@ export default function DemoPage() {
         Pitch · &lt;5 min
         <span className="pill-arrow">→</span>
       </span>
-      <h1 style={{ fontSize: "clamp(2rem, 4vw, 2.9rem)" }}>Pitch demo</h1>
+      <h1 className="page-title">Pitch demo</h1>
       <p className="lede">
         Propose a three-leg trade-finance composition, settle atomically, then
         prove the observer cannot see legs.
@@ -114,30 +114,32 @@ export default function DemoPage() {
         <Link className="btn" href="/governance">
           BitSafe M-of-N
         </Link>
+        <Link className="btn" href="/observer">
+          Observer →
+        </Link>
       </div>
 
       <div className="card card-mint" style={{ marginBottom: 20 }}>
         <h2>Script</h2>
-        <ol className="mono muted" style={{ lineHeight: 1.8, margin: 0, paddingLeft: 18 }}>
-          <li style={{ color: step >= 1 ? "var(--color-deep-forest)" : undefined }}>
+        <ol className="step-list">
+          <li className={step >= 1 ? "done" : step === 1 ? "active" : ""}>
+            <span className="n">1</span>
             Propose collateral + USDCx + attestation
           </li>
-          <li style={{ color: step >= 2 ? "var(--color-deep-forest)" : undefined }}>
+          <li className={step >= 2 ? "done" : ""}>
+            <span className="n">2</span>
             Counterparties accept · AcceptanceTracker fills
           </li>
           <li
-            style={{
-              color:
-                step >= 3
-                  ? error
-                    ? "#7a2251"
-                    : "var(--color-deep-forest)"
-                  : undefined,
-            }}
+            className={
+              step >= 3 ? (error ? "fail" : "done") : ""
+            }
           >
+            <span className="n">3</span>
             Settle — one atomic transaction
           </li>
-          <li style={{ color: step >= 4 ? "var(--color-deep-teal)" : undefined }}>
+          <li className={step >= 4 ? "done active" : ""}>
+            <span className="n">4</span>
             MONEY SHOT — observer visibleTokens: []
           </li>
         </ol>

@@ -32,7 +32,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <span className="brand-mark" aria-hidden />
               Composition Protocol
             </Link>
-            <nav>
+            <span className="live-badge">
+              <span className="status-dot" />
+              Demo ready
+            </span>
+            <nav className="nav-scroll" aria-label="Primary">
               {links.map((l) => (
                 <Link key={l.href} href={l.href}>
                   {l.label}
@@ -44,6 +48,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </Link>
           </header>
           <main>{children}</main>
+          <footer className="footer-bar">
+            <div>
+              Composition Protocol · HackCanton S3 · Track 1 + BitSafe
+            </div>
+            <div className="mono">
+              Lattice UI · Canton JSON Ledger API v2
+            </div>
+          </footer>
         </div>
       </body>
     </html>
