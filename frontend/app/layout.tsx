@@ -1,6 +1,14 @@
 import type { ReactNode } from "react";
+import type { Viewport } from "next";
 import Link from "next/link";
 import "./globals.css";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#f7f6f2",
+};
 
 export const metadata = {
   title: "Composition Protocol",
