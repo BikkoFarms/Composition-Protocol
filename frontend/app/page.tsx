@@ -6,15 +6,15 @@ export default function HomePage() {
       <section className="hero hero-product">
         <div>
           <span className="pill">
-            Canton settlement
+            Canton Composition Layer
             <span className="pill-arrow">→</span>
           </span>
           <h1>Close the whole deal. Or nothing moves.</h1>
           <p className="lede">
-            Composition Protocol lets exporters, lenders, and oracles settle
-            collateral, cash, and attestation in one Canton transaction. Each
-            party sees only its own leg. Auditors get a receipt, not the
-            payloads.
+            A reusable Daml package for structured settlement on Canton. This
+            desk runs a concrete 3-party DvP: collateral, cash, and attestation
+            in one atomic transaction. Each party sees only its own leg.
+            Auditors get a receipt, not the payloads.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/demo">
@@ -225,9 +225,12 @@ export default function HomePage() {
           <details className="faq-item" open>
             <summary>What is Composition Protocol?</summary>
             <p>
-              A reusable Daml primitive on Canton that bundles several asset
-              transfers into one deal. Either every leg settles, or none does.
-              Each participant only sees contracts they are a stakeholder of.
+              The product name for our Canton Composition Layer: a reusable Daml
+              package for structured settlement workflows. Builders get
+              propose/accept coordination, disclosed contracts, expiry/cancel
+              paths, and atomic settlement completion without rewriting that
+              plumbing for every use case. The cocoa export desk is the working
+              3-party DvP specimen.
             </p>
           </details>
           <details className="faq-item">

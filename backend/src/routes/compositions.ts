@@ -65,6 +65,7 @@ compositionsRouter.post("/demo/trade-finance", (req, res) => {
     const body = (req.body ?? {}) as {
       forceFail?: boolean;
       requireGovernance?: boolean;
+      expiresAt?: string;
     };
     const composition = demoStore.proposeTradeFinance(body);
     res.status(201).json(composition);
@@ -217,8 +218,14 @@ compositionsRouter.post("/:id/cancel", (req, res) => {
  */
 compositionsRouter.post("/:id/expire", (req, res) => {
   try {
-    const caller = ((req.body as { caller?: PartyId })?.caller ?? "Operator") as PartyId;
-    const c = demoStore.expire(req.params.id, caller);
+    const body = (req.body ?? {}) as { caller?: PartyId; force?: boolean };
+    const caller = (body.caller ?? "Operator") as PartyId;
+    const existing = demoStore.compositions.get(req.params.id);
+    const simulatedNow =
+      body.force && existing?.expiresAt
+        ? new Date(new Date(existing.expiresAt).getTime() + 1000)
+        : undefined;
+    const c = demoStore.expire(req.params.id, caller, simulatedNow);
     res.json(c);
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });

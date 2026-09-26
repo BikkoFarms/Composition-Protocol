@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton demo ledger · Cocoa export settlement with CBTC + USDCx
+          Live on Canton · Composition Layer DvP specimen · CBTC + USDCx
           {" · "}
           <Link href="/demo">Open the desk →</Link>
         </div>

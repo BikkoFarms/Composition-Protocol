@@ -322,6 +322,7 @@ export class DemoStore {
   proposeTradeFinance(opts?: {
     forceFail?: boolean;
     requireGovernance?: boolean;
+    expiresAt?: string;
   }): Composition {
     const collateral =
       this.listTokens("Alice").find((t) => t.instrumentId === "CBTC") ??
@@ -340,6 +341,18 @@ export class DemoStore {
         "African cocoa export — collateral + USDCx working capital + grade attestation",
       forceFail: opts?.forceFail,
       requireGovernance: opts?.requireGovernance,
+      expiresAt: opts?.expiresAt,
+      disclosedContracts: [
+        {
+          templateId: "#Composition:MockToken",
+          contractId: collateral.contractId,
+          payload: {
+            owner: "Alice",
+            instrumentId: "CBTC",
+            amount: collateral.amount,
+          },
+        },
+      ],
       legs: [
         {
           legId: "collateral",

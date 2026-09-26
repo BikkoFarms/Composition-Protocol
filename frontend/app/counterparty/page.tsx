@@ -1,17 +1,13 @@
 "use client";
 
 /**
- * Counterparty Dashboard — Bob (Lender) & Oracle (Quality Inspection)
- *
- * Demonstrates the co-signing flow:
- * 1. Counterparties inspect compositions where they are named participants.
- * 2. Each counterparty reviews the leg specifications and co-signs using the Daml `AcceptProposal` choice.
- * 3. The `AcceptanceTracker` accumulates signatures until all required counterparties agree, unlocking `FinalizeAgreement` and `Settle`.
+ * Lender / Oracle desk — accept or reject proposals (John's reject path).
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
+import { SkeletonBlock } from "@/components/Skeleton";
 
 type Composition = {
   id: string;
@@ -19,6 +15,9 @@ type Composition = {
   description: string;
   accepted: string[];
   counterparties: string[];
+  expiresAt?: string;
+  rejectionReason?: string;
+  disclosedContracts?: { contractId: string; payload?: Record<string, unknown> }[];
   legs: {
     legId: string;
     instrumentId: string;
@@ -29,22 +28,36 @@ type Composition = {
 };
 
 const ROLES = ["Bob", "Oracle"] as const;
+const ACTIONABLE = new Set(["proposed", "partially_accepted"]);
 
 export default function CounterpartyPage() {
   const [party, setParty] = useState<(typeof ROLES)[number]>("Bob");
   const [comps, setComps] = useState<Composition[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     const view = await api<{ compositions: Composition[] }>(
       `/audit/view/${party}`,
     );
-    setComps(view.compositions.filter((c) => c.status !== "settled"));
+    setComps(
+      view.compositions.filter(
+        (c) =>
+          !["settled", "cancelled", "expired", "rejected", "reverted"].includes(
+            c.status,
+          ),
+      ),
+    );
+    setLoading(false);
   }, [party]);
 
   useEffect(() => {
-    refresh().catch((e) => setError(String(e.message ?? e)));
+    setLoading(true);
+    refresh().catch((e) => {
+      setError(String(e.message ?? e));
+      setLoading(false);
+    });
   }, [refresh]);
 
   async function accept(id: string) {
@@ -63,6 +76,28 @@ export default function CounterpartyPage() {
     }
   }
 
+  async function reject(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/compositions/${id}/reject`, {
+        method: "POST",
+        body: JSON.stringify({
+          rejector: party,
+          reason:
+            party === "Bob"
+              ? "Margin terms rejected by lender"
+              : "Grade attestation failed inspection",
+        }),
+      });
+      await refresh();
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div>
       <div className="page-head">
@@ -72,9 +107,8 @@ export default function CounterpartyPage() {
         </span>
         <h1 className="page-title">Review and co-sign</h1>
         <p className="lede">
-          Switch between lender (Bob) and oracle. Review legs that name you,
-          then sign. Settlement unlocks only when every required party has
-          accepted.
+          Switch between lender (Bob) and oracle. Accept to advance the
+          AcceptanceTracker, or reject cleanly so nothing half-settles.
         </p>
       </div>
       <div className="row">
@@ -92,7 +126,8 @@ export default function CounterpartyPage() {
 
       <div className="card card-lime">
         <h2>Inbox for {party === "Bob" ? "Lender" : "Oracle"}</h2>
-        {comps.length === 0 && (
+        {loading && comps.length === 0 && <SkeletonBlock rows={4} />}
+        {!loading && comps.length === 0 && (
           <p className="muted" style={{ fontSize: 14 }}>
             Nothing waiting.{" "}
             <Link className="link-arrow" href="/proposer">
@@ -102,16 +137,29 @@ export default function CounterpartyPage() {
           </p>
         )}
         {comps.map((c) => (
-          <div key={c.id} style={{ marginBottom: 20 }}>
-            <div className="row">
+          <div key={c.id} className="deal-card">
+            <div className="deal-card-head">
               <span className={`tag ${c.status === "accepted" ? "ok" : "warn"}`}>
-                {c.status}
+                {c.status.replaceAll("_", " ")}
               </span>
               <span className="muted" style={{ fontSize: 14 }}>
                 {c.description}
               </span>
             </div>
-            <div className="card" style={{ marginTop: 12, padding: 16 }}>
+            {c.expiresAt && (
+              <p className="mono muted" style={{ fontSize: 12 }}>
+                Expires {new Date(c.expiresAt).toLocaleString()}
+              </p>
+            )}
+            {c.disclosedContracts && c.disclosedContracts.length > 0 && (
+              <div className="asset-chips" style={{ marginBottom: 10 }}>
+                <span className="tag cyan">
+                  {c.disclosedContracts.length} disclosed contract
+                  {c.disclosedContracts.length > 1 ? "s" : ""}
+                </span>
+              </div>
+            )}
+            <div className="card" style={{ marginTop: 8, padding: 16 }}>
               <table>
                 <thead>
                   <tr>
@@ -137,15 +185,23 @@ export default function CounterpartyPage() {
             </div>
             {!c.accepted.includes(party) &&
               c.counterparties.includes(party) &&
-              c.status !== "reverted" && (
-                <button
-                  className="primary"
-                  style={{ marginTop: 12 }}
-                  disabled={busy}
-                  onClick={() => accept(c.id)}
-                >
-                  Accept as {party === "Bob" ? "Lender" : "Oracle"}
-                </button>
+              ACTIONABLE.has(c.status) && (
+                <div className="row" style={{ marginTop: 12, marginBottom: 0 }}>
+                  <button
+                    className="primary"
+                    disabled={busy}
+                    onClick={() => accept(c.id)}
+                  >
+                    Accept as {party === "Bob" ? "Lender" : "Oracle"}
+                  </button>
+                  <button
+                    className="danger"
+                    disabled={busy}
+                    onClick={() => reject(c.id)}
+                  >
+                    Reject proposal
+                  </button>
+                </div>
               )}
             {c.accepted.includes(party) && (
               <p style={{ color: "var(--color-deep-forest)", fontSize: 14 }}>

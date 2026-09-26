@@ -198,7 +198,8 @@ export default function DemoPage() {
             <h2>What you are proving</h2>
             <ul className="proof-list">
               <li>All three legs commit together or none do</li>
-              <li>Lender holds tokens after a happy path</li>
+              <li>Disclosed contracts reach the right parties only</li>
+              <li>Cancel / expire / reject leave zero partial state</li>
               <li>Auditor holds a receipt with empty token ACS</li>
             </ul>
           </div>
