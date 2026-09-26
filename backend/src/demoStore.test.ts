@@ -148,4 +148,120 @@ describe("Composition Protocol demo gates", () => {
     const aliceTokens = store.listTokens("Alice");
     assert.ok(aliceTokens.some((t) => t.instrumentId === "cETH" && t.amount === "15.5"));
   });
+
+  it("Failure Path: Expiry — resolves stalled or timed-out proposals cleanly", () => {
+    // Proposal with simulated expiry
+    const pastDate = new Date(Date.now() - 1000).toISOString();
+    const c = store.proposeTradeFinance();
+    c.expiresAt = pastDate;
+    assert.equal(c.status, "proposed");
+
+    const expired = store.expire(c.id, "Operator", new Date());
+    assert.equal(expired.status, "expired");
+    assert.throws(() => store.settle(c.id), /not fully accepted/);
+  });
+
+  it("Failure Path: Rejection — counterparty rejection cleanly resolves without half-state", () => {
+    const c = store.proposeTradeFinance();
+    assert.equal(c.status, "proposed");
+
+    const rejected = store.reject(c.id, "Bob", "Margin requirements unmet");
+    assert.equal(rejected.status, "rejected");
+    assert.equal(rejected.rejectionReason, "Margin requirements unmet");
+    assert.throws(() => store.settle(c.id), /not fully accepted/);
+  });
+
+  it("Failure Path: Partial completion — maintains valid state without leaking or premature execution", () => {
+    const c = store.proposeTradeFinance();
+    // Accept only Party B (Bob), leaving Party C (Oracle) pending
+    const partial = store.accept(c.id, "Bob");
+    assert.equal(partial.status, "partially_accepted");
+    assert.equal(partial.accepted.length, 1);
+    assert.equal(partial.agreementCid, null);
+
+    // Premature settle attempt MUST reject
+    assert.throws(() => store.settle(c.id), /not fully accepted/);
+  });
+
+  it("Disclosed Contract Handling — attaches and preserves explicit contract disclosures", () => {
+    const cbtc = store.listTokens("Alice").find((t) => t.instrumentId === "CBTC")!;
+    const c = store.propose({
+      proposer: "Alice",
+      counterparties: ["Bob"],
+      description: "Disclosed contract test",
+      disclosedContracts: [
+        {
+          templateId: "MockToken:MockToken",
+          contractId: cbtc.contractId,
+          createdEventBlob: "blob-0x123abc",
+          payload: { owner: "Alice", instrumentId: "CBTC", amount: cbtc.amount },
+        },
+      ],
+      legs: [
+        {
+          legId: "cbtc-leg",
+          instrumentId: "CBTC",
+          amount: "1.0",
+          provider: "Alice",
+          receiver: "Bob",
+          assetCid: cbtc.contractId,
+        },
+        {
+          legId: "usdc-leg",
+          instrumentId: "USDCx",
+          amount: "1000.0",
+          provider: "Bob",
+          receiver: "Alice",
+          assetCid: store.listTokens("Bob").find((t) => t.instrumentId === "USDCx")!.contractId,
+        },
+      ],
+    });
+    assert.ok(c.disclosedContracts);
+    assert.equal(c.disclosedContracts?.length, 1);
+    assert.equal(c.disclosedContracts?.[0].contractId, cbtc.contractId);
+  });
+
+  it("Reuse Verification — executes multiple distinct 3-party DvP configurations without modifying package logic", () => {
+    // Run 1: Standard Coffee/USDCx/Attest trade finance
+    const t1 = store.mint("Alice", "COFFEE", "10.0");
+    const t2 = store.mint("Bob", "USDCx", "41200.0");
+    const t3 = store.mint("Oracle", "ATTEST", "1.0");
+
+    const deal1 = store.propose({
+      proposer: "Alice",
+      counterparties: ["Bob", "Oracle"],
+      description: "East African Coffee Export DvP",
+      legs: [
+        { legId: "l1", instrumentId: "COFFEE", amount: "10.0", provider: "Alice", receiver: "Bob", assetCid: t1.contractId },
+        { legId: "l2", instrumentId: "USDCx", amount: "41200.0", provider: "Bob", receiver: "Alice", assetCid: t2.contractId },
+        { legId: "l3", instrumentId: "ATTEST", amount: "1.0", provider: "Oracle", receiver: "Bob", assetCid: t3.contractId },
+      ],
+    });
+    store.accept(deal1.id, "Bob");
+    store.accept(deal1.id, "Oracle");
+    const settled1 = store.settle(deal1.id);
+    assert.equal(settled1.status, "settled");
+
+    // Run 2: Re-use exact same template package with completely different asset & topology (Cashew / cETH DvP)
+    const t4 = store.mint("Alice", "CASHEW", "25.0");
+    const t5 = store.mint("Bob", "cETH", "12.0");
+    const t6 = store.mint("Oracle", "ATTEST", "1.0");
+
+    const deal2 = store.propose({
+      proposer: "Alice",
+      counterparties: ["Bob", "Oracle"],
+      description: "West African Cashew Export DvP",
+      legs: [
+        { legId: "l1", instrumentId: "CASHEW", amount: "25.0", provider: "Alice", receiver: "Bob", assetCid: t4.contractId },
+        { legId: "l2", instrumentId: "cETH", amount: "12.0", provider: "Bob", receiver: "Alice", assetCid: t5.contractId },
+        { legId: "l3", instrumentId: "ATTEST", amount: "1.0", provider: "Oracle", receiver: "Bob", assetCid: t6.contractId },
+      ],
+    });
+    store.accept(deal2.id, "Bob");
+    store.accept(deal2.id, "Oracle");
+    const settled2 = store.settle(deal2.id);
+    assert.equal(settled2.status, "settled");
+    assert.notEqual(settled1.id, settled2.id);
+  });
 });
+

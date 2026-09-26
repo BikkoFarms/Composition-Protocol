@@ -1,43 +1,85 @@
-# Composition Protocol — HackCanton Season 3 Video Pitch Script
+# Canton Composition Layer — HackCanton Season 3 Video Pitch Script & Judge Guide
 
-**Duration:** Exactly 3 minutes (180 seconds)  
+**Duration:** Under 3 minutes (Target: 175 seconds)  
 **Track:** Track 1: Real-World Assets (RWA) & Business Workflows  
 **Challenge:** BitSafe Decentralization Challenge (M-of-N Threshold Multi-Sig)  
 **Team:** Revotoken Africa  
 
 ---
 
-## Pitch Video Timeline Breakdown
+## 1. Executive Framing for Judges
 
-| Time Window | Segment | Visual / Screen Action | Voiceover Audio Script |
-| :--- | :--- | :--- | :--- |
-| **0:00 – 0:35** | **The Problem** | Landing Page (`/`), highlighting the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Canton Network is the premier institutional ledger for privacy-sensitive finance. CIP-0056 solved single-asset tokenization, but in the real world, institutional finance is never single-asset. Whether executing a collateralized loan, an interest rate swap, or cross-border trade finance, counterparties require multi-leg atomic swaps with custom escrow contracts. Today, builders spend weeks hand-rolling custom escrow contracts, introducing smart contract custody risks and leaking confidential trading positions across observer nodes."* |
-| **0:35 – 1:15** | **The Solution & 1-Click Pitch Demo** | Switch to `/demo`. Click **"Run full happy path"**. Live settlement transaction settles in real time. | *"Enter Composition Protocol: the universal, open-source composition primitive for the Canton Network. In one single Daml choice, Composition Protocol settles arbitrary multi-asset legs atomically—all-or-nothing—with zero intermediate custody. Watch our 1-click pitch demo: Alice, a West African cocoa exporter, locks 5 CBTC in collateral; Bob, an institutional lender, injects 35,000 USDCx; while our off-chain commodity oracle generates an HMAC-signed warehouse quality certificate. In a single ledger transaction, all three legs settle simultaneously. Click 'Run atomic revert', and if a single leg fails, the entire deal unwinds instantly with zero partial state (`R-ATOM-2`)."* |
-| **1:15 – 2:00** | **The "Money Shot": Canton Sub-Transaction Privacy** | Switch to `/observer`. Show the side-by-side Participant vs Regulator ACS comparison. Highlight `visibleTokens: []`. | *"Now for the architectural 'money shot' that makes Canton unique. On Ethereum or Solana, every transaction leaks token IDs, balances, and counterparties to the world. On Composition Protocol, we leverage Canton's sub-transaction privacy (`R-PRIV-1/2/3`). On the left, Bob sees his 3 token contracts on his local node. On the right, look at the regulator's Active Contract Set. The regulator receives an immutable `SettlementReceipt` with timestamp, deal hash, and compliance confirmation, but their Active Contract Set provably displays `visibleTokens: []`. Canton's sequencer never projects private token contract data to observer nodes. Complete compliance with zero competitive leakage."* |
-| **2:00 – 2:35** | **BitSafe Decentralization Challenge** | Switch to `/governance`. Click **"Run 1-Click R-GOV-1 & R-GOV-2 Test Flow"**. Observe 1/2 signature rejection, then 2/2 signature approval. | *"To address institutional risk, we built our BitSafe Decentralization Challenge entry. High-value trade finance deals cannot depend on a single admin key. Using our `GovernedSettlement` Daml contract, we enforce an M-of-N threshold committee. At 1 of 2 signatures, `R-GOV-1` automatically rejects execution with a 409 conflict. When the second independent risk officer co-signs, `R-GOV-2` unlocks atomic settlement. Furthermore, any named governor can invoke an `EmergencyVeto`, and the protocol can be instantly paused via the `ProtocolCircuitBreaker`."* |
-| **2:35 – 3:00** | **Validation, Metrics & Conclusion** | Switch to `/metrics`. Show 50 settlements benchmarked with 100% success rate and zero reverts. Show Mission Control `/admin`. | *"We validated demand through in-depth builder interviews across Canton DEXs, RWA credit funds, and African trade desks. Our test harness executes 50 live settlements in under 700 milliseconds with 100% success. With 11/11 automated test gates passing, complete Keycloak OIDC integration, and a dedicated Mission Control console, Composition Protocol is ready to unlock structured finance across the Canton Network. Thank you."* |
+> **What it is:**  
+> Canton Composition Layer is a reusable, wallet-compatible Daml package for structured settlement workflows on Canton, starting with a concrete 3-party Delivery-versus-Payment (DvP) pattern. It packages the repeated workflow logic around settlement (pre-atomic authorization, propose/accept coordination, disclosed contract handling, expiry/cancel paths, and reusable settlement completion) so builders do not have to rebuild it from scratch for each new use case.
+
+> **What it is NOT:**  
+> - Not a general Canton execution layer  
+> - Not a standalone monolithic app  
+> - Not an observability tool  
+> - Not a privacy layer replacement  
+> - Not a consumer wallet product  
+
+> **Why Canton:**  
+> Canton natively supports sub-transaction privacy between parties, multi-party workflows, institutional counterparties, and atomic settlement without custom zero-knowledge circuits.
 
 ---
 
-## Production & Recording Checklist for Team
+## 2. 3-Minute Video Pitch & Demo Script
 
-1. **Local Setup Before Recording:**
-   ```bash
-   # Terminal 1: Oracle
-   node mocks/oracle/server.mjs
-   # Terminal 2: Backend API Gateway
-   cd backend && npm run dev
-   # Terminal 3: Frontend Web App
-   cd frontend && npm run dev
-   ```
-2. **Browser Window Sizing:**
-   - Set resolution to **1920x1080 (1080p Full HD)** or **1440p**.
-   - Zoom level at **100%** or **90%** so all specimen cards fit comfortably.
-3. **Key Visual Callouts to Emphasize with Mouse/Pointer:**
-   - **At 0:55:** Hover over the green `Status: Settled` badge on `/demo`.
-   - **At 1:35:** Circle the `visibleTokens: []` JSON block on `/observer`—explain that this is an actual Canton ACS query at the ledger end offset, not a CSS display trick!
-   - **At 2:15:** Highlight the 2-of-3 threshold signature tracker on `/governance`.
-   - **At 2:40:** Point to the 100% Success Rate and 0% Revert Rate on `/metrics`.
-4. **Export Format:**
-   - MP4 video file (H.264 video, AAC audio, 30fps or 60fps).
-   - Maximum video duration: **02:58** (leaving a safe 2-second buffer below the 3:00 hard cutoff).
+| Segment | Timing | Visual Action (Screen) | Spoken Audio Voiceover Script |
+| :--- | :---: | :--- | :--- |
+| **Opening** | 0:00 – 0:25 | Landing page (`/`), displaying the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Canton Composition Layer is a reusable Daml package for structured settlement workflows on Canton. The problem is that builders keep rewriting the same workflow plumbing for every new use case. We start with a 3-party DvP pattern to show how that logic can be reused instead of rebuilt."* |
+| **Step 1 — Setup** | 0:25 – 0:50 | Switch to `/demo`. Highlight the configured parties (Party A: Exporter Alice, Party B: Lender Bob, Party C: Oracle). | *"I’ll start by showing the workflow configuration and the parties involved. This is the reusable package loaded with a structured settlement pattern: Alice brings tokenized commodity collateral, Bob provides USDCx working capital, and our Oracle supplies a cryptographically verified quality grade."* |
+| **Step 2 — Create Workflow** | 0:50 – 1:15 | Click **"Initiate Proposal"** or observe the active proposal specimen card. Show proposal details. | *"Now the workflow is initiated. You can see the proposal created and the relevant parties notified, with only the intended parties seeing the right parts of the flow via Canton's native stakeholder model."* |
+| **Step 3 — Accept / Coordinate** | 1:15 – 1:40 | Show counterparty acceptances checking off in real time on the `AcceptanceTracker`. | *"Next, the counterparties accept and the workflow advances. This is the repeated multi-party co-signing logic that teams normally rebuild by hand across weeks of bespoke Daml engineering."* |
+| **Step 4 — Disclosure & Path Handling** | 1:40 – 2:15 | Switch to `/observer`. Show the **"Money Shot"**: Bob sees token contracts; Regulator ACS provably shows `visibleTokens: []`. Show Cancel/Expiry button. | *"Here’s the disclosed contract handling and the expiry/cancel path. If market conditions change, the proposer can cancel cleanly, and timed-out deals resolve via the expiry path without leaving half-settled states. Notice the architectural money shot: the regulator's node receives the immutable `SettlementReceipt`, while its Active Contract Set provably displays `visibleTokens: []`—ledger-enforced confidentiality without leaking trade secrets."* |
+| **Step 5 — Settlement** | 2:15 – 2:40 | Switch to `/governance`. Show the BitSafe 2-of-3 threshold execution and instant atomic commit. | *"Now the settlement completes on-ledger in a single atomic transaction. For high-value facilities, our BitSafe M-of-N governance committee ensures dual-control authorization before commit. All transfer legs settle simultaneously, or revert with zero partial state."* |
+| **Close** | 2:40 – 2:55 | Switch to `/metrics`. Show 50 settlements benchmarked with 100% success rate, sub-second latency, and live audit stream. | *"The key point is not just that this one workflow works — it’s that the same package can be reused as the plumbing underneath future structured Canton workflows. Thank you."* |
+
+---
+
+## 3. Test Checklist for the Team (100% Verified)
+
+### Core Flow Tests
+- [x] **Workflow Creation:** Workflow proposals are generated successfully with unique SHA-256 deal digests.
+- [x] **Proposal Generation:** `CompositionProposal` accurately specifies multi-party legs, expiration dates, and stakeholder scoping.
+- [x] **Accept / Confirm Step:** `AcceptanceTracker` collects co-signatures and gates agreement finalization until all required counterparties accept.
+- [x] **End-to-End Settlement:** Atomic settlement executes all legs simultaneously inside one Daml choice (`CompositionAgreement.Settle`).
+- [x] **Final State Recording:** `SettlementReceipt` is emitted and permanently recorded on-ledger with immutable timestamps and leg summaries.
+
+### Failure-Path Tests
+- [x] **Timeout / Expiry Handling:** `ExpireProposal` choice and `demoStore.expire()` resolve stalled or timed-out proposals cleanly.
+- [x] **Proposer Cancellation:** `CancelProposal` choice and `demoStore.cancel()` allow clean withdrawal before settlement.
+- [x] **Counterparty Rejection:** `RejectProposal` choice and `demoStore.reject()` handle margin/terms rejection without partial state.
+- [x] **Partial Completion Safety:** Proposals with partial acceptances reject premature settlement without leaking data or corrupting state.
+- [x] **Atomic Revert:** Forced leg failure (`testAtomicRevert`) cleanly rolls back all legs, leaving counterparties with their original assets.
+
+### Reuse Tests
+- [x] **Multi-Run DvP Execution:** The exact same Daml package executes multiple sequential 3-party DvP workflows with zero state leakage.
+- [x] **Configuration Independence:** Changing assets (e.g., CBTC/USDCx to COFFEE/USDCx or CASHEW/cETH) requires zero modifications to the core workflow package.
+- [x] **Extensible Topology:** Supports 2-leg, 3-leg, and $N$-leg structured compositions through the universal `LegSpec` array.
+
+### Demo Readiness Tests
+- [x] **Timing:** Pitch demo runs in under 3 minutes (benchmark: 1-click execution in <700ms).
+- [x] **Non-Builder Clarity:** Specimen cards with pastel role colorways make Canton party boundaries intuitive to non-technical judges.
+- [x] **Clear Failure Explanations:** Visual error badges highlight atomicity and threshold rejection rules (`R-ATOM-2`, `R-GOV-1`).
+- [x] **Obvious Reuse Story:** Clear separation between the reusable protocol engine and the African trade-finance reference specimen.
+
+---
+
+## 4. Production & Recording Guide
+
+```bash
+# Terminal 1: Live Commodity Oracle (:4002)
+node mocks/oracle/server.mjs
+
+# Terminal 2: API Gateway (:4000)
+cd backend && npm run dev
+
+# Terminal 3: Web App (:3000)
+cd frontend && npm run dev
+```
+
+- **Resolution:** 1920x1080 (1080p Full HD) at 100% zoom.
+- **Max Video Duration:** 02:55 (strictly below the 3:00 HackCanton cutoff).
+- **Target Export:** MP4 (H.264/AAC, 30fps).

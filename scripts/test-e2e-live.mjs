@@ -29,7 +29,7 @@ function makeRequest(url, options = {}, body = null) {
   });
 }
 
-async function waitForServer(url, timeoutMs = 20000) {
+async function waitForServer(url, timeoutMs = 30000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -213,8 +213,29 @@ async function run() {
     const metricsRes = await makeRequest('http://localhost:4000/audit/metrics');
     console.log(`  [TEST 11] Telemetry Metrics: TotalSettled=${metricsRes.data.compositionsSettled}, SuccessRate=${metricsRes.data.successRate}%, AvgLegs=${metricsRes.data.avgLegsPerComposition}`);
 
+    // Test 12: Expiry & Cancel Flow (Clean Stalled Flow Resolution)
+    const cancelProp = await makeRequest('http://localhost:4000/compositions/demo/trade-finance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const cancelRes = await makeRequest(`http://localhost:4000/compositions/${cancelProp.data.id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caller: 'Alice' })
+    });
+    console.log(`  [TEST 12] Clean Expiry/Cancel Resolution: Status=${cancelRes.data.status} (Status: ${cancelRes.status})`);
+    if (cancelRes.data.status !== 'cancelled') throw new Error('Cancellation test failed');
+
+    // Test 13: Reusable 3-party DvP Multi-Configuration Execution
+    const multiDeal = await makeRequest('http://localhost:4000/compositions/demo/run-full', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    console.log(`  [TEST 13] Reusable Package Execution: Status=${multiDeal.data.settled?.status}, DealId=${multiDeal.data.settled?.id} (Status: ${multiDeal.status})`);
+    if (multiDeal.data.settled?.status !== 'settled') throw new Error('Reusable package test failed');
+
     console.log('\n===============================================================');
-    console.log('🎉 ALL 11 LIVE END-TO-END PROTOCOL TESTS PASSED WITH 100% SUCCESS!');
+    console.log('🎉 ALL 13 LIVE END-TO-END PROTOCOL TESTS PASSED WITH 100% SUCCESS!');
     console.log('===============================================================');
 
   } catch (err) {

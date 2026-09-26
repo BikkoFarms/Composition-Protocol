@@ -30,6 +30,16 @@ export type LedgerConfig = {
   packageName: string;
 };
 
+export type DisclosedContract = {
+  templateId: {
+    packageId: string;
+    moduleName: string;
+    entityName: string;
+  };
+  contractId: string;
+  createdEventBlob: string;
+};
+
 type CachedToken = {
   token: string;
   expiresAt: number;
@@ -134,21 +144,29 @@ export class LedgerClient {
     };
   }
 
-  async create(actAs: string[], module: string, entity: string, args: unknown) {
-    const body = {
-      commands: {
-        commandId: `create-${Date.now()}`,
-        actAs,
-        commands: [
-          {
-            CreateCommand: {
-              templateId: this.templateId(module, entity),
-              createArguments: args,
-            },
+  async create(
+    actAs: string[],
+    module: string,
+    entity: string,
+    args: unknown,
+    disclosedContracts?: DisclosedContract[],
+  ) {
+    const commandsPayload: Record<string, unknown> = {
+      commandId: `create-${Date.now()}`,
+      actAs,
+      commands: [
+        {
+          CreateCommand: {
+            templateId: this.templateId(module, entity),
+            createArguments: args,
           },
-        ],
-      },
+        },
+      ],
     };
+    if (disclosedContracts && disclosedContracts.length > 0) {
+      commandsPayload.disclosedContracts = disclosedContracts;
+    }
+    const body = { commands: commandsPayload };
     return this.submit(body);
   }
 
@@ -159,23 +177,26 @@ export class LedgerClient {
     contractId: string,
     choice: string,
     argument: unknown,
+    disclosedContracts?: DisclosedContract[],
   ) {
-    const body = {
-      commands: {
-        commandId: `ex-${choice}-${Date.now()}`,
-        actAs,
-        commands: [
-          {
-            ExerciseCommand: {
-              templateId: this.templateId(module, entity),
-              contractId,
-              choice,
-              choiceArgument: argument,
-            },
+    const commandsPayload: Record<string, unknown> = {
+      commandId: `ex-${choice}-${Date.now()}`,
+      actAs,
+      commands: [
+        {
+          ExerciseCommand: {
+            templateId: this.templateId(module, entity),
+            contractId,
+            choice,
+            choiceArgument: argument,
           },
-        ],
-      },
+        },
+      ],
     };
+    if (disclosedContracts && disclosedContracts.length > 0) {
+      commandsPayload.disclosedContracts = disclosedContracts;
+    }
+    const body = { commands: commandsPayload };
     return this.submit(body);
   }
 

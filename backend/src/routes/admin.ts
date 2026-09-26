@@ -37,6 +37,13 @@ adminRouter.get("/overview", async (_req, res) => {
     parties,
     treasuryReserves: reserves,
     totalActiveTokens: allTokens.length,
+    activeAgreements: [...demoStore.compositions.values()].filter(
+      (c) =>
+        c.status === "accepted" ||
+        c.status === "proposed" ||
+        c.status === "awaiting_governance",
+    ).length,
+    totalCompositions: demoStore.compositions.size,
     timestamp: new Date().toISOString(),
   });
 });

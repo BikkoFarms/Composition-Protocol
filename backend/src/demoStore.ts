@@ -40,7 +40,16 @@ export type CompositionStatus =
   | "awaiting_governance"
   | "settled"
   | "reverted"
-  | "cancelled";
+  | "cancelled"
+  | "expired"
+  | "rejected";
+
+export type DisclosedContract = {
+  templateId: string;
+  contractId: string;
+  createdEventBlob?: string;
+  payload?: Record<string, unknown>;
+};
 
 export type Composition = {
   id: string;
@@ -58,6 +67,9 @@ export type Composition = {
   dealHash?: string;
   collateralRatio?: string;
   ltvPercent?: number;
+  expiresAt?: string;
+  rejectionReason?: string;
+  disclosedContracts?: DisclosedContract[];
   settledAt?: string;
   legSummaries?: { legId: string; instrumentId: string; status: string }[];
   forceFail?: boolean;
@@ -247,6 +259,8 @@ export class DemoStore {
     description: string;
     forceFail?: boolean;
     requireGovernance?: boolean;
+    expiresAt?: string;
+    disclosedContracts?: DisclosedContract[];
   }): Composition {
     if (input.legs.length < 2) throw new Error("at least two legs required");
     for (const leg of input.legs) {
@@ -275,6 +289,10 @@ export class DemoStore {
       }
     }
 
+    const expiresAt =
+      input.expiresAt ??
+      new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+
     const c: Composition = {
       id,
       proposalCid: `prop-${id}`,
@@ -291,6 +309,8 @@ export class DemoStore {
       dealHash,
       collateralRatio,
       ltvPercent,
+      expiresAt,
+      disclosedContracts: input.disclosedContracts ?? [],
       forceFail: input.forceFail,
       requireGovernance: input.requireGovernance,
     };
@@ -373,6 +393,55 @@ export class DemoStore {
       throw new Error(`only proposer ${c.proposer} or Operator can cancel`);
     }
     c.status = "cancelled";
+    this.recordEvent({
+      id: c.id,
+      type: "reverted",
+      timestamp: new Date().toISOString(),
+      legs: c.legs.length,
+      description: `${c.description} (Cancelled by ${caller})`,
+    });
+    return c;
+  }
+
+  /** Expiry path: resolves stalled or timed-out proposals cleanly */
+  expire(
+    compositionId: string,
+    caller: PartyId = "Operator",
+    simulatedNow?: Date,
+  ): Composition {
+    const c = this.require(compositionId);
+    if (c.status === "settled") throw new Error("cannot expire settled composition");
+    const now = simulatedNow ?? new Date();
+    if (c.expiresAt && now < new Date(c.expiresAt)) {
+      throw new Error(`proposal has not expired (expires at ${c.expiresAt})`);
+    }
+    c.status = "expired";
+    this.recordEvent({
+      id: c.id,
+      type: "reverted",
+      timestamp: now.toISOString(),
+      legs: c.legs.length,
+      description: `${c.description} (Expired by ${caller})`,
+    });
+    return c;
+  }
+
+  /** Counterparty rejection: cleanly rejects proposal */
+  reject(compositionId: string, rejector: PartyId, reason: string): Composition {
+    const c = this.require(compositionId);
+    if (c.status === "settled") throw new Error("cannot reject settled composition");
+    if (!c.counterparties.includes(rejector) && rejector !== "Operator") {
+      throw new Error(`${rejector} is not an authorized counterparty`);
+    }
+    c.status = "rejected";
+    c.rejectionReason = reason;
+    this.recordEvent({
+      id: c.id,
+      type: "reverted",
+      timestamp: new Date().toISOString(),
+      legs: c.legs.length,
+      description: `${c.description} (Rejected by ${rejector}: ${reason})`,
+    });
     return c;
   }
 

@@ -6,6 +6,7 @@ import ComposableAsset
 import Governance
 import MockToken
 import Daml.Script
+import qualified DA.Set as Set
 
 setupSwap : Script (Party, Party, Party, Party, ContractId CompositionAgreement)
 setupSwap = do
@@ -101,3 +102,46 @@ testGovernedAtThreshold = do
     exerciseCmd gov2 ExecuteGoverned
   Some _ <- queryContractId operator receiptCid
   pure ()
+
+-- | Institutional Safety: Emergency Veto by authorized governor
+testEmergencyVeto : Script ()
+testEmergencyVeto = do
+  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  factory <- submit operator do
+    createCmd GovernanceFactory with operator
+  govCid <- submit operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid
+      governors = [g1, g2]
+      threshold = 2
+      regulator
+  submitMulti [operator, g1] [] do
+    exerciseCmd govCid EmergencyVeto with
+      governor = g1
+      reason = "Malicious counterparty detected"
+  pure ()
+
+-- | Institutional Safety: Circuit Breaker emergency halt and resume
+testCircuitBreaker : Script ()
+testCircuitBreaker = do
+  operator <- allocateParty "Operator"
+  g1 <- allocateParty "Gov1"
+  cbCid <- submit operator do
+    createCmd ProtocolCircuitBreaker with
+      operator
+      governors = Set.fromList [g1]
+      isHalted = False
+      haltReason = None
+  cbHaltedCid <- submitMulti [operator, g1] [] do
+    exerciseCmd cbCid TriggerEmergencyHalt with
+      governor = g1
+      reason = "Oracle anomaly"
+  cbResumedCid <- submitMulti [operator, g1] [] do
+    exerciseCmd cbHaltedCid ResumeProtocol with
+      governor = g1
+  Some resumed <- queryContractId operator cbResumedCid
+  assertMsg "circuit breaker must be resumed" (not resumed.isHalted)
+  pure ()
+

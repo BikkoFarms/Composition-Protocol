@@ -212,6 +212,34 @@ compositionsRouter.post("/:id/cancel", (req, res) => {
 });
 
 /**
+ * POST /compositions/:id/expire
+ * Resolves a stalled or timed-out proposal via the expiration path.
+ */
+compositionsRouter.post("/:id/expire", (req, res) => {
+  try {
+    const caller = ((req.body as { caller?: PartyId })?.caller ?? "Operator") as PartyId;
+    const c = demoStore.expire(req.params.id, caller);
+    res.json(c);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * POST /compositions/:id/reject
+ * Counterparty rejection path: cleanly rejects a proposal.
+ */
+compositionsRouter.post("/:id/reject", (req, res) => {
+  try {
+    const { rejector, reason } = req.body as { rejector: PartyId; reason: string };
+    const c = demoStore.reject(req.params.id, rejector, reason ?? "Proposal rejected by counterparty");
+    res.json(c);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
  * GET /compositions/circuit-breaker/state
  * Returns active emergency circuit breaker state.
  */
