@@ -290,7 +290,8 @@ daml test
 - [**docs/JUDGING.md**](docs/JUDGING.md) — HackCanton Season 3 evaluation guide, Track 1 & BitSafe challenge alignment, and 3-minute quick walkthrough.
 - [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) — Full FR/SR requirements audit matrix cross-referencing PRD/SRD specifications.
 - [**docs/DESIGN.md**](docs/DESIGN.md) — Lattice design system (parchment / forest ink / pastel specimen cards).
-- [**docs/INTERVIEWS.md**](docs/INTERVIEWS.md) — Builder interview guide for Metrics / Validation criterion.
+- [**docs/INTERVIEWS.md**](docs/INTERVIEWS.md) — Builder interviews, qualitative evidence, and validation metrics for Criterion 3.
+- [**docs/PITCH_SCRIPT.md**](docs/PITCH_SCRIPT.md) — 3-minute video pitch presentation script, voiceover dialogue, and recording checklist.
 - [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) · [**SRD**](docs/Composition_Protocol_SRD.pdf) — Product & software requirements.
 - [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
 - [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.

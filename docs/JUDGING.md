@@ -77,10 +77,10 @@ BitSafe is hosting the **Decentralization Challenge** at HackCanton Season 3 to 
 | :--- | :--- | :--- |
 | **1. Value / Problem** | Solves an acute, unaddressed pain point with high network utility. | Solves the missing **composition layer** between CIP-0056 tokenization and structured finance. Eliminates the need for DEXs and lending protocols to hand-roll custom atomic multi-leg logic. |
 | **2. ICP / Audience** | Clear, dual persona with demonstrated business demand. | **Builders:** DEXs/lending pools (Temple Digital, Tradecraft, Ekiden) calling the shared primitive.<br>**Operators:** African commodity trade finance facilities needing private funding against warehouse receipts. |
-| **3. Metrics / Validation** | Quantitative evidence, transaction volume, and user validation. | **≥50 settlements** benchmarked on-chain with zero unexpected failures; average legs per deal, success/revert rates instrumented in real-time on `/metrics`. |
+| **3. Metrics / Validation** | Quantitative evidence, transaction volume, and user validation. | **≥50 settlements** benchmarked on-chain with zero unexpected failures; average legs per deal, success/revert rates instrumented in real-time on `/metrics`.<br>**Builder Demand:** 3 detailed builder interviews logged in [docs/INTERVIEWS.md](INTERVIEWS.md) confirming 100% consensus on custom escrow pain and willingness to pay 2–5 bps per deal. |
 | **4. Go-To-Market (GTM)** | Realistic distribution strategy and network effects. | Open-source primitive (Apache-2.0); adoption by Canton venues. Each deal settling on the protocol generates recurrent network activity and fee volume. |
 | **5. MVP / Technical Excellence** | Functioning code, automated tests, clean architecture, and Canton-native features. | 4 Daml 3.x smart contracts, CIP-0056 interface, Canton JSON Ledger API v2 bridge with Keycloak OIDC, Next.js 15 UI, **11/11 passing automated test gates**, and **11/11 prerendered frontend routes**. |
-| **6. Pitch / Demo** | Clear problem→solution narrative with verifiable proof. | The **Observer "Money Shot"**: proving cryptographic privacy directly through Canton's Active Contract Set (`visibleTokens: []`), not a UI filter. |
+| **6. Pitch / Demo** | Clear problem→solution narrative with verifiable proof. | The **Observer "Money Shot"**: proving cryptographic privacy directly through Canton's Active Contract Set (`visibleTokens: []`), not a UI filter.<br>**Pitch Script:** Timed 3-minute video script with screen cues and voiceover in [docs/PITCH_SCRIPT.md](PITCH_SCRIPT.md). |
 
 ---
 
