@@ -1,8 +1,7 @@
 "use client";
 
 /**
- * Settlement desk — product flow for proposing, settling, and proving privacy.
- * Same backend demo endpoints; framed as a working desk, not a pitch script.
+ * Settlement desk — primary pitch path for GUIDE v2 / PITCH_SCRIPT.
  */
 
 import { useState } from "react";
@@ -28,11 +27,11 @@ type RunFullResult = {
 };
 
 const PHASES = [
-  { id: 0, label: "Ready", hint: "Ticket staged · cocoa export" },
-  { id: 1, label: "Proposed", hint: "Collateral + cash + attestation" },
+  { id: 0, label: "Ready", hint: "3-party DvP specimen staged" },
+  { id: 1, label: "Proposed", hint: "CBTC + USDCx + cETH" },
   { id: 2, label: "Accepted", hint: "Lender and oracle co-signed" },
   { id: 3, label: "Settling", hint: "One atomic Canton transaction" },
-  { id: 4, label: "Settled", hint: "Receipt issued · privacy holds" },
+  { id: 4, label: "Settled", hint: "Prove privacy on auditor desk" },
 ];
 
 export default function DemoPage() {
@@ -106,22 +105,22 @@ export default function DemoPage() {
     <div>
       <div className="page-head">
         <span className="pill">
-          Settlement desk
+          Settlement desk · DvP
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">Settle a cocoa export</h1>
+        <h1 className="page-title">Initiate & settle the DvP</h1>
         <p className="lede">
-          Open a three-leg ticket: CBTC collateral, USDCx cash, and grade
-          attestation. Counterparties accept. Settlement runs as one Canton
-          transaction, then the auditor proves they cannot see the legs.
+          The reusable settlement package with a concrete face: CBTC collateral,
+          USDCx cash, and cETH — one atomic Canton transaction. Then prove the
+          auditor cannot see the legs.
         </p>
       </div>
 
       <div className="desk-layout">
         <div className="card desk-panel">
-          <h2>Ticket</h2>
+          <h2>Workflow specimen</h2>
           <p className="card-title" style={{ fontSize: 22, marginBottom: 4 }}>
-            West Africa cocoa · T+0
+            3-party DvP · West Africa cocoa
           </p>
           <p className="muted" style={{ marginBottom: 20, fontSize: 14 }}>
             Status: <strong>{phaseLabel}</strong>
@@ -130,16 +129,16 @@ export default function DemoPage() {
 
           <ul className="ticket-legs">
             <li>
-              <span>Leg A · Collateral</span>
-              <strong>12.5 CBTC → Lender</strong>
+              <span>Leg A · Collateral (BitSafe)</span>
+              <strong>CBTC → Lender</strong>
             </li>
             <li>
-              <span>Leg B · Purchase</span>
-              <strong>850,000 USDCx → Exporter</strong>
+              <span>Leg B · Cash</span>
+              <strong>USDCx → Exporter</strong>
             </li>
             <li>
-              <span>Leg C · Attestation</span>
-              <strong>Oracle grade · Pass</strong>
+              <span>Leg C · Sponsor asset</span>
+              <strong>cETH → Lender</strong>
             </li>
           </ul>
 
@@ -167,18 +166,30 @@ export default function DemoPage() {
               disabled={busy}
               onClick={() => settleTrade(false)}
             >
-              {busy && mode === "happy" ? "Settling…" : "Settle this trade"}
+              {busy && mode === "happy"
+                ? "Settling DvP…"
+                : "Initiate / Settle DvP"}
             </button>
             <button
               className="danger"
               disabled={busy}
               onClick={() => settleTrade(true)}
             >
-              Test atomic revert
+              Atomic revert
             </button>
+            <Link className="btn" href="/governance">
+              Open BitSafe desk
+            </Link>
           </div>
+          {phase >= 4 && !error && (
+            <p style={{ marginTop: 16, marginBottom: 0 }}>
+              <Link className="btn primary" href="/observer">
+                Prove money shot →
+              </Link>
+            </p>
+          )}
           <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
-            Prefer role-by-role?{" "}
+            Role desks:{" "}
             <Link className="link-arrow" href="/proposer">
               Exporter
             </Link>
@@ -195,18 +206,17 @@ export default function DemoPage() {
 
         <div className="stack-sm desk-side">
           <div className="card card-mint">
-            <h2>What you are proving</h2>
+            <h2>Pitch path</h2>
             <ul className="proof-list">
-              <li>All three legs commit together or none do</li>
-              <li>Disclosed contracts reach the right parties only</li>
-              <li>Cancel / expire / reject leave zero partial state</li>
-              <li>Auditor holds a receipt with empty token ACS</li>
+              <li>1. Initiate / Settle DvP here</li>
+              <li>2. Open auditor desk — observer sees nothing</li>
+              <li>3. BitSafe: refuse below threshold, then settle</li>
             </ul>
           </div>
           <div className="card card-lime">
-            <h2>Load the desk</h2>
+            <h2>Load evidence</h2>
             <p className="card-body" style={{ marginBottom: 14 }}>
-              Push fifty settlements to fill the activity board for judges.
+              Push fifty settlements for the Metrics criterion.
             </p>
             <button disabled={busy} onClick={runBatch}>
               Settle 50 tickets
@@ -219,13 +229,11 @@ export default function DemoPage() {
             )}
           </div>
           <div className="card card-lavender">
-            <h2>BitSafe</h2>
-            <p className="card-body" style={{ marginBottom: 14 }}>
-              Need threshold signatures before cash moves?
+            <h2>Package, not app</h2>
+            <p className="card-body" style={{ marginBottom: 0 }}>
+              Venues rebuild this plumbing by hand. This specimen shows the
+              reusable layer they call instead.
             </p>
-            <Link className="btn" href="/governance">
-              Open BitSafe desk
-            </Link>
           </div>
         </div>
       </div>
@@ -237,7 +245,7 @@ export default function DemoPage() {
             {error}
           </p>
           <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>
-            No partial state. Collateral, cash, and attestation all rolled back.
+            No partial state. CBTC, USDCx, and cETH all rolled back.
           </p>
         </div>
       )}
@@ -264,7 +272,7 @@ export default function DemoPage() {
             </p>
           </div>
           <div className="card card-lavender">
-            <h2>Auditor view</h2>
+            <h2>Auditor preview</h2>
             <p className="card-title" style={{ fontSize: 20 }}>
               Privacy check
             </p>
@@ -280,8 +288,8 @@ export default function DemoPage() {
             <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
               {result.moneyShot.observer.privacy.claim}
             </p>
-            <Link className="link-arrow" href="/observer">
-              Open full auditor desk →
+            <Link className="btn primary" href="/observer">
+              Open full money shot →
             </Link>
           </div>
         </div>

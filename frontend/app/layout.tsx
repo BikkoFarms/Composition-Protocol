@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 export const metadata = {
   title: "Composition Protocol",
   description:
-    "Settle multi-asset trades in one atomic Canton transaction. Each party sees only its own leg.",
+    "Reusable Daml settlement-workflow package on Canton — 3-party DvP with CBTC, USDCx, and cETH, BitSafe governance, and ledger-enforced privacy.",
 };
 
 const links = [
@@ -31,9 +31,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton · Composition Layer DvP specimen · CBTC + USDCx
+          Live on Canton · Composition Layer · CBTC + USDCx + cETH
           {" · "}
-          <Link href="/demo">Open the desk →</Link>
+          <Link href="/demo">Initiate / Settle DvP →</Link>
         </div>
         <div className="shell">
           <header className="top">
@@ -57,7 +57,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 Desk online
               </span>
               <Link className="btn primary" href="/demo">
-                Settle a trade
+                Initiate / Settle DvP
               </Link>
             </div>
           </header>

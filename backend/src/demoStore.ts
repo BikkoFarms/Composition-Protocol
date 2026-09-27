@@ -318,7 +318,7 @@ export class DemoStore {
     return c;
   }
 
-  /** Seed standard 3-leg African commodity trade-finance topology with Canton domain routing. */
+  /** Seed 3-leg sponsor-asset DvP: CBTC + USDCx + cETH (BitSafe / onRails). */
   proposeTradeFinance(opts?: {
     forceFail?: boolean;
     requireGovernance?: boolean;
@@ -330,15 +330,15 @@ export class DemoStore {
     const cash =
       this.listTokens("Bob").find((t) => t.instrumentId === "USDCx") ??
       this.mint("Bob", "USDCx", "10000.0");
-    const attest =
-      this.listTokens("Oracle").find((t) => t.instrumentId === "ATTEST") ??
-      this.mint("Oracle", "ATTEST", "1.0");
+    const ceth =
+      this.listTokens("Oracle").find((t) => t.instrumentId === "cETH") ??
+      this.mint("Oracle", "cETH", "1.5");
 
     return this.propose({
       proposer: "Alice",
       counterparties: ["Bob", "Oracle"],
       description:
-        "African cocoa export — collateral + USDCx working capital + grade attestation",
+        "African cocoa export — CBTC collateral + USDCx cash + cETH sponsor leg",
       forceFail: opts?.forceFail,
       requireGovernance: opts?.requireGovernance,
       expiresAt: opts?.expiresAt,
@@ -350,6 +350,15 @@ export class DemoStore {
             owner: "Alice",
             instrumentId: "CBTC",
             amount: collateral.amount,
+          },
+        },
+        {
+          templateId: "#Composition:MockToken",
+          contractId: ceth.contractId,
+          payload: {
+            owner: "Oracle",
+            instrumentId: "cETH",
+            amount: ceth.amount,
           },
         },
       ],
@@ -373,13 +382,13 @@ export class DemoStore {
           cantonDomain: "canton-domain-liquidity-02.us",
         },
         {
-          legId: "attestation",
-          instrumentId: "ATTEST",
-          amount: attest.amount,
+          legId: "sponsor",
+          instrumentId: "cETH",
+          amount: ceth.amount,
           provider: "Oracle",
           receiver: "Bob",
-          assetCid: attest.contractId,
-          cantonDomain: "canton-domain-oracle-03.global",
+          assetCid: ceth.contractId,
+          cantonDomain: "canton-domain-onrails-03.global",
         },
       ],
     });

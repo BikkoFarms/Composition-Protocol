@@ -12,16 +12,16 @@ export default function HomePage() {
           <h1>Close the whole deal. Or nothing moves.</h1>
           <p className="lede">
             A reusable Daml package for structured settlement on Canton. This
-            desk runs a concrete 3-party DvP: collateral, cash, and attestation
-            in one atomic transaction. Each party sees only its own leg.
-            Auditors get a receipt, not the payloads.
+            desk runs a concrete 3-party DvP: CBTC, USDCx, and cETH in one
+            atomic transaction. Each party sees only its own leg. Auditors get
+            a receipt, not the payloads.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/demo">
-              Settle a cocoa export
+              Initiate / Settle DvP
             </Link>
             <Link className="btn" href="/observer">
-              See the auditor view
+              Observer money shot
             </Link>
           </div>
           <div className="stat-strip">
@@ -54,15 +54,15 @@ export default function HomePage() {
             <ul className="ticket-legs">
               <li>
                 <span>Collateral</span>
-                <strong>12.5 CBTC</strong>
+                <strong>CBTC</strong>
               </li>
               <li>
-                <span>Cash purchase</span>
-                <strong>850,000 USDCx</strong>
+                <span>Cash</span>
+                <strong>USDCx</strong>
               </li>
               <li>
-                <span>Grade attestation</span>
-                <strong>Oracle · Pass</strong>
+                <span>Sponsor asset</span>
+                <strong>cETH</strong>
               </li>
             </ul>
             <div className="ticket-foot">
@@ -83,10 +83,10 @@ export default function HomePage() {
             Multi-leg trades still settle like three separate wires
           </h2>
           <p className="muted" style={{ maxWidth: "40rem" }}>
-            Commodity finance needs collateral, cash, and inspection to move
-            together. On public chains you get MEV and full disclosure. On
-            private rails you get silos. Judges and buyers both ask the same
-            thing: can this settle atomically with privacy that is real?
+            Commodity finance needs collateral, cash, and a sponsor asset to
+            move together. On public chains you get MEV and full disclosure. On
+            private rails you get silos. The package answer: reusable
+            propose/accept/disclose/expire/settle — demonstrated as 3-party DvP.
           </p>
         </div>
         <div className="grid grid-3">
@@ -131,8 +131,8 @@ export default function HomePage() {
             <div className="icon-circle">Ex</div>
             <h3 className="card-title">Exporter</h3>
             <p className="card-body">
-              Propose the composition: CBTC collateral, USDCx purchase, oracle
-              grade. Track acceptances until settle unlocks.
+              Propose the composition: CBTC collateral, USDCx cash, cETH sponsor
+              leg. Track acceptances until settle unlocks.
             </p>
             <span className="link-arrow">Open exporter desk →</span>
           </Link>
@@ -149,8 +149,8 @@ export default function HomePage() {
             <div className="icon-circle">St</div>
             <h3 className="card-title">Settlement</h3>
             <p className="card-body">
-              Run the happy path or force an atomic revert. Watch the ticket
-              move from proposed to settled in one Daml transaction.
+              Initiate / Settle DvP or force an atomic revert. Then jump to the
+              money shot and BitSafe beats.
             </p>
             <span className="link-arrow">Open settlement desk →</span>
           </Link>
@@ -229,8 +229,8 @@ export default function HomePage() {
               package for structured settlement workflows. Builders get
               propose/accept coordination, disclosed contracts, expiry/cancel
               paths, and atomic settlement completion without rewriting that
-              plumbing for every use case. The cocoa export desk is the working
-              3-party DvP specimen.
+              plumbing for every use case. The CBTC / USDCx / cETH desk is the
+              working 3-party DvP specimen.
             </p>
           </details>
           <details className="faq-item">
@@ -254,9 +254,9 @@ export default function HomePage() {
           <details className="faq-item">
             <summary>Where do I start?</summary>
             <p>
-              Open the settlement desk, run a cocoa export, then switch to the
-              auditor view. For multi-sig, open BitSafe and walk a 2-of-3
-              governed deal.
+              Open the settlement desk, click Initiate / Settle DvP, then open
+              the auditor money shot. For multi-sig, run the BitSafe camera beat
+              (refuse below threshold, then settle).
             </p>
           </details>
         </div>
@@ -270,10 +270,10 @@ export default function HomePage() {
         </p>
         <div className="row">
           <Link className="btn primary" href="/demo">
-            Settle a trade
+            Initiate / Settle DvP
           </Link>
-          <Link className="btn" href="/metrics">
-            View activity
+          <Link className="btn" href="/observer">
+            Money shot
           </Link>
         </div>
       </section>

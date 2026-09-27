@@ -87,7 +87,7 @@ export default function CounterpartyPage() {
           reason:
             party === "Bob"
               ? "Margin terms rejected by lender"
-              : "Grade attestation failed inspection",
+              : "cETH sponsor terms rejected by oracle",
         }),
       });
       await refresh();

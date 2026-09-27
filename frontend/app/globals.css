@@ -1253,12 +1253,166 @@ h1.page-title {
   }
 }
 
+/* Money shot recording stage */
+.money-shot-stage {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: stretch;
+  margin-bottom: var(--spacing-36);
+}
+
+.money-shot-panel {
+  border-radius: var(--radius-cards);
+  padding: var(--card-padding);
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+}
+
+.money-shot-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.money-shot-panel-head h2 {
+  margin: 0;
+}
+
+.query-as {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--color-lichen-gray);
+}
+
+.money-shot-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.money-shot-divider span {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--color-forest-ink);
+  color: var(--color-paper-white);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.money-shot-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  font-size: 16px;
+}
+
+.money-shot-empty.proved {
+  border-style: solid;
+  box-shadow: var(--shadow-md);
+}
+
+/* BitSafe camera beat */
+.bitsafe-rail {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.bitsafe-step {
+  background: var(--color-paper-white);
+  border-radius: var(--radius-cards);
+  padding: 16px 18px;
+  box-shadow: var(--shadow-md);
+  border: 1.5px solid transparent;
+}
+
+.bitsafe-step .n {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-forest-ink);
+}
+
+.bitsafe-step strong {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+
+.bitsafe-step p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-lichen-gray);
+  line-height: 1.35;
+}
+
+.bitsafe-step.active {
+  border-color: var(--color-deep-teal);
+  background: var(--color-mint-surface);
+  box-shadow: none;
+}
+
+.bitsafe-step.done {
+  border-color: color-mix(in srgb, var(--color-deep-forest) 35%, transparent);
+  background: var(--color-sage-glow);
+  box-shadow: none;
+}
+
+.bitsafe-step.fail {
+  border-color: color-mix(in srgb, #7a2251 40%, transparent);
+  background: var(--color-petal);
+  box-shadow: none;
+}
+
+.bitsafe-step.done .n,
+.bitsafe-step.active .n {
+  background: var(--color-forest-ink);
+  color: #fff;
+}
+
+.flash-refuse {
+  background: var(--color-petal);
+  border: 1px solid color-mix(in srgb, #7a2251 30%, transparent);
+  color: #7a2251;
+  border-radius: var(--radius-cards);
+  padding: 14px 18px;
+  margin-bottom: var(--spacing-20);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+}
+
 @media (max-width: 860px) {
   .desk-layout,
   .site-footer-inner,
   .footer-cols,
-  .stat-strip {
+  .stat-strip,
+  .money-shot-stage,
+  .bitsafe-rail {
     grid-template-columns: 1fr;
+  }
+
+  .money-shot-divider {
+    padding: 8px 0;
   }
 
   .top-actions .live-badge {

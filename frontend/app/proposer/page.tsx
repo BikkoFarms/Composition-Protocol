@@ -146,8 +146,8 @@ export default function ProposerPage() {
         <h1 className="page-title">Initiate the DvP proposal</h1>
         <p className="lede">
           You are Alice. Stage the reusable 3-party settlement pattern: CBTC
-          collateral, USDCx cash, oracle grade. Cancel or expire before
-          settlement if the market moves.
+          collateral, USDCx cash, and cETH. Cancel or expire before settlement
+          if the market moves.
         </p>
       </div>
       <div className="row">

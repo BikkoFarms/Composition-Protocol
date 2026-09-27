@@ -15,7 +15,7 @@ describe("Composition Protocol demo gates", () => {
     assert.equal(result.composition.status, "settled");
     assert.equal(result.composition.legSummaries?.length, 3);
     assert.ok(result.composition.receiptCid);
-    // Alice receives USDCx; Bob receives CBTC + ATTEST
+    // Alice receives USDCx; Bob receives CBTC + cETH
     const alice = store.listTokens("Alice");
     const bob = store.listTokens("Bob");
     assert.ok(alice.some((t) => t.instrumentId === "USDCx"));

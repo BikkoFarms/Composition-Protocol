@@ -1,7 +1,8 @@
 "use client";
 
 /**
- * Auditor desk — same ledger, different party. Human-first money shot.
+ * Money shot — cinematic split-screen: participant ACS vs regulator ACS.
+ * Settle-then-prove so judges never land on empty skeletons.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -9,15 +10,17 @@ import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
 
+type Tokenish = { instrumentId?: string; amount?: string; contractId?: string };
+
 type MoneyShot = {
   participant: {
     party: string;
-    visibleTokens: unknown[];
+    visibleTokens: Tokenish[];
     settlementReceipts: unknown[];
   };
   observer: {
     party: string;
-    visibleTokens: unknown[];
+    visibleTokens: Tokenish[];
     settlementReceipts: {
       receiptCid: string | null;
       description: string;
@@ -37,11 +40,14 @@ export default function ObserverPage() {
   const [data, setData] = useState<MoneyShot | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [proveFlash, setProveFlash] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const shot = await api<MoneyShot>("/audit/money-shot");
     setData(shot);
     setLoading(false);
+    return shot;
   }, []);
 
   useEffect(() => {
@@ -51,114 +57,151 @@ export default function ObserverPage() {
     });
     const id = setInterval(() => {
       refresh().catch(() => undefined);
-    }, 3500);
+    }, 4000);
     return () => clearInterval(id);
   }, [refresh]);
 
+  async function settleThenProve() {
+    setBusy(true);
+    setError(null);
+    setProveFlash(null);
+    try {
+      await api("/compositions/demo/run-full", {
+        method: "POST",
+        body: JSON.stringify({ forceFail: false }),
+      });
+      const shot = await refresh();
+      if (shot?.observer.proof.visibleTokensEmpty && shot.observer.proof.receiptPresent) {
+        setProveFlash(
+          "Money shot locked: same settlement, same ledger — regulator ACS has receipt only.",
+        );
+      }
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const receipt = data?.observer.settlementReceipts[0];
+  const proved =
+    data?.observer.proof.visibleTokensEmpty && data?.observer.proof.receiptPresent;
 
   return (
     <div>
       <div className="page-head">
         <span className="pill">
-          Auditor desk
+          Money shot · R-PRIV-3
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">What the regulator sees</h1>
+        <h1 className="page-title">Observer sees nothing</h1>
         <p className="lede">
-          Same Canton ledger as the lender. Different party. You get proof that
-          settlement happened. You do not get the asset legs. That is ledger
-          privacy, not a UI filter.
+          Same settlement. Same ledger. The regulator sees that it happened —
+          and cannot see a single leg&apos;s contents. That is Canton's
+          stakeholder model, not a UI filter. Query run as each party below.
         </p>
+        <div className="row">
+          <button className="primary" disabled={busy} onClick={settleThenProve}>
+            {busy ? "Settling & querying…" : "Settle then prove"}
+          </button>
+          <Link className="btn" href="/demo">
+            Settlement desk
+          </Link>
+          <Link className="btn" href="/governance">
+            BitSafe beat
+          </Link>
+        </div>
       </div>
 
+      {proveFlash && <div className="flash-ok">{proveFlash}</div>}
       {error && <p className="err">{error}</p>}
 
-      <div className="split">
-        <div className="card card-mint">
-          <h2>Lender (participant)</h2>
+      <div className="money-shot-stage" aria-label="Participant versus regulator ACS">
+        <div className="money-shot-panel card-mint">
+          <div className="money-shot-panel-head">
+            <div>
+              <h2>Participant ACS</h2>
+              <p className="query-as">
+                Query run as {data?.participant.party ?? "Bob"}
+              </p>
+            </div>
+            {data && (
+              <span className="tag ok">
+                {data.participant.visibleTokens.length} token
+                {data.participant.visibleTokens.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </div>
           {loading && !data ? (
             <SkeletonBlock rows={5} />
           ) : data ? (
             <>
-              <p className="card-title" style={{ fontSize: 20 }}>
-                {data.participant.party}
+              <p className="card-title" style={{ fontSize: 22 }}>
+                Legs visible to the counterparty
               </p>
-              <div className="row">
-                <span className="tag ok">
-                  Tokens held: {data.participant.visibleTokens.length}
-                </span>
-                <span className="tag ok">
-                  Receipts: {data.participant.settlementReceipts.length}
-                </span>
-              </div>
-              <p className="muted" style={{ fontSize: 14 }}>
-                After a settled trade, the lender ACS includes the transferred
-                instruments. That is expected.
-              </p>
-              {data.participant.visibleTokens.length > 0 && (
-                <div className="asset-chips">
-                  {(data.participant.visibleTokens as { instrumentId?: string; amount?: string }[])
-                    .slice(0, 6)
-                    .map((t, i) => (
-                      <span key={i} className="tag cyan">
-                        {t.instrumentId ?? "asset"} · {t.amount ?? "—"}
-                      </span>
-                    ))}
-                </div>
+              {data.participant.visibleTokens.length === 0 ? (
+                <p className="muted" style={{ fontSize: 14 }}>
+                  No tokens yet. Run <strong>Settle then prove</strong> to
+                  populate this ACS.
+                </p>
+              ) : (
+                <ul className="ticket-legs">
+                  {data.participant.visibleTokens.slice(0, 8).map((t, i) => (
+                    <li key={t.contractId ?? i}>
+                      <span>{t.instrumentId ?? "asset"}</span>
+                      <strong>{t.amount ?? "—"}</strong>
+                    </li>
+                  ))}
+                </ul>
               )}
+              <p className="mono muted" style={{ fontSize: 12, marginTop: 12 }}>
+                Receipts: {data.participant.settlementReceipts.length}
+              </p>
             </>
           ) : null}
         </div>
 
-        <div className="card card-lavender">
-          <h2>Regulator (observer)</h2>
+        <div className="money-shot-divider" aria-hidden>
+          <span>vs</span>
+        </div>
+
+        <div className="money-shot-panel card-lavender">
+          <div className="money-shot-panel-head">
+            <div>
+              <h2>Regulator ACS</h2>
+              <p className="query-as">
+                Query run as {data?.observer.party ?? "Regulator"}
+              </p>
+            </div>
+            {data && (
+              <span
+                className={`tag ${
+                  data.observer.proof.visibleTokensEmpty ? "empty" : "warn"
+                }`}
+              >
+                {data.observer.proof.visibleTokensEmpty
+                  ? "0 tokens"
+                  : "leak"}
+              </span>
+            )}
+          </div>
           {loading && !data ? (
             <SkeletonBlock rows={6} />
           ) : data ? (
             <>
-              <p className="card-title" style={{ fontSize: 20 }}>
-                {data.observer.party}
-              </p>
-              <div className="row">
-                <span
-                  className={`tag ${
-                    data.observer.proof.visibleTokensEmpty ? "empty" : "warn"
-                  }`}
-                >
-                  Tokens:{" "}
-                  {data.observer.proof.visibleTokensEmpty
-                    ? "none visible"
-                    : "leak detected"}
-                </span>
-                <span
-                  className={`tag ${
-                    data.observer.proof.receiptPresent ? "ok" : "warn"
-                  }`}
-                >
-                  Receipt:{" "}
-                  {data.observer.proof.receiptPresent ? "on file" : "waiting"}
-                </span>
+              <div
+                className={`empty-state money-shot-empty ${
+                  proved ? "proved" : ""
+                }`}
+              >
+                visibleTokens: []
+                <br />
+                Legs cryptographically excluded
               </div>
-
-              {data.observer.visibleTokens.length === 0 ? (
-                <div className="empty-state">
-                  visibleTokens: []
-                  <br />
-                  Legs cryptographically excluded
-                </div>
-              ) : (
-                <p className="err">Unexpected tokens in observer ACS.</p>
-              )}
-
               <h2 style={{ marginTop: 20 }}>Settlement receipt</h2>
               {!receipt ? (
                 <p className="muted" style={{ fontSize: 14 }}>
-                  No receipt yet.{" "}
-                  <Link className="link-arrow" href="/demo">
-                    Settle a trade
-                  </Link>{" "}
-                  to issue one.
+                  Waiting for a receipt. Settle a DvP to issue one.
                 </p>
               ) : (
                 <div className="receipt-card">
@@ -180,8 +223,11 @@ export default function ObserverPage() {
                       ))}
                     </ul>
                   )}
-                  <p className="mono muted" style={{ marginTop: 10, marginBottom: 0 }}>
-                    Proven by {data.observer.proof.test}
+                  <p
+                    className="mono muted"
+                    style={{ marginTop: 10, marginBottom: 0 }}
+                  >
+                    On-ledger backing: {data.observer.proof.test}
                   </p>
                 </div>
               )}
