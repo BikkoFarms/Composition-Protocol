@@ -16,7 +16,7 @@ Composition-Protocol/
 │   │   ├── index.ts        # Server entry & router mounting
 │   │   ├── ledger.ts       # Canton Ledger API v2 & Keycloak OIDC client
 │   │   ├── demoStore.ts    # High-fidelity ACS simulation & state machine
-│   │   ├── demoStore.test.ts # 11 automated test suites
+│   │   ├── demoStore.test.ts # 20 automated test suites
 │   │   └── routes/         # Assets, Compositions, Governance, Audit, Admin
 ├── frontend/               # Next.js 15 App Router web application (:3000)
 │   ├── app/
@@ -52,8 +52,10 @@ Composition-Protocol/
 | **Canton JSON Ledger API v2 Client** | Complete | [backend/src/ledger.ts](backend/src/ledger.ts) handles `/v2/commands/submit-and-wait`, active-contracts queries, and Keycloak OIDC caching. |
 | **Mission Control Admin Console** | Complete | [frontend/app/admin/page.tsx](frontend/app/admin/page.tsx) with live latency ping, mode toggles, treasury minting, and state resets. |
 | **Commodity Oracle & Attestation Service** | Complete | [mocks/oracle/server.mjs](mocks/oracle/server.mjs) serving dynamic spot prices and HMAC-SHA256 signed inspection certificates. |
-| **Automated Test Gates** | 11/11 Passing | `cd backend && npm test` passing in 551ms. |
-| **Frontend Production Build** | 11/11 Static Routes | `cd frontend && npm run build` compiled with 0 errors. |
+| **Automated Test Gates** | 20/20 Passing | `npm test` (or `cd backend && npm test`) passing across all SRS §12 gates. |
+| **Live E2E Socket Suite** | 13/13 Passing | `npm run test:e2e` verifying live integration across backend & oracle. |
+| **Frontend Production Build** | 11/11 Static Routes | `npm run build` compiled with 0 errors. |
+| **Operational Manuals** | Complete | [DEPLOYMENT.md](DEPLOYMENT.md) & [TESTING.md](TESTING.md) available in root. |
 
 ---
 
@@ -88,18 +90,16 @@ When writing code or submitting Pull Requests, every contributor must uphold the
 
 ## 4. Pre-Commit Checklist & Verification Workflow
 
-Before pushing any commit to `main` or opening a PR:
+Before pushing any commit to `main` or opening a PR (see [TESTING.md](TESTING.md)):
 
 ```bash
-# 1. Backend Strict Typecheck
-cd backend
-npm run typecheck
-
-# 2. Automated Test Suite (Must pass all 11 suites)
+# 1. Automated Test Suite (Must pass all 20 suites)
 npm test
 
-# 3. Frontend Production Build & Route Prerendering (Must pass 11/11 routes)
-cd ../frontend
+# 2. Live E2E Integration Suite (Must pass all 13 tests)
+npm run test:e2e
+
+# 3. Production Build & Route Prerendering (Must compile cleanly)
 npm run build
 
 # 4. Check Git Status (Ensure working tree is clean)

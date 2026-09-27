@@ -6,6 +6,10 @@
     "dev:api": "npm --prefix backend run dev",
     "dev:web": "npm --prefix frontend run dev",
     "dev:oracle": "node mocks/oracle/server.mjs",
-    "install:all": "npm --prefix backend install && npm --prefix frontend install"
+    "install:all": "npm --prefix backend install && npm --prefix frontend install",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build",
+    "test": "npm --prefix backend test",
+    "test:backend": "npm --prefix backend test",
+    "test:e2e": "node scripts/test-e2e-live.mjs"
   }
 }

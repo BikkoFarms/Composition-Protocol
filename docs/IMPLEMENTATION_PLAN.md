@@ -60,23 +60,43 @@ TAP version 13
 # fail 0
 ```
 
-### Frontend Compilation & Prerender Build (`npm run build`)
-```
+### Frontend Compilation & Prerender Build (
+pm run build)
+`
 Route (app)                                 Size  First Load JS
 ┌ ○ /                                      162 B         106 kB
 ├ ○ /_not-found                            995 B         104 kB
-├ ○ /counterparty                        1.39 kB         104 kB
-├ ○ /demo                                1.63 kB         108 kB
-├ ○ /governance                           2.6 kB         105 kB
-├ ○ /metrics                              2.3 kB         105 kB
-├ ○ /observer                            1.25 kB         104 kB
-└ ○ /proposer                            1.43 kB         104 kB
+├ ○ /admin                               3.12 kB         106 kB
+├ ○ /counterparty                        2.06 kB         108 kB
+├ ○ /demo                                2.59 kB         109 kB
+├ ○ /governance                          2.41 kB         108 kB
+├ ○ /metrics                             1.96 kB         105 kB
+├ ○ /observer                            1.96 kB         108 kB
+└ ○ /proposer                            2.22 kB         105 kB
 + First Load JS shared by all             103 kB
 
-✓ All 10 routes compiled with 0 errors.
-```
+✓ All 11 routes compiled and statically prerendered with 0 errors.
+`
+
+### Live Network E2E Socket Suite (
+pm run test:e2e — 13/13 Passing)
+All 13 live integration tests across ports :4000 (Backend API) and :4002 (Commodity Oracle) pass cleanly:
+- Health check & asset discovery
+- Live commodity oracle price feed (,000 CBTC)
+- 3-leg trade-finance proposal & counterparty acceptance
+- Atomic settlement execution & receipt generation
+- Injected atomic revert (409 Conflict: ATOMIC_REVERT)
+- Observer privacy check (isibleTokens: [])
+- Proposer cancellation, expiration, and rejection paths
+- Governance emergency veto and circuit breaker operational halt
 
 ---
 
-## 3. Conclusion & Delivery Readiness
-All 12 functional and non-functional requirements specified in the PRD and SRD are fully developed, verified through automated gates, and confirmed working across smart contract, API, and UI tiers.
+## 3. Operational Manuals & Runbooks
+- [**DEPLOYMENT.md**](../DEPLOYMENT.md) — Complete multi-topology deployment instructions (LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet).
+- [**TESTING.md**](../TESTING.md) — Comprehensive step-by-step testing manual covering Daml scripts, 20 backend test gates, 13 live E2E tests, and browser walkthrough.
+
+---
+
+## 4. Conclusion & Delivery Readiness
+All 16 functional and non-functional requirements specified in the PRD and SRS are fully developed, verified through automated gates, and confirmed working across smart contract, API, and UI tiers. Ready for HackCanton Season 3 submission.
