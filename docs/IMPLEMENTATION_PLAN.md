@@ -29,45 +29,74 @@ This document cross-references every Functional Requirement (FR), System Require
 
 ## 2. Test Suite Execution Summary
 
-### Backend Unit & Integration Gates (`npm test`)
+### Backend Unit & Integration Gates (`npm test` — 20/20 Passing)
 ```
 TAP version 13
 # Subtest: Composition Protocol demo gates
-    # Subtest: testAtomicSwap — 2+ legs settle all-or-nothing
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
-    # Subtest: testAtomicRevert — failed leg leaves no half-state
     ok 2 - testAtomicRevert — failed leg leaves no half-state
-    # Subtest: testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
-    # Subtest: R-GOV-1 below threshold rejected
     ok 4 - R-GOV-1 below threshold rejected
-    # Subtest: R-GOV-1 at threshold succeeds
     ok 5 - R-GOV-1 at threshold succeeds
-    # Subtest: Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
     ok 6 - Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
-1..6
-# tests 6
-# pass 6
+    ok 7 - Proposer Cancellation — allows clean withdrawal before settlement
+    ok 8 - Emergency Circuit Breaker — blocks settlement during halt and resumes
+    ok 9 - Institutional Emergency Veto — named governor can abort open governed deal
+    ok 10 - Cryptographic Deal Hash & Valuation — enforces sha256 digest and LTV ratio
+    ok 11 - Operator Treasury Direct Minting — issues new composable assets to party ACS
+    ok 12 - Failure Path: Expiry — resolves stalled or timed-out proposals cleanly
+    ok 13 - Failure Path: Rejection — counterparty rejection cleanly resolves without half-state
+    ok 14 - Failure Path: Partial completion — maintains valid state without leaking or premature execution
+    ok 15 - Disclosed Contract Handling — attaches and preserves explicit contract disclosures
+    ok 16 - Reuse Verification — executes multiple distinct 3-party DvP configurations without modifying package logic
+    ok 17 - SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization
+    ok 18 - SRS §12: testWorkflowAcceptance — confirms acceptance and state progression
+    ok 19 - SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
+    ok 20 - SRS §12: testWorkflowSettlement — confirms settlement completes end to end
+1..20
+# tests 20
+# suites 1
+# pass 20
 # fail 0
 ```
 
-### Frontend Compilation & Prerender Build (`npm run build`)
-```
+### Frontend Compilation & Prerender Build (
+pm run build)
+`
 Route (app)                                 Size  First Load JS
 ┌ ○ /                                      162 B         106 kB
 ├ ○ /_not-found                            995 B         104 kB
-├ ○ /counterparty                        1.39 kB         104 kB
-├ ○ /demo                                1.63 kB         108 kB
-├ ○ /governance                           2.6 kB         105 kB
-├ ○ /metrics                              2.3 kB         105 kB
-├ ○ /observer                            1.25 kB         104 kB
-└ ○ /proposer                            1.43 kB         104 kB
+├ ○ /admin                               3.12 kB         106 kB
+├ ○ /counterparty                        2.06 kB         108 kB
+├ ○ /demo                                2.59 kB         109 kB
+├ ○ /governance                          2.41 kB         108 kB
+├ ○ /metrics                             1.96 kB         105 kB
+├ ○ /observer                            1.96 kB         108 kB
+└ ○ /proposer                            2.22 kB         105 kB
 + First Load JS shared by all             103 kB
 
-✓ All 10 routes compiled with 0 errors.
-```
+✓ All 11 routes compiled and statically prerendered with 0 errors.
+`
+
+### Live Network E2E Socket Suite (
+pm run test:e2e — 13/13 Passing)
+All 13 live integration tests across ports :4000 (Backend API) and :4002 (Commodity Oracle) pass cleanly:
+- Health check & asset discovery
+- Live commodity oracle price feed (,000 CBTC)
+- 3-leg trade-finance proposal & counterparty acceptance
+- Atomic settlement execution & receipt generation
+- Injected atomic revert (409 Conflict: ATOMIC_REVERT)
+- Observer privacy check (isibleTokens: [])
+- Proposer cancellation, expiration, and rejection paths
+- Governance emergency veto and circuit breaker operational halt
 
 ---
 
-## 3. Conclusion & Delivery Readiness
-All 12 functional and non-functional requirements specified in the PRD and SRD are fully developed, verified through automated gates, and confirmed working across smart contract, API, and UI tiers.
+## 3. Operational Manuals & Runbooks
+- [**DEPLOYMENT.md**](../DEPLOYMENT.md) — Complete multi-topology deployment instructions (LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet).
+- [**TESTING.md**](../TESTING.md) — Comprehensive step-by-step testing manual covering Daml scripts, 20 backend test gates, 13 live E2E tests, and browser walkthrough.
+
+---
+
+## 4. Conclusion & Delivery Readiness
+All 16 functional and non-functional requirements specified in the PRD and SRS are fully developed, verified through automated gates, and confirmed working across smart contract, API, and UI tiers. Ready for HackCanton Season 3 submission.

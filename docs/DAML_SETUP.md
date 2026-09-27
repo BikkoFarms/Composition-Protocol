@@ -27,6 +27,10 @@ Expected Script gates:
 - `testAuditorCannotSeeLegs`
 - `testGovernedBelowThreshold`
 - `testGovernedAtThreshold`
+- `testWorkflowProposal` (SRS §12: proposal creation & workflow initialization)
+- `testWorkflowAcceptance` (SRS §12: counterparty acceptance & state progression)
+- `testWorkflowExpiryOrCancel` (SRS §12: clean resolution of stalled workflows)
+- `testWorkflowSettlement` (SRS §12: end-to-end 3-party DvP settlement)
 
 ## Without SDK yet
 

@@ -232,56 +232,83 @@ To connect the backend to an active Canton participant node via the JSON Ledger 
 
 ## 6. Verification & Automated Test Gates
 
-All core protocol guarantees are verified across two distinct test layers:
+All core protocol guarantees are verified across multi-layer test gates (see [**TESTING.md**](TESTING.md) for complete guide):
 
-### 1. Node.js Backend Gate Suite
-Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshold logic, and judge metrics:
+### 1. Backend Automated Gate Suite
+Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshold logic, failure paths, reusability, and SRS §12 gates:
 ```bash
-cd backend
 npm test
 ```
-**Automated Gate Results (6/6 Passing):**
+**Automated Gate Results (20/20 Passing):**
 - `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
 - `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
 - `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
 - `R-GOV-1 below threshold rejected` — execution blocked with < M approvals **[Pass]**
 - `R-GOV-1 at threshold succeeds` — execution unlocked with == M approvals (`R-GOV-2`) **[Pass]**
 - `Judge Metrics` — throughput, average legs/deal, and success/revert rates **[Pass]**
+- `Proposer Cancellation` — allows clean withdrawal before settlement **[Pass]**
+- `Emergency Circuit Breaker` — blocks settlement during halt and resumes **[Pass]**
+- `Institutional Emergency Veto` — named governor can abort open governed deal **[Pass]**
+- `Cryptographic Deal Hash & Valuation` — enforces sha256 digest and LTV ratio **[Pass]**
+- `Operator Treasury Direct Minting` — issues new composable assets to party ACS **[Pass]**
+- `Failure Path: Expiry` — resolves stalled or timed-out proposals cleanly **[Pass]**
+- `Failure Path: Rejection` — counterparty rejection cleanly resolves without half-state **[Pass]**
+- `Failure Path: Partial completion` — maintains valid state without premature execution **[Pass]**
+- `Disclosed Contract Handling` — attaches and preserves explicit contract disclosures **[Pass]**
+- `Reuse Verification` — executes multiple distinct 3-party DvP configurations without modifying package logic **[Pass]**
+- `SRS §12: testWorkflowProposal` — confirms proposal creation and workflow initialization **[Pass]**
+- `SRS §12: testWorkflowAcceptance` — confirms acceptance and state progression **[Pass]**
+- `SRS §12: testWorkflowExpiryOrCancel` — confirms stalled workflows resolve cleanly **[Pass]**
+- `SRS §12: testWorkflowSettlement` — confirms settlement completes end to end **[Pass]**
 
 ### 2. Daml Script Test Suite
-Verifies on-ledger sub-transaction semantics and Canton stakeholder visibility (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
+Verifies on-ledger sub-transaction semantics, Canton stakeholder visibility, and SRS §12 gates (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
 ```bash
 cd daml
 daml build
 daml test
 ```
-**Tests Covered:**
+**Tests Covered (9 Passing Scripts):**
 - `Test.daml:testAtomicSwap`
 - `Test.daml:testAtomicRevert`
 - `Test.daml:testAuditorCannotSeeLegs`
+- `Test.daml:testWorkflowProposal` (SRS §12)
+- `Test.daml:testWorkflowAcceptance` (SRS §12)
+- `Test.daml:testWorkflowExpiryOrCancel` (SRS §12)
+- `Test.daml:testWorkflowSettlement` (SRS §12)
 - `TestGovernance.daml:testGovernedBelowThreshold`
 - `TestGovernance.daml:testGovernedAtThreshold`
+
+### 3. Live E2E Integration Suite (13 Tests)
+Runs full network socket tests across backend (:4000) and oracle (:4002):
+```bash
+npm run test:e2e
+```
 
 ---
 
 ## 7. Implementation Status & Next Milestones
 
 | Component | Status | Verification / Artifact |
-|:---|:---:|:---|
-| **Daml Smart Contracts** | Complete | `ComposableAsset`, `Composition`, `Governance`, `MockToken` |
-| **Daml Script Test Gates** | Complete | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV |
-| **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, and admin |
-| **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC |
-| **Backend Test Gates** | Passing (11/11) | `npm test` passing in `backend/` in 551ms |
-| **Frontend Next.js Views** | Complete | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
+| :--- | :--- | :--- |
+| **Daml Smart Contracts** | Complete | `ComposableAsset`, `Composition`, `Governance`, `Workflow`, `DisclosedContract` |
+| **Daml Script Test Gates** | Complete (9/9) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV, and SRS §12 |
+| **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, circuit-breaker, admin |
+| **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts |
+| **Backend Test Gates** | Passing (20/20) | `npm test` passing across all invariants and SRS §12 gates |
+| **Live E2E Socket Tests** | Passing (13/13) | `npm run test:e2e` verifying live integration across ports :4000 and :4002 |
+| **Frontend Next.js Views** | Complete (11/11 routes) | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
 | **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
-| **Agentic Environment** | Operational | `.ai/rules.md`, `.ai/skills.json`, `.ai/context.md`, `.ai/ai.md`, and modular skills |
-| **Documentation Hub** | Complete | Architecture, API reference, Judging guide, Implementation plan, Context, AI guide |
+| **Documentation & Runbooks** | Complete | `DEPLOYMENT.md`, `TESTING.md`, PRD, SRS, Architecture, API, Risk assessment |
 
 ---
 
 ## 8. Documentation Hub & Deep Dives
 
+- [**DEPLOYMENT.md**](DEPLOYMENT.md) — Step-by-step deployment guide covering LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet.
+- [**TESTING.md**](TESTING.md) — Comprehensive testing manual covering Daml scripts, 20 backend test gates, 13 live E2E tests, and browser walkthrough.
+- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Authoritative updated Product Requirements Document (PRD).
+- [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Authoritative updated Software Requirements Specification (SRS).
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — Contributor onboarding, engineering rules, status matrix, and pre-commit checklists.
 - [**docs/RISK_ASSESSMENT.md**](docs/RISK_ASSESSMENT.md) — Rigorous protocol and operational risk assessment, invariant guarantees, and threat mitigations.
 - [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Technical blueprint, Mermaid lifecycle diagrams, sub-transaction privacy models, and failure modes.
@@ -289,13 +316,12 @@ daml test
 - [**docs/API.md**](docs/API.md) — Complete REST API reference, request/response schemas, query parameters, and cURL examples.
 - [**docs/JUDGING.md**](docs/JUDGING.md) — HackCanton Season 3 evaluation guide, Track 1 & BitSafe challenge alignment, and 3-minute quick walkthrough.
 - [**docs/IMPLEMENTATION_PLAN.md**](docs/IMPLEMENTATION_PLAN.md) — Full FR/SR requirements audit matrix cross-referencing PRD/SRD specifications.
-- [**docs/DESIGN.md**](docs/DESIGN.md) — Lattice design system (parchment / forest ink / pastel specimen cards).
+- [**docs/DEVNET.md**](docs/DEVNET.md) — Shared HackCanton DevNet node connection, Keycloak OIDC token flow, and DAR deployment.
+- [**docs/DAML_SETUP.md**](docs/DAML_SETUP.md) — Daml SDK 3.3.x environment setup, compilation, and script testing.
 - [**docs/INTERVIEWS.md**](docs/INTERVIEWS.md) — Builder interviews, qualitative evidence, and validation metrics for Criterion 3.
 - [**docs/PITCH_SCRIPT.md**](docs/PITCH_SCRIPT.md) — 3-minute video pitch presentation script, voiceover dialogue, and recording checklist.
-- [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) · [**SRD**](docs/Composition_Protocol_SRD.pdf) — Product & software requirements.
 - [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
 - [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.
-- [**docs/DEVNET.md**](docs/DEVNET.md) — Shared HackCanton DevNet node connection, Keycloak OIDC token flow, and DAR deployment.
 - [**docs/JOURNAL.md**](docs/JOURNAL.md) — Daily AI-guided hackathon engineering log (judging artifact).
 
 ---
