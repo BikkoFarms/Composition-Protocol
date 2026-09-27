@@ -263,5 +263,50 @@ describe("Composition Protocol demo gates", () => {
     assert.equal(settled2.status, "settled");
     assert.notEqual(settled1.id, settled2.id);
   });
+
+  // ============================================================
+  // SRS §12 Core Acceptance Tests
+  // ============================================================
+  it("SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization", () => {
+    const c = store.proposeTradeFinance();
+    assert.equal(c.status, "proposed");
+    assert.equal(c.legs.length, 3);
+    assert.ok(c.proposalCid);
+    assert.ok(c.dealHash);
+  });
+
+  it("SRS §12: testWorkflowAcceptance — confirms acceptance and state progression", () => {
+    const c = store.proposeTradeFinance();
+    assert.equal(c.status, "proposed");
+    store.accept(c.id, "Bob");
+    assert.equal(store.require(c.id).status, "partially_accepted");
+    store.accept(c.id, "Oracle");
+    assert.equal(store.require(c.id).status, "accepted");
+    assert.ok(store.require(c.id).agreementCid);
+  });
+
+  it("SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly", () => {
+    // 1. Proposer cancel path
+    const c1 = store.proposeTradeFinance();
+    const cancelled = store.cancel(c1.id, "Alice");
+    assert.equal(cancelled.status, "cancelled");
+
+    // 2. Timeout expiry path
+    const c2 = store.proposeTradeFinance();
+    c2.expiresAt = new Date(Date.now() - 1000).toISOString();
+    const expired = store.expire(c2.id, "Operator", new Date());
+    assert.equal(expired.status, "expired");
+  });
+
+  it("SRS §12: testWorkflowSettlement — confirms settlement completes end to end", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    const settled = store.settle(c.id);
+    assert.equal(settled.status, "settled");
+    assert.ok(settled.receiptCid);
+    assert.equal(settled.legSummaries?.length, 3);
+  });
 });
+
 

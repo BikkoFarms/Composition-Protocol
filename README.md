@@ -272,7 +272,7 @@ daml test
 | **Daml Script Test Gates** | Complete | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, and admin |
 | **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC |
-| **Backend Test Gates** | Passing (11/11) | `npm test` passing in `backend/` in 551ms |
+| **Backend Test Gates** | Passing (20/20) | `npm test` passing in `backend/` across all SRS §12 gates |
 | **Frontend Next.js Views** | Complete | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
 | **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
 | **Agentic Environment** | Operational | `.ai/rules.md`, `.ai/skills.json`, `.ai/context.md`, `.ai/ai.md`, and modular skills |
@@ -282,6 +282,8 @@ daml test
 
 ## 8. Documentation Hub & Deep Dives
 
+- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Authoritative updated Product Requirements Document (PRD).
+- [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Authoritative updated Software Requirements Specification (SRS).
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — Contributor onboarding, engineering rules, status matrix, and pre-commit checklists.
 - [**docs/RISK_ASSESSMENT.md**](docs/RISK_ASSESSMENT.md) — Rigorous protocol and operational risk assessment, invariant guarantees, and threat mitigations.
 - [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Technical blueprint, Mermaid lifecycle diagrams, sub-transaction privacy models, and failure modes.
@@ -292,7 +294,7 @@ daml test
 - [**docs/DESIGN.md**](docs/DESIGN.md) — Lattice design system (parchment / forest ink / pastel specimen cards).
 - [**docs/INTERVIEWS.md**](docs/INTERVIEWS.md) — Builder interviews, qualitative evidence, and validation metrics for Criterion 3.
 - [**docs/PITCH_SCRIPT.md**](docs/PITCH_SCRIPT.md) — 3-minute video pitch presentation script, voiceover dialogue, and recording checklist.
-- [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) · [**SRD**](docs/Composition_Protocol_SRD.pdf) — Product & software requirements.
+- [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) · [**SRD**](docs/Composition_Protocol_SRD.pdf) — Baseline product & software requirements.
 - [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
 - [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.
 - [**docs/DEVNET.md**](docs/DEVNET.md) — Shared HackCanton DevNet node connection, Keycloak OIDC token flow, and DAR deployment.

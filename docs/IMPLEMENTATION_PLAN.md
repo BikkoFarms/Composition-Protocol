@@ -29,25 +29,34 @@ This document cross-references every Functional Requirement (FR), System Require
 
 ## 2. Test Suite Execution Summary
 
-### Backend Unit & Integration Gates (`npm test`)
+### Backend Unit & Integration Gates (`npm test` — 20/20 Passing)
 ```
 TAP version 13
 # Subtest: Composition Protocol demo gates
-    # Subtest: testAtomicSwap — 2+ legs settle all-or-nothing
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
-    # Subtest: testAtomicRevert — failed leg leaves no half-state
     ok 2 - testAtomicRevert — failed leg leaves no half-state
-    # Subtest: testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
-    # Subtest: R-GOV-1 below threshold rejected
     ok 4 - R-GOV-1 below threshold rejected
-    # Subtest: R-GOV-1 at threshold succeeds
     ok 5 - R-GOV-1 at threshold succeeds
-    # Subtest: Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
     ok 6 - Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
-1..6
-# tests 6
-# pass 6
+    ok 7 - Proposer Cancellation — allows clean withdrawal before settlement
+    ok 8 - Emergency Circuit Breaker — blocks settlement during halt and resumes
+    ok 9 - Institutional Emergency Veto — named governor can abort open governed deal
+    ok 10 - Cryptographic Deal Hash & Valuation — enforces sha256 digest and LTV ratio
+    ok 11 - Operator Treasury Direct Minting — issues new composable assets to party ACS
+    ok 12 - Failure Path: Expiry — resolves stalled or timed-out proposals cleanly
+    ok 13 - Failure Path: Rejection — counterparty rejection cleanly resolves without half-state
+    ok 14 - Failure Path: Partial completion — maintains valid state without leaking or premature execution
+    ok 15 - Disclosed Contract Handling — attaches and preserves explicit contract disclosures
+    ok 16 - Reuse Verification — executes multiple distinct 3-party DvP configurations without modifying package logic
+    ok 17 - SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization
+    ok 18 - SRS §12: testWorkflowAcceptance — confirms acceptance and state progression
+    ok 19 - SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
+    ok 20 - SRS §12: testWorkflowSettlement — confirms settlement completes end to end
+1..20
+# tests 20
+# suites 1
+# pass 20
 # fail 0
 ```
 
