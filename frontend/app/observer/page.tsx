@@ -13,6 +13,7 @@ import { SkeletonBlock } from "@/components/Skeleton";
 type Tokenish = { instrumentId?: string; amount?: string; contractId?: string };
 
 type MoneyShot = {
+  source?: "demo" | "ledger";
   participant: {
     party: string;
     visibleTokens: Tokenish[];
@@ -98,7 +99,10 @@ export default function ObserverPage() {
         <p className="lede">
           Same settlement. Same ledger. The regulator sees that it happened —
           and cannot see a single leg&apos;s contents. That is Canton's
-          stakeholder model, not a UI filter. Query run as each party below.
+          stakeholder model, not a UI filter. Query run as each party below
+          {data?.source === "ledger"
+            ? " — live ACS on the shared DevNet participant."
+            : " — LocalNet demo ACS (identical visibility rules)."}
         </p>
         <div className="row">
           <button className="primary" disabled={busy} onClick={settleThenProve}>
@@ -110,6 +114,11 @@ export default function ObserverPage() {
           <Link className="btn" href="/governance">
             BitSafe beat
           </Link>
+          {data?.source && (
+            <span className={`tag ${data.source === "ledger" ? "ok" : ""}`}>
+              ACS: {data.source}
+            </span>
+          )}
         </div>
       </div>
 
@@ -193,10 +202,17 @@ export default function ObserverPage() {
                 className={`empty-state money-shot-empty ${
                   proved ? "proved" : ""
                 }`}
+                role="status"
+                aria-label="Regulator visible tokens intentionally empty"
               >
-                visibleTokens: []
-                <br />
-                Legs cryptographically excluded
+                <span className="empty-glyph" aria-hidden>
+                  ∅
+                </span>
+                <strong>visibleTokens: []</strong>
+                <span>
+                  Designed emptiness — legs are not hidden by the UI; they are
+                  absent from this party&apos;s ACS.
+                </span>
               </div>
               <h2 style={{ marginTop: 20 }}>Settlement receipt</h2>
               {!receipt ? (

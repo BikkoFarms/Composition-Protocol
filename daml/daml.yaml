@@ -1,4 +1,4 @@
-sdk-version: 3.3.0
+sdk-version: 3.3.0-snapshot.20250930.0
 name: composition
 source: daml
 version: 0.1.0
@@ -8,5 +8,7 @@ dependencies:
   - daml-script
 build-options:
   - --target=2.1
+  - -Wno-upgrade-interfaces
+  - -Wno-template-interface-depends-on-daml-script
 test-dependencies:
   - daml-script

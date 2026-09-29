@@ -1,129 +1,158 @@
--- | Daml Script acceptance tests for atomicity + per-leg privacy.
--- Gates: testAtomicSwap, testAtomicRevert, testAuditorCannotSeeLegs.
+-- | Daml Script acceptance tests for atomicity, privacy, lifecycle, and
+-- allocation matching (R-ALLOC).
 module Test where
 
 import ComposableAsset
 import Composition
 import MockToken
 import Daml.Script
+import DA.Date (datetime, Month(..))
+import DA.Time (addRelTime, hours)
+import DA.Text (isInfixOf)
+
+-- | Extract a human-readable rejection from a failed submit (SubmitError Show).
+rejectionText : SubmitError -> Text
+rejectionText = show
+
+expectRejectionContaining :
+  Text -> Either SubmitError a -> Script Text
+expectRejectionContaining needle result = case result of
+  Right _ -> do
+    assertMsg ("expected rejection containing: " <> needle) False
+    pure ""
+  Left err -> do
+    let msg = rejectionText err
+    debug ("VERBATIM_REJECTION: " <> msg)
+    assertMsg
+      ("rejection missing expected text [" <> needle <> "]; got: " <> msg)
+      (needle `isInfixOf` msg)
+    pure msg
+
+farDeadline : Time
+farDeadline = datetime 2099 Jan 1 0 0 0
 
 allocateParties : Script (Party, Party, Party, Party, Party)
 allocateParties = do
   operator <- allocateParty "Operator"
-  alice <- allocateParty "Alice"       -- borrower / proposer
-  bob <- allocateParty "Bob"           -- lender
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
   oracle <- allocateParty "Oracle"
   regulator <- allocateParty "Regulator"
   pure (operator, alice, bob, oracle, regulator)
 
 mintToken : Party -> Party -> Text -> Decimal -> Script (ContractId MockToken)
 mintToken issuer owner instrumentId amount =
-  submitMulti [issuer, owner] [] do
+  submit issuer do
     createCmd MockToken with
       owner
       issuer
       instrumentId
       amount
 
--- | R-ATOM-1/2 happy path: 2 parties, 2 assets, atomic end state.
+mkLeg :
+  Text -> Text -> Decimal -> Party -> Party -> ContractId MockToken -> Text ->
+  LegSpec
+mkLeg legId instrumentId amount provider receiver tokCid reference =
+  LegSpec with
+    legId
+    instrumentId
+    amount
+    provider
+    receiver
+    assetCid = toInterfaceContractId tokCid
+    reference
+    deadline = farDeadline
+
+-- | Propose via ComposableWorkflow factory (package entry point).
+proposeViaFactory :
+  Party -> Party -> [Party] -> [LegSpec] -> Text -> Time ->
+  Script (ContractId WorkflowProposal)
+proposeViaFactory operator proposer counterparties legs description expiresAt = do
+  factory <- submit operator do
+    createCmd ComposableWorkflow with operator
+  submitMulti [operator, proposer] counterparties do
+    exerciseCmd factory Propose with
+      proposer
+      counterparties
+      legs
+      description
+      expiresAt
+
+proposeDefault :
+  Party -> Party -> [Party] -> [LegSpec] -> Text ->
+  Script (ContractId WorkflowProposal)
+proposeDefault operator proposer counterparties legs description =
+  proposeViaFactory operator proposer counterparties legs description farDeadline
+
+-- | Provider + operator post an allocation that mirrors the agreed LegSpec.
+allocateFromLeg :
+  Party -> ContractId WorkflowAgreement -> LegSpec ->
+  Script (ContractId LegAllocation)
+allocateFromLeg operator agreementCid leg =
+  submitMulti [operator, leg.provider] [] do
+    exerciseCmd agreementCid AllocateLeg with
+      allocator = leg.provider
+      legId = leg.legId
+      instrumentId = leg.instrumentId
+      amount = leg.amount
+      provider = leg.provider
+      receiver = leg.receiver
+      assetCid = leg.assetCid
+      reference = leg.reference
+      deadline = leg.deadline
+
+allocateAll :
+  Party -> ContractId WorkflowAgreement -> [LegSpec] ->
+  Script [ContractId LegAllocation]
+allocateAll operator agreementCid legs =
+  mapA (allocateFromLeg operator agreementCid) legs
+
+-- | R-ATOM-1/2 happy path: Propose → Accept → Finalize → Allocate → Settle.
 testAtomicSwap : Script ()
 testAtomicSwap = do
   (operator, alice, bob, _oracle, _reg) <- allocateParties
   aliceUsd <- mintToken operator alice "USDCx" 100.0
   bobCbtc <- mintToken operator bob "CBTC" 1.0
-
   let legs =
-        [ LegSpec with
-            legId = "cash"
-            instrumentId = "USDCx"
-            amount = 100.0
-            provider = alice
-            receiver = bob
-            assetCid = toInterfaceContractId aliceUsd
-        , LegSpec with
-            legId = "collateral"
-            instrumentId = "CBTC"
-            amount = 1.0
-            provider = bob
-            receiver = alice
-            assetCid = toInterfaceContractId bobCbtc
+        [ mkLeg "cash" "USDCx" 100.0 alice bob aliceUsd "swap-cash-1"
+        , mkLeg "collateral" "CBTC" 1.0 bob alice bobCbtc "swap-cbtc-1"
         ]
-
-  proposalCid <- submitMulti [operator, alice] [bob] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob]
-      legs
-      description = "atomic swap demo"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
-
+  proposalCid <- proposeDefault operator alice [bob] legs "atomic swap demo"
   trackerCid <- submitMulti [operator, bob] [] do
     exerciseCmd proposalCid AcceptProposal with
       acceptor = bob
       trackerCid = None
-
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
-
-  receiptCid <- submit operator do
-    exerciseCmd agreementCid Settle
-
+  allocs <- allocateAll operator agreementCid legs
+  receiptCid <- submitMulti [operator, alice, bob] [] do
+    exerciseCmd agreementCid Settle with allocationCids = allocs
   Some receipt <- queryContractId operator receiptCid
   assertMsg "both legs settled" (length receipt.legSummaries == 2)
   pure ()
 
--- | Forced failure: Settle with a consumed/wrong asset must fully revert.
+-- | Forced failure: Settle with a consumed asset must fully revert.
 testAtomicRevert : Script ()
 testAtomicRevert = do
   (operator, alice, bob, _oracle, _reg) <- allocateParties
   aliceUsd <- mintToken operator alice "USDCx" 50.0
   bobCbtc <- mintToken operator bob "CBTC" 1.0
-
-  -- Consume Alice's USDCx before settle so Transfer fails.
-  _ <- submit alice do
-    exerciseCmd (toInterfaceContractId aliceUsd) Transfer with newOwner = bob
-
+  _ <- submitMulti [alice, operator] [] do
+    exerciseCmd (toInterfaceContractId @ComposableAsset aliceUsd) Transfer with newOwner = bob
   let legs =
-        [ LegSpec with
-            legId = "cash"
-            instrumentId = "USDCx"
-            amount = 50.0
-            provider = alice
-            receiver = bob
-            assetCid = toInterfaceContractId aliceUsd
-        , LegSpec with
-            legId = "collateral"
-            instrumentId = "CBTC"
-            amount = 1.0
-            provider = bob
-            receiver = alice
-            assetCid = toInterfaceContractId bobCbtc
+        [ mkLeg "cash" "USDCx" 50.0 alice bob aliceUsd "revert-cash"
+        , mkLeg "collateral" "CBTC" 1.0 bob alice bobCbtc "revert-cbtc"
         ]
-
-  proposalCid <- submitMulti [operator, alice] [bob] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob]
-      legs
-      description = "revert demo"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
-
+  proposalCid <- proposeDefault operator alice [bob] legs "revert demo"
   trackerCid <- submitMulti [operator, bob] [] do
-    exerciseCmd proposalCid AcceptProposal with
-      acceptor = bob
-      trackerCid = None
-
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
-
-  -- Settle must fail; Bob must still hold CBTC (no partial settle).
-  submitMustFail operator do
-    exerciseCmd agreementCid Settle
-
-  bobTokens <- query @MockToken bob
-  assertMsg "bob still holds CBTC after revert" (length bobTokens == 1)
+  allocs <- allocateAll operator agreementCid legs
+  submitMultiMustFail [operator, alice, bob] [] do
+    exerciseCmd agreementCid Settle with allocationCids = allocs
+  Some tok <- queryContractId bob bobCbtc
+  assertMsg "bob still holds CBTC after revert" (tok.instrumentId == "CBTC" && tok.amount == 1.0)
   pure ()
 
 -- | R-PRIV-1/2/3: regulator sees SettlementReceipt, zero MockToken legs.
@@ -132,108 +161,58 @@ testAuditorCannotSeeLegs = do
   (operator, alice, bob, oracle, regulator) <- allocateParties
   collateral <- mintToken operator alice "CBTC" 2.0
   cash <- mintToken operator bob "USDCx" 10000.0
-  attestation <- mintToken operator oracle "ATTEST" 1.0
-
+  ceth <- mintToken operator oracle "cETH" 1.5
   let legs =
-        [ LegSpec with
-            legId = "collateral"
-            instrumentId = "CBTC"
-            amount = 2.0
-            provider = alice
-            receiver = bob
-            assetCid = toInterfaceContractId collateral
-        , LegSpec with
-            legId = "cash"
-            instrumentId = "USDCx"
-            amount = 10000.0
-            provider = bob
-            receiver = alice
-            assetCid = toInterfaceContractId cash
-        , LegSpec with
-            legId = "attestation"
-            instrumentId = "ATTEST"
-            amount = 1.0
-            provider = oracle
-            receiver = bob
-            assetCid = toInterfaceContractId attestation
+        [ mkLeg "collateral" "CBTC" 2.0 alice bob collateral "tf-collateral"
+        , mkLeg "cash" "USDCx" 10000.0 bob alice cash "tf-cash"
+        , mkLeg "sponsor" "cETH" 1.5 oracle bob ceth "tf-sponsor"
         ]
-
-  proposalCid <- submitMulti [operator, alice] [bob, oracle] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob, oracle]
-      legs
-      description = "trade-finance composition"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
-
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "trade-finance composition"
   tracker1 <- submitMulti [operator, bob] [] do
-    exerciseCmd proposalCid AcceptProposal with
-      acceptor = bob
-      trackerCid = None
-
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
   tracker2 <- submitMulti [operator, oracle] [] do
-    exerciseCmd proposalCid AcceptProposal with
-      acceptor = oracle
-      trackerCid = Some tracker1
-
+    exerciseCmd proposalCid AcceptProposal with acceptor = oracle, trackerCid = Some tracker1
   agreementCid <- submit operator do
     exerciseCmd tracker2 FinalizeAgreement
-
-  receiptCid <- submit operator do
-    exerciseCmd agreementCid SettleWithRegulator with regulator
-
-  -- MONEY SHOT: regulator ACS has receipt, zero MockToken contracts.
+  allocs <- allocateAll operator agreementCid legs
+  receiptCid <- submitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreementCid SettleWithRegulator with
+      regulator
+      allocationCids = allocs
   regTokens <- query @MockToken regulator
   assertMsg "regulator visibleTokens must be []" (null regTokens)
-
-  Some _receipt <- queryContractId regulator receiptCid
+  Some receipt <- queryContractId regulator receiptCid
+  assertMsg "receipt has blinded summaries only" (length receipt.legSummaries == 3)
   pure ()
 
--- | SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization
 testWorkflowProposal : Script ()
 testWorkflowProposal = do
   (operator, alice, bob, oracle, _reg) <- allocateParties
   cbtc <- mintToken operator alice "CBTC" 2.0
   usdc <- mintToken operator bob "USDCx" 10000.0
-  attest <- mintToken operator oracle "ATTEST" 1.0
+  ceth <- mintToken operator oracle "cETH" 1.0
   let legs =
-        [ LegSpec with legId = "l1", instrumentId = "CBTC", amount = 2.0, provider = alice, receiver = bob, assetCid = toInterfaceContractId cbtc
-        , LegSpec with legId = "l2", instrumentId = "USDCx", amount = 10000.0, provider = bob, receiver = alice, assetCid = toInterfaceContractId usdc
-        , LegSpec with legId = "l3", instrumentId = "ATTEST", amount = 1.0, provider = oracle, receiver = bob, assetCid = toInterfaceContractId attest
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "prop-l1"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "prop-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "prop-l3"
         ]
-  proposalCid <- submitMulti [operator, alice] [bob, oracle] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob, oracle]
-      legs
-      description = "3-party DvP proposal"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "3-party DvP proposal"
   Some prop <- queryContractId operator proposalCid
   assertMsg "proposal created" (prop.proposer == alice && length prop.legs == 3)
   pure ()
 
--- | SRS §12: testWorkflowAcceptance — confirms acceptance and state progression
 testWorkflowAcceptance : Script ()
 testWorkflowAcceptance = do
   (operator, alice, bob, oracle, _reg) <- allocateParties
   cbtc <- mintToken operator alice "CBTC" 2.0
   usdc <- mintToken operator bob "USDCx" 10000.0
-  attest <- mintToken operator oracle "ATTEST" 1.0
+  ceth <- mintToken operator oracle "cETH" 1.0
   let legs =
-        [ LegSpec with legId = "l1", instrumentId = "CBTC", amount = 2.0, provider = alice, receiver = bob, assetCid = toInterfaceContractId cbtc
-        , LegSpec with legId = "l2", instrumentId = "USDCx", amount = 10000.0, provider = bob, receiver = alice, assetCid = toInterfaceContractId usdc
-        , LegSpec with legId = "l3", instrumentId = "ATTEST", amount = 1.0, provider = oracle, receiver = bob, assetCid = toInterfaceContractId attest
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "acc-l1"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "acc-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "acc-l3"
         ]
-  proposalCid <- submitMulti [operator, alice] [bob, oracle] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob, oracle]
-      legs
-      description = "3-party DvP acceptance"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "3-party DvP acceptance"
   t1 <- submitMulti [operator, bob] [] do
     exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
   t2 <- submitMulti [operator, oracle] [] do
@@ -244,29 +223,205 @@ testWorkflowAcceptance = do
   assertMsg "all counterparties accepted" (length agr.legs == 3)
   pure ()
 
--- | SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
+testAcceptanceTrackerGates : Script ()
+testAcceptanceTrackerGates = do
+  (operator, alice, bob, oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 1.0
+  usdc <- mintToken operator bob "USDCx" 1000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 1.0 alice bob cbtc "gate-l1"
+        , mkLeg "l2" "USDCx" 1000.0 bob alice usdc "gate-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "gate-l3"
+        ]
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "gate test"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  submitMustFail operator do
+    exerciseCmd t1 FinalizeAgreement
+  pure ()
+
 testWorkflowExpiryOrCancel : Script ()
 testWorkflowExpiryOrCancel = do
   (operator, alice, bob, _oracle, _reg) <- allocateParties
   cbtc <- mintToken operator alice "CBTC" 1.0
   usdc <- mintToken operator bob "USDCx" 1000.0
   let legs =
-        [ LegSpec with legId = "l1", instrumentId = "CBTC", amount = 1.0, provider = alice, receiver = bob, assetCid = toInterfaceContractId cbtc
-        , LegSpec with legId = "l2", instrumentId = "USDCx", amount = 1000.0, provider = bob, receiver = alice, assetCid = toInterfaceContractId usdc
+        [ mkLeg "l1" "CBTC" 1.0 alice bob cbtc "cancel-l1"
+        , mkLeg "l2" "USDCx" 1000.0 bob alice usdc "cancel-l2"
         ]
-  proposalCid <- submitMulti [operator, alice] [bob] do
-    createCmd CompositionProposal with
-      operator
-      proposer = alice
-      counterparties = [bob]
-      legs
-      description = "cancel test"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
-  -- Clean proposer cancellation
+  proposalCid <- proposeDefault operator alice [bob] legs "cancel test"
   submit alice do
     exerciseCmd proposalCid CancelProposal
   pure ()
 
--- | SRS §12: testWorkflowSettlement — confirms settlement completes end to end
 testWorkflowSettlement : Script ()
 testWorkflowSettlement = testAtomicSwap
+
+---------------------------------------------------------------------------
+-- Allocation-matching gates (core composition-layer value)
+---------------------------------------------------------------------------
+
+-- | Happy path: 3-party DvP with full allocations matching agreed terms.
+testAllocHappyPath3PartyDvp : Script ()
+testAllocHappyPath3PartyDvp = do
+  (operator, alice, bob, oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 2.0
+  usdc <- mintToken operator bob "USDCx" 10000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "dvp-ref-cbtc"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "dvp-ref-usdc"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "dvp-ref-ceth"
+        ]
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "3-party DvP settle"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  t2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = oracle, trackerCid = Some t1
+  agreementCid <- submit operator do
+    exerciseCmd t2 FinalizeAgreement
+  allocs <- allocateAll operator agreementCid legs
+  receiptCid <- submitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreementCid Settle with allocationCids = allocs
+  Some receipt <- queryContractId operator receiptCid
+  assertMsg "3-party DvP settled" (length receipt.legSummaries == 3)
+  -- No leftover allocations; assets moved.
+  leftover <- query @LegAllocation operator
+  assertMsg "no residual allocations after settle" (null leftover)
+  pure ()
+
+-- | (1) Partial allocation: only one of three legs allocated → Settle rejects;
+-- assets and agreement remain (no partial commit).
+testAllocPartialAllocation : Script ()
+testAllocPartialAllocation = do
+  (operator, alice, bob, oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 2.0
+  usdc <- mintToken operator bob "USDCx" 10000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "partial-l1"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "partial-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "partial-l3"
+        ]
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "partial allocation"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  t2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = oracle, trackerCid = Some t1
+  agreementCid <- submit operator do
+    exerciseCmd t2 FinalizeAgreement
+  -- Only allocate the first leg.
+  onlyOne <- allocateFromLeg operator agreementCid (mkLeg "l1" "CBTC" 2.0 alice bob cbtc "partial-l1")
+  partialResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreementCid Settle with allocationCids = [onlyOne]
+  _ <- expectRejectionContaining "allocation match failed: expected 3 allocations, got 1" partialResult
+  -- Clean rejection: agreement still active; CBTC still with Alice.
+  Some _agr <- queryContractId operator agreementCid
+  Some tok <- queryContractId alice cbtc
+  assertMsg "partial alloc: alice still holds CBTC" (tok.amount == 2.0)
+  pure ()
+
+-- | (2) Expiry: deadline/expiresAt passes before all accept → ExpireProposal;
+-- stalled workflow resolves with no agreement / no settlement.
+testAllocExpiryBeforeAccept : Script ()
+testAllocExpiryBeforeAccept = do
+  (operator, alice, bob, oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 1.0
+  usdc <- mintToken operator bob "USDCx" 1000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  now <- getTime
+  let expiresAt = addRelTime now (hours 1)
+      legs =
+        [ mkLeg "l1" "CBTC" 1.0 alice bob cbtc "exp-l1"
+        , mkLeg "l2" "USDCx" 1000.0 bob alice usdc "exp-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "exp-l3"
+        ]
+  proposalCid <- proposeViaFactory operator alice [bob, oracle] legs "expiry before accept" expiresAt
+  -- Only Bob accepts; Oracle never accepts before deadline.
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  passTime (hours 2)
+  submit operator do
+    exerciseCmd proposalCid ExpireProposal
+  -- Tracker cannot finalize after expiry; Oracle never accepted.
+  finalizeResult <- trySubmit operator do
+    exerciseCmd t1 FinalizeAgreement
+  _ <- expectRejectionContaining "not all counterparties have accepted" finalizeResult
+  -- No WorkflowAgreement created; holdings untouched.
+  agreements <- query @WorkflowAgreement operator
+  assertMsg "expiry: no agreement formed" (null agreements)
+  Some tok <- queryContractId alice cbtc
+  assertMsg "expiry: alice still holds CBTC" (tok.amount == 1.0)
+  pure ()
+
+-- | (3) Withdrawn leg: party withdraws its allocation → Settle rejects;
+-- remaining pledges and assets stay (no partial settle).
+testAllocWithdrawnLeg : Script ()
+testAllocWithdrawnLeg = do
+  (operator, alice, bob, oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 2.0
+  usdc <- mintToken operator bob "USDCx" 10000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "wd-l1"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "wd-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "wd-l3"
+        ]
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "withdrawn allocation"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  t2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = oracle, trackerCid = Some t1
+  agreementCid <- submit operator do
+    exerciseCmd t2 FinalizeAgreement
+  a1 <- allocateFromLeg operator agreementCid (mkLeg "l1" "CBTC" 2.0 alice bob cbtc "wd-l1")
+  a2 <- allocateFromLeg operator agreementCid (mkLeg "l2" "USDCx" 10000.0 bob alice usdc "wd-l2")
+  a3 <- allocateFromLeg operator agreementCid (mkLeg "l3" "cETH" 1.0 oracle bob ceth "wd-l3")
+  -- Oracle withdraws the cETH allocation.
+  submit oracle do
+    exerciseCmd a3 WithdrawAllocation
+  withdrawnResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreementCid Settle with allocationCids = [a1, a2, a3]
+  _ <- expectRejectionContaining "Could not find contract" withdrawnResult
+  -- Also fails if the withdrawn CID is omitted (partial set).
+  omittedResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreementCid Settle with allocationCids = [a1, a2]
+  _ <- expectRejectionContaining "allocation match failed: expected 3 allocations, got 2" omittedResult
+  Some tok <- queryContractId oracle ceth
+  assertMsg "withdrawn: oracle still holds cETH" (tok.amount == 1.0)
+  Some _agr <- queryContractId operator agreementCid
+  pure ()
+
+-- | (4) Unauthorized executor: party with no Settle right attempts Settle.
+testAllocUnauthorizedExecutor : Script ()
+testAllocUnauthorizedExecutor = do
+  (operator, alice, bob, oracle, regulator) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 2.0
+  usdc <- mintToken operator bob "USDCx" 10000.0
+  ceth <- mintToken operator oracle "cETH" 1.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 2.0 alice bob cbtc "unauth-l1"
+        , mkLeg "l2" "USDCx" 10000.0 bob alice usdc "unauth-l2"
+        , mkLeg "l3" "cETH" 1.0 oracle bob ceth "unauth-l3"
+        ]
+  proposalCid <- proposeDefault operator alice [bob, oracle] legs "unauthorized settle"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  t2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = oracle, trackerCid = Some t1
+  agreementCid <- submit operator do
+    exerciseCmd t2 FinalizeAgreement
+  allocs <- allocateAll operator agreementCid legs
+  -- Regulator cannot see/exercise the agreement (not a party) → ContractNotFound.
+  unauthReg <- trySubmit regulator do
+    exerciseCmd agreementCid Settle with allocationCids = allocs
+  _ <- expectRejectionContaining "Could not find contract" unauthReg
+  -- Operator alone lacks the required party controllers of Settle.
+  unauthOp <- trySubmit operator do
+    exerciseCmd agreementCid Settle with allocationCids = allocs
+  _ <- expectRejectionContaining "Authorization failure" unauthOp
+  Some tok <- queryContractId alice cbtc
+  assertMsg "unauthorized: alice still holds CBTC" (tok.amount == 2.0)
+  Some _agr <- queryContractId operator agreementCid
+  pure ()

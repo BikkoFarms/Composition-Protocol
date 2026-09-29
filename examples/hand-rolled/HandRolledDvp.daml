@@ -1,0 +1,209 @@
+-- | WITHOUT the Composition layer — hand-rolled 3-party DvP coordination (~220 lines).
+-- Everything the package gives you (accept gate, allocation match, atomic settle,
+-- blinded receipt, expire/cancel) re-implemented ad hoc. Do not ship this; it is
+-- the pitch contrast ("adopt the layer instead of writing it").
+module HandRolledDvp where
+
+import ComposableAsset
+import MockToken
+import DA.Foldable (forA_)
+import DA.List (find)
+import DA.Optional (isSome)
+import DA.Set (Set)
+import qualified DA.Set as Set
+import Daml.Script
+import DA.Date (datetime, Month(..))
+
+data HrLeg = HrLeg with
+    legId : Text
+    instrumentId : Text
+    amount : Decimal
+    provider : Party
+    receiver : Party
+    assetCid : ContractId ComposableAsset
+    reference : Text
+    deadline : Time
+  deriving (Eq, Show)
+
+data HrSummary = HrSummary with
+    legId : Text
+    instrumentId : Text
+    status : Text
+  deriving (Eq, Show)
+
+template HrProposal
+  with
+    operator : Party
+    proposer : Party
+    counterparties : [Party]
+    legs : [HrLeg]
+    description : Text
+    expiresAt : Time
+  where
+    signatory proposer, operator
+    observer counterparties
+    ensure length legs >= 2 && length counterparties >= 1
+
+    choice HrCancel : ()
+      controller proposer
+      do pure ()
+
+    choice HrExpire : ()
+      controller operator
+      do
+        now <- getTime
+        assertMsg "hand-rolled: proposal not expired" (now >= expiresAt)
+        pure ()
+
+    nonconsuming choice HrAccept : ContractId HrTracker
+      with
+        acceptor : Party
+        trackerCid : Optional (ContractId HrTracker)
+      controller operator, acceptor
+      do
+        assertMsg "hand-rolled: not a counterparty" (elem acceptor counterparties)
+        case trackerCid of
+          None -> create HrTracker with
+            operator; proposalCid = self; proposer
+            ; required = Set.fromList counterparties
+            ; accepted = Set.fromList [acceptor]
+            ; legs; description
+          Some cid -> exercise cid HrRecord with acceptor
+
+template HrTracker
+  with
+    operator : Party
+    proposalCid : ContractId HrProposal
+    proposer : Party
+    required : Set Party
+    accepted : Set Party
+    legs : [HrLeg]
+    description : Text
+  where
+    signatory operator
+    observer Set.toList required
+
+    choice HrRecord : ContractId HrTracker
+      with acceptor : Party
+      controller operator, acceptor
+      do
+        assertMsg "hand-rolled: not required" (Set.member acceptor required)
+        create this with accepted = Set.insert acceptor accepted
+
+    choice HrFinalize : ContractId HrAgreement
+      controller operator
+      do
+        assertMsg "hand-rolled: not all accepted" (Set.isSubsetOf required accepted)
+        create HrAgreement with
+          operator
+          parties = Set.insert proposer required
+          legs; description
+
+template HrAllocation
+  with
+    operator : Party
+    agreementCid : ContractId HrAgreement
+    allocator : Party
+    legId : Text
+    instrumentId : Text
+    amount : Decimal
+    provider : Party
+    receiver : Party
+    assetCid : ContractId ComposableAsset
+    reference : Text
+    deadline : Time
+  where
+    signatory allocator, operator
+    observer [provider, receiver]
+    ensure allocator == provider && amount > 0.0
+
+    choice HrWithdraw : ()
+      controller allocator
+      do pure ()
+
+template HrAgreement
+  with
+    operator : Party
+    parties : Set Party
+    legs : [HrLeg]
+    description : Text
+  where
+    signatory operator
+    observer Set.toList parties
+
+    nonconsuming choice HrAllocate : ContractId HrAllocation
+      with
+        allocator : Party
+        legId : Text
+        instrumentId : Text
+        amount : Decimal
+        provider : Party
+        receiver : Party
+        assetCid : ContractId ComposableAsset
+        reference : Text
+        deadline : Time
+      controller operator, allocator
+      do
+        assertMsg "hand-rolled: bad allocator" (allocator == provider && Set.member allocator parties)
+        create HrAllocation with
+          operator; agreementCid = self; allocator; legId; instrumentId
+          ; amount; provider; receiver; assetCid; reference; deadline
+
+    choice HrSettle : ContractId HrReceipt
+      with
+        allocationCids : [ContractId HrAllocation]
+        regulator : Party
+      controller operator, Set.toList parties
+      do
+        now <- getTime
+        assertMsg "hand-rolled: alloc count" (length allocationCids == length legs)
+        pairs <- forA allocationCids $ \cid -> do
+          a <- fetch cid
+          pure (cid, a)
+        matched <- forA legs $ \leg ->
+          case find (\(_, a) -> a.legId == leg.legId) pairs of
+            None -> do
+              assertMsg ("hand-rolled: missing alloc " <> leg.legId) False
+              error "unreachable"
+            Some (cid, alloc) -> do
+              -- Field-by-field match (mirrors layer — easy to get wrong / incomplete).
+              assertMsg "hand-rolled: provider" (alloc.provider == leg.provider)
+              assertMsg "hand-rolled: receiver" (alloc.receiver == leg.receiver)
+              assertMsg "hand-rolled: amount" (alloc.amount == leg.amount)
+              assertMsg "hand-rolled: instrument" (alloc.instrumentId == leg.instrumentId)
+              assertMsg "hand-rolled: reference" (alloc.reference == leg.reference)
+              assertMsg "hand-rolled: deadline term" (alloc.deadline == leg.deadline)
+              assertMsg "hand-rolled: past deadline" (now <= leg.deadline)
+              assertMsg "hand-rolled: assetCid" (alloc.assetCid == leg.assetCid)
+              asset <- fetch alloc.assetCid
+              let v = view asset
+              assertMsg "hand-rolled: live owner" (v.owner == leg.provider)
+              assertMsg "hand-rolled: live instrument" (v.instrumentId == leg.instrumentId)
+              assertMsg "hand-rolled: live amount" (v.amount == leg.amount)
+              pure (leg, cid)
+        forA_ matched $ \(leg, cid) -> do
+          archive cid
+          exercise leg.assetCid Transfer with newOwner = leg.receiver
+        -- Privacy footgun: tempting to put amounts on the receipt — don't.
+        let summaries = map (\l -> HrSummary with
+              legId = l.legId; instrumentId = l.instrumentId; status = "Settled") legs
+        create HrReceipt with
+          operator; participants = parties; regulator
+          ; settledAt = now; description; legSummaries = summaries
+
+    choice HrCancelAgreement : ()
+      with reason : Text
+      controller operator
+      do pure ()
+
+template HrReceipt
+  with
+    operator : Party
+    participants : Set Party
+    regulator : Party
+    settledAt : Time
+    description : Text
+    legSummaries : [HrSummary]
+  where
+    signatory operator
+    observer (Set.toList participants ++ [regulator])

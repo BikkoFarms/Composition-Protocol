@@ -1,26 +1,40 @@
--- | BitSafe LocalNet demos: below-threshold reject, at-threshold accept.
+-- | BitSafe LocalNet demos: below-threshold reject, at-threshold accept/cancel.
+--
+-- Named controllers: Gov1, Gov2, Gov3 (BitSafe contribution pool).
+-- Threshold: 2-of-3 — ExecuteGoverned / CancelGoverned require two distinct
+-- governor approvals before the operator may complete the governed action.
+--
+-- Reproduce on LocalNet:
+--   cd daml && daml test --test-pattern testGoverned
+--   (or full: daml test)
+-- See docs/DAML_SETUP.md § BitSafe M-of-N.
 module TestGovernance where
 
 import Composition
-import ComposableAsset
 import Governance
 import MockToken
 import Daml.Script
 import qualified DA.Set as Set
+import DA.Date (datetime, Month(..))
+import ComposableAsset ()
 
-setupSwap : Script (Party, Party, Party, Party, ContractId CompositionAgreement)
+farDeadline : Time
+farDeadline = datetime 2099 Jan 1 0 0 0
+
+setupSwap :
+  Script (Party, Party, Party, Party, ContractId WorkflowAgreement, [LegSpec])
 setupSwap = do
   operator <- allocateParty "Operator"
   alice <- allocateParty "Alice"
   bob <- allocateParty "Bob"
   regulator <- allocateParty "Regulator"
-  aliceUsd <- submitMulti [operator, alice] [] do
+  aliceUsd <- submit operator do
     createCmd MockToken with
       owner = alice
       issuer = operator
       instrumentId = "USDCx"
       amount = 100.0
-  bobCbtc <- submitMulti [operator, bob] [] do
+  bobCbtc <- submit operator do
     createCmd MockToken with
       owner = bob
       issuer = operator
@@ -34,6 +48,8 @@ setupSwap = do
             provider = alice
             receiver = bob
             assetCid = toInterfaceContractId aliceUsd
+            reference = "gov-cash"
+            deadline = farDeadline
         , LegSpec with
             legId = "collateral"
             instrumentId = "CBTC"
@@ -41,27 +57,47 @@ setupSwap = do
             provider = bob
             receiver = alice
             assetCid = toInterfaceContractId bobCbtc
+            reference = "gov-cbtc"
+            deadline = farDeadline
         ]
   proposalCid <- submitMulti [operator, alice] [bob] do
-    createCmd CompositionProposal with
+    createCmd WorkflowProposal with
       operator
       proposer = alice
       counterparties = [bob]
       legs
       description = "gov demo"
-      expiresAt = time (date 2099 Jan 1) 00:00:00
+      expiresAt = farDeadline
   trackerCid <- submitMulti [operator, bob] [] do
     exerciseCmd proposalCid AcceptProposal with
       acceptor = bob
       trackerCid = None
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
-  pure (operator, alice, bob, regulator, agreementCid)
+  pure (operator, alice, bob, regulator, agreementCid, legs)
+
+allocateFromLeg :
+  Party -> ContractId WorkflowAgreement -> LegSpec ->
+  Script (ContractId LegAllocation)
+allocateFromLeg operator agreementCid leg =
+  submitMulti [operator, leg.provider] [] do
+    exerciseCmd agreementCid AllocateLeg with
+      allocator = leg.provider
+      legId = leg.legId
+      instrumentId = leg.instrumentId
+      amount = leg.amount
+      provider = leg.provider
+      receiver = leg.receiver
+      assetCid = leg.assetCid
+      reference = leg.reference
+      deadline = leg.deadline
 
 -- | R-GOV-1 failure: Execute below threshold must fail.
+-- Controllers: Gov1, Gov2, Gov3. Threshold = 2.
+-- Only Gov1 has approved → |approvals| = 1 < 2 → reject; no settlement.
 testGovernedBelowThreshold : Script ()
 testGovernedBelowThreshold = do
-  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  (operator, alice, bob, regulator, agreementCid, _legs) <- setupSwap
   g1 <- allocateParty "Gov1"
   g2 <- allocateParty "Gov2"
   g3 <- allocateParty "Gov3"
@@ -75,14 +111,16 @@ testGovernedBelowThreshold = do
       regulator
   govCid2 <- submitMulti [operator, g1] [] do
     exerciseCmd govCid ApproveGoverned with governor = g1
-  submitMustFail operator do
-    exerciseCmd govCid2 ExecuteGoverned
+  submitMultiMustFail [operator, alice, bob] [] do
+    exerciseCmd govCid2 ExecuteGoverned with allocationCids = []
   pure ()
 
 -- | R-GOV-1 success: at threshold Execute succeeds.
+-- Controllers: Gov1, Gov2, Gov3. Threshold = 2.
+-- Gov1 + Gov2 approve → |approvals| = 2 ≥ 2 → SettleWithRegulator commits.
 testGovernedAtThreshold : Script ()
 testGovernedAtThreshold = do
-  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  (operator, alice, bob, regulator, agreementCid, legs) <- setupSwap
   g1 <- allocateParty "Gov1"
   g2 <- allocateParty "Gov2"
   g3 <- allocateParty "Gov3"
@@ -98,15 +136,64 @@ testGovernedAtThreshold = do
     exerciseCmd govCid ApproveGoverned with governor = g1
   gov2 <- submitMulti [operator, g2] [] do
     exerciseCmd gov1 ApproveGoverned with governor = g2
-  receiptCid <- submit operator do
-    exerciseCmd gov2 ExecuteGoverned
+  allocs <- mapA (allocateFromLeg operator agreementCid) legs
+  receiptCid <- submitMulti [operator, alice, bob] [] do
+    exerciseCmd gov2 ExecuteGoverned with allocationCids = allocs
   Some _ <- queryContractId operator receiptCid
+  pure ()
+
+-- | R-GOV-2 failure: Cancel below threshold must fail.
+-- Controllers: Gov1, Gov2, Gov3. Threshold = 2. Only Gov1 cancel-approved.
+testGovernedCancelBelowThreshold : Script ()
+testGovernedCancelBelowThreshold = do
+  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  g3 <- allocateParty "Gov3"
+  factory <- submit operator do
+    createCmd GovernanceFactory with operator
+  govCid <- submit operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid
+      governors = [g1, g2, g3]
+      threshold = 2
+      regulator
+  gov1 <- submitMulti [operator, g1] [] do
+    exerciseCmd govCid ApproveCancelGoverned with governor = g1
+  submitMustFail operator do
+    exerciseCmd gov1 CancelGoverned with reason = "too early"
+  Some _agr <- queryContractId operator agreementCid
+  pure ()
+
+-- | R-GOV-2 success: Cancel at threshold archives the agreement cleanly.
+-- Controllers: Gov1, Gov2, Gov3. Threshold = 2. Gov1 + Gov2 cancel-approve.
+testGovernedCancelAtThreshold : Script ()
+testGovernedCancelAtThreshold = do
+  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  g3 <- allocateParty "Gov3"
+  factory <- submit operator do
+    createCmd GovernanceFactory with operator
+  govCid <- submit operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid
+      governors = [g1, g2, g3]
+      threshold = 2
+      regulator
+  c1 <- submitMulti [operator, g1] [] do
+    exerciseCmd govCid ApproveCancelGoverned with governor = g1
+  c2 <- submitMulti [operator, g2] [] do
+    exerciseCmd c1 ApproveCancelGoverned with governor = g2
+  submit operator do
+    exerciseCmd c2 CancelGoverned with reason = "pool consensus cancel"
+  None <- queryContractId operator agreementCid
   pure ()
 
 -- | Institutional Safety: Emergency Veto by authorized governor
 testEmergencyVeto : Script ()
 testEmergencyVeto = do
-  (operator, _alice, _bob, regulator, agreementCid) <- setupSwap
+  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
   g1 <- allocateParty "Gov1"
   g2 <- allocateParty "Gov2"
   factory <- submit operator do
@@ -144,4 +231,3 @@ testCircuitBreaker = do
   Some resumed <- queryContractId operator cbResumedCid
   assertMsg "circuit breaker must be resumed" (not resumed.isHalted)
   pure ()
-

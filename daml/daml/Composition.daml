@@ -1,17 +1,18 @@
--- | Core composition lifecycle: Propose → Accept → Settle → Receipt.
--- Atomicity is guaranteed by Daml transaction semantics (R-ATOM-1/2).
--- Per-leg privacy is enforced by observer scoping (R-PRIV-1/2/3).
+-- | Canton Composition Layer — reusable settlement-workflow package (Daml 3.x).
+-- Contracts: ComposableWorkflow, WorkflowProposal, AcceptanceTracker,
+--            WorkflowAgreement, LegAllocation, SettlementReceipt.
+-- Lifecycle: Propose → Accept (tracker gates) → Allocate → Settle (atomic match) → Expire/Cancel.
+-- Privacy: SettlementReceipt observers include regulator; leg payloads stay off-receipt.
 module Composition where
 
 import ComposableAsset
 import DA.Foldable (forA_)
 import DA.Set (Set)
 import qualified DA.Set as Set
-import DA.Time (getTime)
 
--- | One proposed transfer leg. Visibility is scoped to provider + receiver
--- when the concrete asset contracts are disclosed; proposal observers see
--- the high-level schedule but not unrelated asset payloads.
+-- | One proposed transfer leg. Asset payloads live on disclosed ComposableAsset
+-- contracts, not on the receipt the regulator observes.
+-- Agreed terms locked here are the source of truth for allocation matching on Settle.
 data LegSpec = LegSpec with
     legId : Text
     instrumentId : Text
@@ -19,19 +20,77 @@ data LegSpec = LegSpec with
     provider : Party
     receiver : Party
     assetCid : ContractId ComposableAsset
+    reference : Text   -- trade/leg reference that allocation must echo
+    deadline : Time    -- allocation + settlement must complete by this instant
   deriving (Eq, Show)
 
 data LegStatus = LegPending | LegSettled | LegFailed
   deriving (Eq, Show)
 
+-- | Blinded leg metadata only — no assetCid / amount payload for regulators.
 data LegSummary = LegSummary with
     legId : Text
     instrumentId : Text
     status : LegStatus
   deriving (Eq, Show)
 
--- | Proposed multi-leg deal. Reject/Expire/Accept choices.
-template CompositionProposal
+-- | Posted pledge against one WorkflowAgreement leg. Consumed on successful Settle.
+-- Allocator (provider) may WithdrawAllocation before settlement.
+template LegAllocation
+  with
+    operator : Party
+    agreementCid : ContractId WorkflowAgreement
+    allocator : Party
+    legId : Text
+    instrumentId : Text
+    amount : Decimal
+    provider : Party
+    receiver : Party
+    assetCid : ContractId ComposableAsset
+    reference : Text
+    deadline : Time
+  where
+    signatory allocator, operator
+    observer [provider, receiver]
+    ensure
+      allocator == provider
+      && amount > 0.0
+
+    choice WithdrawAllocation : ()
+      controller allocator
+      do
+        pure ()
+
+-- | Package entry point: reusable factory for structured settlement workflows.
+-- Signatory: operator. Nonconsuming Propose creates a WorkflowProposal.
+template ComposableWorkflow
+  with
+    operator : Party
+  where
+    signatory operator
+
+    nonconsuming choice Propose : ContractId WorkflowProposal
+      with
+        proposer : Party
+        counterparties : [Party]
+        legs : [LegSpec]
+        description : Text
+        expiresAt : Time
+      controller operator, proposer
+      do
+        assertMsg "at least two legs required" (length legs >= 2)
+        assertMsg "at least one counterparty required" (length counterparties >= 1)
+        create WorkflowProposal with
+          operator
+          proposer
+          counterparties
+          legs
+          description
+          expiresAt
+
+-- | Proposed multi-leg deal. Accept builds/fills AcceptanceTracker;
+-- Reject / Expire / Cancel resolve stalled workflows cleanly.
+template WorkflowProposal
   with
     operator : Party
     proposer : Party
@@ -49,12 +108,12 @@ template CompositionProposal
     choice RejectProposal : ()
       with
         reason : Text
-      controller head counterparties
+        rejector : Party
+      controller rejector
       do
+        assertMsg "rejector must be a counterparty" (elem rejector counterparties)
         pure ()
 
-    -- | Proposer cancellation choice: enables proposer to cleanly withdraw
-    -- an unfinalized deal if market conditions or counterparties change.
     choice CancelProposal : ()
       controller proposer
       do
@@ -67,6 +126,8 @@ template CompositionProposal
         assertMsg "proposal has not expired" (now >= expiresAt)
         pure ()
 
+    -- | First accept creates the tracker; subsequent accepts RecordAcceptance.
+    -- Settlement cannot proceed until AcceptanceTracker finalizes.
     nonconsuming choice AcceptProposal : ContractId AcceptanceTracker
       with
         acceptor : Party
@@ -87,11 +148,11 @@ template CompositionProposal
           Some cid -> do
             exercise cid RecordAcceptance with acceptor
 
--- | Tracks which counterparties have accepted; gates settlement.
+-- | Tracks which counterparties have accepted; gates FinalizeAgreement / Settle.
 template AcceptanceTracker
   with
     operator : Party
-    proposalCid : ContractId CompositionProposal
+    proposalCid : ContractId WorkflowProposal
     proposer : Party
     required : Set Party
     accepted : Set Party
@@ -117,20 +178,112 @@ template AcceptanceTracker
           legs
           description
 
-    choice FinalizeAgreement : ContractId CompositionAgreement
+    -- | Only when every required party has accepted may the agreement be formed.
+    choice FinalizeAgreement : ContractId WorkflowAgreement
       controller operator
       do
         assertMsg "not all counterparties have accepted"
           (Set.isSubsetOf required accepted)
-        create CompositionAgreement with
+        create WorkflowAgreement with
           operator
           parties = Set.insert proposer required
           legs
           description
           acceptedBy = accepted
 
--- | Co-signed deal. Atomic Settle maps Transfer over every leg, then emits receipt.
-template CompositionAgreement
+-- | Match one posted LegAllocation against one agreed LegSpec.
+-- ANY failed assert aborts the enclosing Settle transaction (no partial commit).
+-- Fields checked (in order): legId → parties → amount → instrumentId →
+-- reference → deadline (agreed + wall-clock) → assetCid → live asset view.
+matchAllocationToLeg : Time -> LegSpec -> LegAllocation -> Update ()
+matchAllocationToLeg now leg alloc = do
+    -- Presence / identity: allocation must address this exact leg.
+    assertMsg
+      ("allocation match failed: legId mismatch (agreed=" <> leg.legId <>
+        ", allocated=" <> alloc.legId <> ")")
+      (alloc.legId == leg.legId)
+
+    -- Parties: provider and receiver must equal the trade's agreed parties.
+    assertMsg
+      ("allocation match failed: provider party mismatch on leg " <> leg.legId)
+      (alloc.provider == leg.provider)
+    assertMsg
+      ("allocation match failed: receiver party mismatch on leg " <> leg.legId)
+      (alloc.receiver == leg.receiver)
+    assertMsg
+      ("allocation match failed: allocator must be provider on leg " <> leg.legId)
+      (alloc.allocator == leg.provider)
+
+    -- Amount: pledged quantity must equal agreed quantity.
+    assertMsg
+      ("allocation match failed: amount mismatch on leg " <> leg.legId)
+      (alloc.amount == leg.amount)
+
+    -- Instrument / asset id: allocated instrument must equal agreed instrumentId.
+    assertMsg
+      ("allocation match failed: instrumentId mismatch on leg " <> leg.legId)
+      (alloc.instrumentId == leg.instrumentId)
+
+    -- Reference: allocation must carry the same trade/leg reference.
+    assertMsg
+      ("allocation match failed: reference mismatch on leg " <> leg.legId)
+      (alloc.reference == leg.reference)
+
+    -- Deadline (agreed term): allocation deadline must equal the trade deadline.
+    assertMsg
+      ("allocation match failed: deadline mismatch on leg " <> leg.legId)
+      (alloc.deadline == leg.deadline)
+
+    -- Deadline (wall-clock): settlement after the agreed deadline is rejected.
+    assertMsg
+      ("allocation match failed: settlement past deadline on leg " <> leg.legId)
+      (now <= leg.deadline)
+
+    -- Bound asset: allocation must pledge the exact agreed asset contract.
+    assertMsg
+      ("allocation match failed: assetCid mismatch on leg " <> leg.legId)
+      (alloc.assetCid == leg.assetCid)
+
+    -- Live asset view: fetch pledged holding and re-check owner/instrument/amount.
+    asset <- fetch alloc.assetCid
+    let v = view asset
+    assertMsg
+      ("allocation match failed: live asset owner != provider on leg " <> leg.legId)
+      (v.owner == leg.provider)
+    assertMsg
+      ("allocation match failed: live asset instrumentId mismatch on leg " <> leg.legId)
+      (v.instrumentId == leg.instrumentId)
+    assertMsg
+      ("allocation match failed: live asset amount mismatch on leg " <> leg.legId)
+      (v.amount == leg.amount)
+
+-- | Resolve allocation CIDs to payloads; require exactly one allocation per legId.
+fetchAllocationsByLeg :
+    [LegSpec] -> [ContractId LegAllocation]
+    -> Update [(LegSpec, ContractId LegAllocation, LegAllocation)]
+fetchAllocationsByLeg legs allocationCids = do
+    -- Completeness: every leg must have a posted allocation (rejects partial allocation).
+    assertMsg
+      ("allocation match failed: expected " <> show (length legs) <>
+        " allocations, got " <> show (length allocationCids))
+      (length allocationCids == length legs)
+    pairs <- forA allocationCids $ \cid -> do
+      a <- fetch cid
+      pure (cid, a)
+    forA legs $ \leg ->
+      case find (\(_, a) -> a.legId == leg.legId) pairs of
+        None -> do
+          assertMsg
+            ("allocation match failed: no allocation posted for leg " <> leg.legId)
+            False
+          -- Unreachable after assert; keeps the type-checker happy.
+          error ("missing allocation for " <> leg.legId)
+        Some (cid, alloc) ->
+          pure (leg, cid, alloc)
+
+-- | Co-signed agreement. Settle matches allocations then runs every Transfer
+-- in one transaction (all-or-none).
+template WorkflowAgreement
   with
     operator : Party
     parties : Set Party
@@ -142,13 +295,53 @@ template CompositionAgreement
     observer Set.toList parties
     ensure length legs >= 2
 
+    -- | Provider posts a pledge that Settle will match field-by-field.
+    nonconsuming choice AllocateLeg : ContractId LegAllocation
+      with
+        allocator : Party
+        legId : Text
+        instrumentId : Text
+        amount : Decimal
+        provider : Party
+        receiver : Party
+        assetCid : ContractId ComposableAsset
+        reference : Text
+        deadline : Time
+      controller operator, allocator
+      do
+        assertMsg "allocator must be a settlement party" (Set.member allocator parties)
+        assertMsg "allocator must be the provider" (allocator == provider)
+        assertMsg "legId must exist on agreement" (any (\l -> l.legId == legId) legs)
+        create LegAllocation with
+          operator
+          agreementCid = self
+          allocator
+          legId
+          instrumentId
+          amount
+          provider
+          receiver
+          assetCid
+          reference
+          deadline
+
     choice Settle : ContractId SettlementReceipt
-      controller operator
+      with
+        allocationCids : [ContractId LegAllocation]
+      controller operator, Set.toList parties
       do
         now <- getTime
-        -- R-ATOM-1: all Transfers run in this single transaction.
-        -- Any failure aborts the whole tx — no half-settled state (R-ATOM-2).
-        forA_ legs $ \leg -> do
+        matched <- fetchAllocationsByLeg legs allocationCids
+        -- R-ALLOC: every allocation must match agreed terms before any Transfer.
+        forA_ matched $ \(leg, _allocCid, alloc) -> do
+          assertMsg
+            ("allocation match failed: allocation not bound to this agreement on leg " <>
+              leg.legId)
+            (alloc.agreementCid == self)
+          matchAllocationToLeg now leg alloc
+        -- R-ATOM-1/2: consume pledges then Transfer; any failure aborts all.
+        forA_ matched $ \(leg, allocCid, _alloc) -> do
+          archive allocCid
           exercise leg.assetCid Transfer with newOwner = leg.receiver
         let summaries = map (\l -> LegSummary with
               legId = l.legId
@@ -165,10 +358,19 @@ template CompositionAgreement
     choice SettleWithRegulator : ContractId SettlementReceipt
       with
         regulator : Party
-      controller operator
+        allocationCids : [ContractId LegAllocation]
+      controller operator, Set.toList parties
       do
         now <- getTime
-        forA_ legs $ \leg -> do
+        matched <- fetchAllocationsByLeg legs allocationCids
+        forA_ matched $ \(leg, _allocCid, alloc) -> do
+          assertMsg
+            ("allocation match failed: allocation not bound to this agreement on leg " <>
+              leg.legId)
+            (alloc.agreementCid == self)
+          matchAllocationToLeg now leg alloc
+        forA_ matched $ \(leg, allocCid, _alloc) -> do
+          archive allocCid
           exercise leg.assetCid Transfer with newOwner = leg.receiver
         let summaries = map (\l -> LegSummary with
               legId = l.legId
@@ -182,7 +384,6 @@ template CompositionAgreement
           legSummaries = summaries
           regulators = Set.fromList [regulator]
 
-    -- | Agreement cancellation / unwind choice: allows operator to cleanly void an un-settled agreement.
     choice CancelAgreement : ()
       with
         reason : Text
@@ -190,8 +391,10 @@ template CompositionAgreement
       do
         pure ()
 
--- | Proof a composition settled.
--- Regulators observe the receipt + leg statuses but NOT asset payloads (R-PRIV-2).
+-- | Proof settlement occurred.
+-- signatory: operator
+-- observers: participants + regulator(s)
+-- Scoped: only blinded LegSummary (id/instrument/status) — NOT assetCid or amounts.
 template SettlementReceipt
   with
     operator : Party

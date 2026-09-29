@@ -1,0 +1,101 @@
+-- | WITH the Composition Protocol layer — orchestration only (~55 LOC).
+-- Illustrative script for docs/SIDE_BY_SIDE.md (mirrors Test.daml happy path).
+-- Reuses ComposableWorkflow → AcceptanceTracker → Allocate → Settle.
+module ThreePartyDvp where
+
+import Composition
+import ComposableAsset
+import MockToken
+import Daml.Script
+import DA.Date (datetime, Month(..))
+
+demo : Script (ContractId SettlementReceipt)
+demo = do
+  operator <- allocateParty "Operator"
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  oracle <- allocateParty "Oracle"
+  regulator <- allocateParty "Regulator"
+  let dl = datetime 2099 Jan 1 0 0 0
+  cbtc <- submit operator do
+    createCmd MockToken with
+      owner = alice
+      issuer = operator
+      instrumentId = "CBTC"
+      amount = 2.0
+  usdc <- submit operator do
+    createCmd MockToken with
+      owner = bob
+      issuer = operator
+      instrumentId = "USDCx"
+      amount = 10000.0
+  ceth <- submit operator do
+    createCmd MockToken with
+      owner = oracle
+      issuer = operator
+      instrumentId = "cETH"
+      amount = 1.0
+  let legs =
+        [ LegSpec with
+            legId = "l1"
+            instrumentId = "CBTC"
+            amount = 2.0
+            provider = alice
+            receiver = bob
+            assetCid = toInterfaceContractId cbtc
+            reference = "layer-cbtc"
+            deadline = dl
+        , LegSpec with
+            legId = "l2"
+            instrumentId = "USDCx"
+            amount = 10000.0
+            provider = bob
+            receiver = alice
+            assetCid = toInterfaceContractId usdc
+            reference = "layer-usdc"
+            deadline = dl
+        , LegSpec with
+            legId = "l3"
+            instrumentId = "cETH"
+            amount = 1.0
+            provider = oracle
+            receiver = bob
+            assetCid = toInterfaceContractId ceth
+            reference = "layer-ceth"
+            deadline = dl
+        ]
+  factory <- submit operator do
+    createCmd ComposableWorkflow with operator
+  proposal <- submitMulti [operator, alice] [bob, oracle] do
+    exerciseCmd factory Propose with
+      proposer = alice
+      counterparties = [bob, oracle]
+      legs
+      description = "layer DvP"
+      expiresAt = dl
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposal AcceptProposal with
+      acceptor = bob
+      trackerCid = None
+  t2 <- submitMulti [operator, oracle] [] do
+    exerciseCmd proposal AcceptProposal with
+      acceptor = oracle
+      trackerCid = Some t1
+  agreement <- submit operator do
+    exerciseCmd t2 FinalizeAgreement
+  allocs <- mapA (\leg ->
+    submitMulti [operator, leg.provider] [] do
+      exerciseCmd agreement AllocateLeg with
+        allocator = leg.provider
+        legId = leg.legId
+        instrumentId = leg.instrumentId
+        amount = leg.amount
+        provider = leg.provider
+        receiver = leg.receiver
+        assetCid = leg.assetCid
+        reference = leg.reference
+        deadline = leg.deadline) legs
+  submitMulti [operator, alice, bob, oracle] [] do
+    exerciseCmd agreement SettleWithRegulator with
+      regulator
+      allocationCids = allocs

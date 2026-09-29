@@ -4,6 +4,7 @@ module ComposableAsset where
 
 data ComposableAssetView = ComposableAssetView with
     owner : Party
+    issuer : Party
     instrumentId : Text
     amount : Decimal
   deriving (Eq, Show)
@@ -15,7 +16,12 @@ data TransferResult = TransferResult with
 interface ComposableAsset where
   viewtype ComposableAssetView
 
+  transferTo : Party -> Update TransferResult
+
+  -- | Owner + issuer must authorize; issuer remains signatory on the new holding.
   choice Transfer : TransferResult
     with
       newOwner : Party
-    controller (view this).owner
+    controller (view this).owner, (view this).issuer
+    do
+      transferTo this newOwner

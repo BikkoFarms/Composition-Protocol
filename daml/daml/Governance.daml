@@ -1,28 +1,42 @@
 -- | BitSafe Decentralization challenge: M-of-N governed settlement (R-GOV-1/2).
--- Settlement MUST NOT execute below threshold and MUST succeed once met.
+--
+-- Named controllers (LocalNet / Script fixtures):
+--   Gov1, Gov2, Gov3  — BitSafe contribution-pool governors
+-- Threshold (LocalNet demos):
+--   threshold = 2     — 2-of-3 must co-sign before ExecuteGoverned or CancelGoverned
+--
+-- Settlement MUST NOT execute below the threshold of named controllers and
+-- MUST succeed once the threshold co-signs. Same gate applies to cancel.
+-- Permissioning beyond stock Canton options: named M-of-N execute/cancel set.
 module Governance where
 
 import Composition
 import DA.Set (Set)
 import qualified DA.Set as Set
 
--- | Gates Settle behind an M-of-N approval set of named operators.
+-- | Gates Settle / Cancel behind an M-of-N approval set of named governors.
+-- Controllers who may approve execute or cancel: exactly the `governors` set
+-- (e.g. Gov1, Gov2, Gov3). Operator co-signs Approve* / Execute / Cancel.
 template GovernedSettlement
   with
     operator : Party
-    agreementCid : ContractId CompositionAgreement
+    agreementCid : ContractId WorkflowAgreement
+    settlementParties : Set Party
     governors : Set Party
     threshold : Int
     approvals : Set Party
+    cancelApprovals : Set Party
     regulator : Party
   where
     signatory operator
-    observer Set.toList governors
+    observer (Set.toList governors ++ Set.toList settlementParties)
     ensure
       threshold >= 1
       && threshold <= Set.size governors
       && Set.size governors >= 1
 
+    -- | One named governor co-signs toward the execute threshold.
+    -- Controllers: operator + that governor (must be ∈ governors).
     choice ApproveGoverned : ContractId GovernedSettlement
       with
         governor : Party
@@ -33,21 +47,59 @@ template GovernedSettlement
         create GovernedSettlement with
           operator
           agreementCid
+          settlementParties
           governors
           threshold
           approvals = Set.insert governor approvals
+          cancelApprovals
           regulator
 
-    -- | R-GOV-1: rejects when approvals < threshold.
+    -- | R-GOV-1 execute: rejects when |approvals| < threshold (e.g. 1 < 2).
+    -- Controllers: operator + all settlement parties (nested SettleWithRegulator auth).
+    -- Succeeds only once threshold co-sign is met (e.g. Gov1 + Gov2 of {Gov1,Gov2,Gov3}).
     choice ExecuteGoverned : ContractId SettlementReceipt
-      controller operator
+      with
+        allocationCids : [ContractId LegAllocation]
+      controller operator, Set.toList settlementParties
       do
         assertMsg "below threshold — governed action must not execute"
           (Set.size approvals >= threshold)
-        exercise agreementCid SettleWithRegulator with regulator
+        exercise agreementCid SettleWithRegulator with
+          regulator
+          allocationCids
 
-    -- | Institutional Emergency Veto: Allows any authorized governor to veto and abort
-    -- a malicious or compromised composition deal prior to settlement.
+    -- | One named governor co-signs toward the cancel threshold (same M-of-N set).
+    choice ApproveCancelGoverned : ContractId GovernedSettlement
+      with
+        governor : Party
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        assertMsg "already approved cancel" (not (Set.member governor cancelApprovals))
+        create GovernedSettlement with
+          operator
+          agreementCid
+          settlementParties
+          governors
+          threshold
+          approvals
+          cancelApprovals = Set.insert governor cancelApprovals
+          regulator
+
+    -- | R-GOV-2 cancel: MUST NOT cancel below threshold; MUST cancel once met.
+    -- Controllers: operator. Gate: |cancelApprovals| >= threshold (same 2-of-3).
+    choice CancelGoverned : ()
+      with
+        reason : Text
+      controller operator
+      do
+        assertMsg "below threshold — governed cancel must not execute"
+          (Set.size cancelApprovals >= threshold)
+        exercise agreementCid CancelAgreement with reason
+        pure ()
+
+    -- | Institutional Emergency Veto: any single named governor aborts the deal
+    -- (BitSafe safety valve; distinct from M-of-N CancelGoverned).
     choice EmergencyVeto : ()
       with
         governor : Party
@@ -66,7 +118,7 @@ template GovernanceFactory
 
     nonconsuming choice OpenGovernedSettlement : ContractId GovernedSettlement
       with
-        agreementCid : ContractId CompositionAgreement
+        agreementCid : ContractId WorkflowAgreement
         governors : [Party]
         threshold : Int
         regulator : Party
@@ -75,12 +127,15 @@ template GovernanceFactory
         let govSet = Set.fromList governors
         assertMsg "threshold out of range"
           (threshold >= 1 && threshold <= Set.size govSet)
+        agr <- fetch agreementCid
         create GovernedSettlement with
           operator
           agreementCid
+          settlementParties = agr.parties
           governors = govSet
           threshold
           approvals = Set.empty
+          cancelApprovals = Set.empty
           regulator
 
 -- | Institutional Safety: Protocol Circuit Breaker for emergency halts.

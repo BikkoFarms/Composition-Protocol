@@ -282,3 +282,41 @@ compositionsRouter.post("/governance/:id/veto", (req, res) => {
   }
 });
 
+/**
+ * POST /compositions/ledger/e2e
+ * Live DevNet path: mint → propose → accept×N → finalize → allocate → settle → ACS receipt.
+ * Requires LEDGER_MODE=ledger, DAML_PACKAGE_ID, OIDC/token, and LEDGER_PARTY_*.
+ */
+compositionsRouter.post("/ledger/e2e", async (_req, res) => {
+  const { ledgerFromEnv } = await import("../ledger.js");
+  const { partiesFromEnv, runLedgerE2E } = await import("../ledgerWorkflow.js");
+  const ledger = ledgerFromEnv();
+  const parties = partiesFromEnv();
+  if (!ledger) {
+    res.status(503).json({
+      error: "Ledger not configured",
+      hint: "Set LEDGER_MODE=ledger and LEDGER_API_URL / OIDC_* — see docs/DEVNET.md",
+    });
+    return;
+  }
+  if (!parties) {
+    res.status(503).json({
+      error: "LEDGER_PARTY_* not set",
+      required: [
+        "LEDGER_PARTY_OPERATOR",
+        "LEDGER_PARTY_ALICE",
+        "LEDGER_PARTY_BOB",
+        "LEDGER_PARTY_ORACLE",
+        "LEDGER_PARTY_REGULATOR",
+      ],
+    });
+    return;
+  }
+  try {
+    const result = await runLedgerE2E(ledger, parties);
+    res.json(result);
+  } catch (e) {
+    res.status(502).json({ error: (e as Error).message });
+  }
+});
+

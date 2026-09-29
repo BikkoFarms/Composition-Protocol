@@ -1,5 +1,6 @@
 -- | MVP stand-in for CIP-0056 / USDCx / CBTC / cETH registry assets.
 -- Mocked at the boundary; replace with real CIP-0056 adapters post-MVP.
+-- Signatory is the issuer/registry; owner is an observer with transfer rights.
 module MockToken where
 
 import ComposableAsset
@@ -11,31 +12,31 @@ template MockToken
     instrumentId : Text
     amount : Decimal
   where
-    signatory issuer, owner
+    signatory issuer
+    observer owner
     ensure amount > 0.0
 
     interface instance ComposableAsset for MockToken where
       view = ComposableAssetView with
         owner
+        issuer
         instrumentId
         amount
-      Transfer newOwner = do
-        archive self
+      transferTo newOwner = do
         newCid <- create MockToken with
           owner = newOwner
           issuer
           instrumentId
           amount
-        pure TransferResult with newAssetCid = toInterfaceContractId newCid
+        pure TransferResult with newAssetCid = toInterfaceContractId @ComposableAsset newCid
 
     choice Split : (ContractId MockToken, ContractId MockToken)
       with
         splitAmount : Decimal
-      controller owner
+      controller owner, issuer
       do
         assertMsg "split must be positive" (splitAmount > 0.0)
         assertMsg "split must be less than amount" (splitAmount < amount)
-        archive self
         keep <- create MockToken with
           owner
           issuer
