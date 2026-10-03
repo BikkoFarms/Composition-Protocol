@@ -1,102 +1,103 @@
-# Settleflow — Implementation Audit & Requirements Verification
+# SettleFlow (Composition Protocol) — Implementation Audit & Requirements Verification
 
-This document cross-references every Functional Requirement (FR), System Requirement (SR), and validation gate defined in the **Product Requirements Document (PRD)** and **Software Requirements Document (SRD)** against the active codebase.
+This document cross-references every Functional Requirement (FR), System Requirement (SR), and validation gate defined in the authoritative **SettleFlow Product Requirements Document (PRD)** (`SettleFlow_PRD.docx`), **SettleFlow Differentiation Document** (`SettleFlow_Differentiation.docx`), and Software Requirements Document (SRD) against the active codebase.
 
 ---
 
-## 1. Requirements Compliance & Verification Matrix
+## 1. Authoritative Requirements Compliance & Verification Matrix (PRD §8)
 
 | Requirement ID | Specification Description | Source Document | Implementation Artifact | Test Gate / Verification | Status |
 |:---|:---|:---|:---|:---|:---:|
-| **`R-ATOM-1`** | **Single Transaction Settlement:** All settlement legs MUST execute within a single atomic Daml transaction. If any leg fails, the entire transaction reverts. | SRD §3, PRD §7 | `daml/daml/Composition.daml` (`CompositionAgreement.Settle`) | `Test.daml:testAtomicSwap`<br>`demoStore.test.ts` (test 1) | **VERIFIED & PASSING** |
-| **`R-ATOM-2`** | **Zero Half-Settled States:** No intermediate or partial settlement state is ever observable on-chain. Counterparties retain their assets upon any failure. | SRD §3, PRD §7 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` | `Test.daml:testAtomicRevert`<br>`demoStore.test.ts` (test 2) | **VERIFIED & PASSING** |
-| **`R-PRIV-1`** | **Per-Leg Payload Confidentiality:** Asset payloads and transfer details are scoped strictly to leg provider and receiver via Canton stakeholder model. | SRD §4, PRD §6 | `daml/daml/ComposableAsset.daml`<br>`daml/daml/Composition.daml` | `Test.daml`<br>`backend/src/demoStore.ts` (`partyView`) | **VERIFIED & PASSING** |
-| **`R-PRIV-2`** | **Regulator/Observer Exclusion:** Regulators/auditors observe `SettlementReceipt` only; they are cryptographically excluded from token payloads. | SRD §4, PRD §6 | `daml/daml/Composition.daml` (`SettlementReceipt`) | `Test.daml:testAuditorCannotSeeLegs`<br>`demoStore.test.ts` (test 3) | **VERIFIED & PASSING** |
-| **`R-PRIV-3`** | **Ledger-Level Privacy Proof ("The Money Shot"):** Regulator ACS query returns `visibleTokens: []` with receipt present. Enforced by ledger, not UI filters. | SRD §4, PRD §8 | `backend/src/routes/audit.ts` (`/audit/money-shot`)<br>`frontend/app/observer/page.tsx` | Automated test gate 3<br>Live side-by-side observer UI | **VERIFIED & PASSING** |
-| **`R-AUTH-1`** | **Signatory Authorization Enforcement:** All commands carry `actAs` for required signatories; Daml engine checks controller declarations before commit. | SRD §5 | `backend/src/ledger.ts` (`submit-and-wait` with `actAs`) | Canton Ledger API v2 contract authorization | **VERIFIED & PASSING** |
-| **`R-GOV-1`** | **BitSafe Below-Threshold Rejection:** Governed settlements wrapped in `GovernedSettlement` MUST reject execution if approvals < threshold ($M$ of $N$). | SRD §9, PRD §10 | `daml/daml/Governance.daml`<br>`backend/src/demoStore.ts` (`executeGovernance`) | `TestGovernance.daml:testGovernedBelowThreshold`<br>`demoStore.test.ts` (test 4) | **VERIFIED & PASSING** |
-| **`R-GOV-2`** | **BitSafe Threshold Execution:** Governed settlements MUST succeed once $M$ of $N$ governor signatures are recorded. | SRD §9, PRD §10 | `daml/daml/Governance.daml`<br>`backend/src/demoStore.ts`<br>`frontend/app/governance/page.tsx` | `TestGovernance.daml:testGovernedAtThreshold`<br>`demoStore.test.ts` (test 5) | **VERIFIED & PASSING** |
-| **`R-DEPLOY-1`** | **Live DevNet & LocalNet Execution:** Must support connection to shared HackCanton DevNet node with Keycloak OIDC, and offline demo fallback. | SRD §7, PRD §7 | `scripts/oidc-token.mjs`<br>`backend/src/ledger.ts`<br>`docker-compose.yml` | `backend/src/index.ts` (`/health` diagnostics)<br>Dual-mode switch verified | **VERIFIED & PASSING** |
-| **`R-METRICS-1`** | **On-Chain Metrics Evidence:** Record and expose compositions settled (target ≥50), average legs per deal, success/revert rates, and live audit feed. | PRD §4, SRD §8 | `backend/src/demoStore.ts` (`getMetrics`)<br>`frontend/app/metrics/page.tsx` | `demoStore.test.ts` (test 6)<br>Real-time metrics polling | **VERIFIED & PASSING** |
-| **`R-UI-1`** | **Multi-Role User Experience:** Interactive dashboards for Proposer, Counterparty, Observer, Governance, Demo, and Metrics. | SRD §1, PRD §7 | `frontend/app/` (6 Next.js pages) | `npm run build` (11/11 routes statically prerendered) | **VERIFIED & PASSING** |
-| **`R-MOCK-1`** | **Ecosystem Mock Services:** Price and commodity grade inspection oracle and token fixtures for African commodity trade finance. | SRD §1, SRD §6 | `mocks/oracle/server.mjs` (:4002)<br>`daml/daml/MockToken.daml` | Oracle HTTP endpoint on port 4002<br>Token minting routes in backend | **VERIFIED & PASSING** |
-| **`R-WORKFLOW-1`** | **3-Party DvP Coordination Workflow:** Reusable propose/accept coordination pattern gating settlement across 3 independent parties. | Team Follow-Up Guide | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` | `demoStore.test.ts` (test 1, 14, 16)<br>`scripts/test-e2e-live.mjs` | **VERIFIED & PASSING** |
-| **`R-FAIL-1`** | **Clean Stalled Path Resolution (Expiry/Cancel/Reject):** Expire timed-out deals (`ExpireProposal`), cancel (`CancelProposal`), or reject (`RejectProposal`) with zero half-state. | Team Follow-Up Guide | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` | `demoStore.test.ts` (tests 7, 12, 13)<br>E2E test 12 | **VERIFIED & PASSING** |
-| **`R-DISCLOSE-1`** | **Disclosed Contract Handling:** Support explicit contract disclosures (`disclosedContracts`) in command submissions per Canton Ledger API v2. | Canton Docs & Team Guide | `backend/src/ledger.ts`<br>`backend/src/demoStore.ts` | `demoStore.test.ts` (test 15) | **VERIFIED & PASSING** |
-| **`R-REUSE-1`** | **Multi-Topology Package Reusability:** Parameterized settlement logic reusable across arbitrary asset classes and topologies without Daml alterations. | Team Follow-Up Guide | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` | `demoStore.test.ts` (test 16)<br>E2E test 13 | **VERIFIED & PASSING** |
+| **`FR-1`** | **Initiate Settlement Terms:** Create trade terms: parties, legs, instruments, amounts, reference, executor. | PRD §8, §6 | `backend/src/demoStore.ts`<br>`daml/daml/Composition.daml` | `demoStore.test.ts` (test 19)<br>`scripts/run-demo-scenario.mjs` (Step 2) | **VERIFIED & PASSING** |
+| **`FR-2`** | **Collect Authorizations:** Collect multi-party signatures across buyer, seller, and third-party coordinator. | PRD §8 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`accept`) | `demoStore.test.ts` (test 20)<br>`scripts/run-demo-scenario.mjs` (Step 3) | **VERIFIED & PASSING** |
+| **`FR-3`** | **CIP-56 Allocation Tracking:** Request and track explicit allocations for each party's agreed leg. | PRD §8 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`allocate`) | `demoStore.test.ts` (test 5)<br>`scripts/run-demo-scenario.mjs` (Step 3) | **VERIFIED & PASSING** |
+| **`FR-4`** | **Field-Level Allocation Matching:** Strict match on parties, amount, instrument, reference, deadline, asset. Any mismatch aborts with no half-state. | PRD §8, Diff Doc | `daml/daml/Composition.daml` (`matchAllocationToLeg`)<br>`backend/src/demoStore.ts` | `demoStore.test.ts` (test 4)<br>`scripts/run-demo-scenario.mjs` (Step 4) | **VERIFIED & PASSING** |
+| **`FR-5`** | **On-Ledger Readiness Tracking:** Track readiness of all legs and counterparties before execution is permitted. | PRD §8 | `backend/src/demoStore.ts`<br>`GET /compositions/:id/readiness` | `demoStore.test.ts` (test 5, 27)<br>`scripts/run-demo-scenario.mjs` (Step 5) | **VERIFIED & PASSING** |
+| **`FR-6`** | **Atomic Execution:** Single Daml transaction choice (`Settle`) ensuring all-or-nothing settlement across all legs. | PRD §8 (`R-ATOM-1`) | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`settle`) | `Test.daml:testAtomicSwap`<br>`demoStore.test.ts` (test 1, 22) | **VERIFIED & PASSING** |
+| **`FR-7`** | **Clean Cancellation & Lock Release:** Cancelled trade releases all committed allocations back to parties without residual lock. | PRD §8 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`cancel`) | `demoStore.test.ts` (test 9, 21, 26)<br>`scripts/run-demo-scenario.mjs` (Step 7) | **VERIFIED & PASSING** |
+| **`FR-8`** | **Demo Assets (CIP-56 Holdings):** Custodian tokenized asset (`CBTC`) and payment token (`USDCx`) issued as CIP-56 holdings. | PRD §8, §7 | `backend/src/routes/assets.ts` (`POST /assets/issue`)<br>`daml/daml/MockToken.daml` | `demoStore.test.ts` (test 23)<br>`scripts/run-demo-scenario.mjs` (Step 1) | **VERIFIED & PASSING** |
+| **`FR-9`** | **Per-Party Audit Trail View:** History of authorizations and outcomes scoped per party; auditor sees receipts with `visibleTokens: []`. | PRD §8, §7 | `backend/src/routes/audit.ts`<br>`frontend/app/observer/page.tsx` | `demoStore.test.ts` (test 3, 24)<br>`scripts/run-demo-scenario.mjs` (Step 8) | **VERIFIED & PASSING** |
+| **`FR-10`** | **Automated Failure-Path Tests:** Suite covering partial allocation, withdrawn leg, mismatched leg, and wrong executor. | PRD §8 | `backend/src/demoStore.test.ts`<br>`daml/daml/Test.daml` | `demoStore.test.ts` (tests 4, 14, 15, 16, 25, 26, 27) | **VERIFIED & PASSING** |
+| **`FR-11`** | **Shared Readiness View:** Minimal readiness status view (API & CLI) detailing outstanding parties and legs. | PRD §8 | `GET /compositions/:id/readiness`<br>`scripts/run-demo-scenario.mjs` | `demoStore.test.ts` (test 27)<br>REST response on `:4000` | **VERIFIED & PASSING** |
+| **`FR-12`** | **Deadlines & Anti-Strand Guards:** Time-bounded allocate-by and settle-by deadlines resolving stalled workflows cleanly. | PRD §8 | `backend/src/demoStore.ts` (`expire`)<br>`daml/daml/Composition.daml` | `demoStore.test.ts` (test 14, 21)<br>`POST /compositions/:id/expire` | **VERIFIED & PASSING** |
+| **`FR-13`** | **Permissioning Enforcement:** Only designated executor may settle; only authorized parties may cancel. Unauthorized attempts rejected. | PRD §8 | `backend/src/demoStore.ts` (`settle`, `cancel`) | `demoStore.test.ts` (test 9, 25) | **VERIFIED & PASSING** |
+| **`FR-14`** | **Canton Sub-Transaction Privacy:** Cryptographic stakeholder privacy (`signatory`, `observer`) preventing leg data leakage. | PRD §9, SRD §4 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`partyView`) | `Test.daml:testAuditorCannotSeeLegs`<br>`demoStore.test.ts` (test 3, 24) | **VERIFIED & PASSING** |
+| **`FR-15`** | **Daml Finance Leg Support:** Compatible adapters and examples for Daml Finance asset types. | PRD §8 | `examples/with-layer/ThreePartyDvp.daml`<br>`daml/daml/ComposableAsset.daml` | Side-by-side LOC audit in `docs/SIDE_BY_SIDE.md` | **VERIFIED & PASSING** |
 
 ---
 
 ## 2. Test Suite Execution Summary
 
-### Backend Unit & Integration Gates (`npm test` — 22/22 Passing)
+### Backend Unit & Integration Gates (`npm test` — 27/27 Passing)
 ```
 TAP version 13
 # Subtest: Settleflow demo gates
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
     ok 2 - testAtomicRevert — failed leg leaves no half-state
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
-    ok 4 - R-GOV-1 below threshold rejected
-    ok 5 - R-GOV-1 at threshold succeeds
-    ok 6 - Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
-    ok 7 - Proposer Cancellation — allows clean withdrawal before settlement
-    ok 8 - Emergency Circuit Breaker — blocks settlement during halt and resumes
-    ok 9 - Institutional Emergency Veto — named governor can abort open governed deal
-    ok 10 - Cryptographic Deal Hash & Valuation — enforces sha256 digest and LTV ratio
-    ok 11 - Operator Treasury Direct Minting — issues new composable assets to party ACS
-    ok 12 - Failure Path: Expiry — resolves stalled or timed-out proposals cleanly
-    ok 13 - Failure Path: Rejection — counterparty rejection cleanly resolves without half-state
-    ok 14 - Failure Path: Partial completion — maintains valid state without leaking or premature execution
-    ok 15 - Disclosed Contract Handling — attaches and preserves explicit contract disclosures
-    ok 16 - Reuse Verification — executes multiple distinct 3-party DvP configurations without modifying package logic
-    ok 17 - SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization
-    ok 18 - SRS §12: testWorkflowAcceptance — confirms acceptance and state progression
-    ok 19 - SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
-    ok 20 - SRS §12: testWorkflowSettlement — confirms settlement completes end to end
-1..20
-# tests 20
+    ok 4 - allocation mismatch rejected — no half-state
+    ok 5 - allocate → settle — commits + ready_to_settle gate
+    ok 6 - R-GOV-1 below threshold rejected
+    ok 7 - R-GOV-1 at threshold succeeds
+    ok 8 - Judge Metrics — calculates avgLegsPerComposition, successRate, revertRate
+    ok 9 - Proposer Cancellation — allows clean withdrawal before settlement
+    ok 10 - Emergency Circuit Breaker — blocks settlement during halt and resumes
+    ok 11 - Institutional Emergency Veto — named governor can abort open governed deal
+    ok 12 - Cryptographic Deal Hash & Valuation — enforces sha256 digest and LTV ratio
+    ok 13 - Operator Treasury Direct Minting — issues new composable assets to party ACS
+    ok 14 - Failure Path: Expiry — resolves stalled or timed-out proposals cleanly
+    ok 15 - Failure Path: Rejection — counterparty rejection cleanly resolves without half-state
+    ok 16 - Failure Path: Partial completion — maintains valid state without leaking or premature execution
+    ok 17 - Disclosed Contract Handling — attaches and preserves explicit contract disclosures
+    ok 18 - Reuse Verification — executes multiple distinct 3-party DvP configurations without modifying package logic
+    ok 19 - SRS §12: testWorkflowProposal — confirms proposal creation and workflow initialization
+    ok 20 - SRS §12: testWorkflowAcceptance — confirms acceptance and state progression
+    ok 21 - SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
+    ok 22 - SRS §12: testWorkflowSettlement — confirms settlement completes end to end
+    ok 23 - FR-8: demo assets issuance produces valid CIP-56 holdings
+    ok 24 - FR-9: audit trail provides per-party scoped history
+    ok 25 - FR-10: failure path — wrong executor rejected
+    ok 26 - FR-10: failure path — cancelled trade releases locked allocations
+    ok 27 - FR-10 & FR-11: partial allocation blocks settlement until all legs ready
+1..27
+# tests 27
 # suites 1
-# pass 20
+# pass 27
 # fail 0
 ```
 
-### Frontend Compilation & Prerender Build (
-pm run build)
-`
-Route (app)                                 Size  First Load JS
-┌ ○ /                                      162 B         106 kB
-├ ○ /_not-found                            995 B         104 kB
-├ ○ /admin                               3.12 kB         106 kB
-├ ○ /counterparty                        2.06 kB         108 kB
-├ ○ /demo                                2.59 kB         109 kB
-├ ○ /governance                          2.41 kB         108 kB
-├ ○ /metrics                             1.96 kB         105 kB
-├ ○ /observer                            1.96 kB         108 kB
-└ ○ /proposer                            2.22 kB         105 kB
-+ First Load JS shared by all             103 kB
-
-✓ All 11 routes compiled and statically prerendered with 0 errors.
-`
-
-### Live Network E2E Socket Suite (
-pm run test:e2e — 13/13 Passing)
-All 13 live integration tests across ports :4000 (Backend API) and :4002 (Commodity Oracle) pass cleanly:
+### Live Network E2E Socket Suite (`npm run test:e2e` — 13/13 Passing)
+All 13 live integration tests across ports `:4000` (Backend API) and `:4002` (Commodity Oracle) pass cleanly:
 - Health check & asset discovery
-- Live commodity oracle price feed (,000 CBTC)
+- Live commodity oracle price feed ($8,240+ CBTC spot price)
+- HMAC cryptographic attestation issuance & ECDSA verification
 - 3-leg trade-finance proposal & counterparty acceptance
 - Atomic settlement execution & receipt generation
 - Injected atomic revert (409 Conflict: ATOMIC_REVERT)
-- Observer privacy check (isibleTokens: [])
+- Observer privacy check (`visibleTokens: []`)
+- BitSafe M-of-N governance below-threshold rejection (R-GOV-1) and execution at threshold (R-GOV-2)
 - Proposer cancellation, expiration, and rejection paths
 - Governance emergency veto and circuit breaker operational halt
+- Reusable multi-topology execution
+
+### PRD §7 8-Step Demo Scenario Runner (`npm run demo:scenario` — 8/8 Passing)
+Executes the authoritative 8-step PRD sequence in a single deterministic command:
+1. Issue demo assets (FR-8)
+2. Propose 3-leg trade finance terms (FR-1)
+3. Collect counterparty co-signatures (FR-2, FR-3)
+4. Verify and reject allocation mismatch without half-state (FR-4)
+5. Query shared readiness status view (FR-5, FR-11)
+6. Execute single-transaction atomic settlement (FR-6)
+7. Cancel stalled trade and release locked allocations (FR-7, FR-10)
+8. Verify per-party audit trail and observer zero-leak privacy (FR-9)
 
 ---
 
-## 3. Operational Manuals & Runbooks
-- [**DEPLOYMENT.md**](../DEPLOYMENT.md) — Complete multi-topology deployment instructions (LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet).
-- [**TESTING.md**](../TESTING.md) — Comprehensive step-by-step testing manual covering Daml scripts, 20 backend test gates, 13 live E2E tests, and browser walkthrough.
+## 3. Authoritative Specification Index
 
----
-
-## 4. Conclusion & Delivery Readiness
-All 16 functional and non-functional requirements specified in the PRD and SRS are fully developed, verified through automated gates, and confirmed working across smart contract, API, and UI tiers. Ready for HackCanton Season 3 submission.
+- [**SettleFlow_PRD.docx**](../SettleFlow_PRD.docx) / [**docs/SettleFlow_PRD.md**](SettleFlow_PRD.md) — Authoritative SettleFlow PRD (October 2026 Edition for HackCanton S3).
+- [**SettleFlow_Differentiation.docx**](../SettleFlow_Differentiation.docx) / [**docs/SettleFlow_Differentiation.md**](SettleFlow_Differentiation.md) — Authoritative differentiation matrix against CIP-0056, Daml Finance, and CIP-112.
+- [**docs/SIDE_BY_SIDE.md**](SIDE_BY_SIDE.md) — Measured developer effort: ~99 LOC with layer vs. ~192 LOC hand-rolled.
+- [**docs/POSITIONING.md**](POSITIONING.md) — Market positioning and ecosystem adapter architecture.
+- [**DEPLOYMENT.md**](../DEPLOYMENT.md) — Production operations and runbooks.
+- [**TESTING.md**](../TESTING.md) — Full test execution manual.

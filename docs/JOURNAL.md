@@ -44,5 +44,23 @@
 - **Pitch Video Script (Criterion 5):** Authored `docs/PITCH_SCRIPT.md` detailing the timed 3-minute presentation, voiceover narrative, visual cues for the "Money Shot" sub-transaction privacy proof, BitSafe 2-of-3 threshold governance, and pre-recording checklist.
 - **Readiness Audit:** Pre-submission checklist verified. All Track 1 (RWA & Business Workflows) and BitSafe Decentralization Challenge requirements are fulfilled for the HackCanton Season 3 deadline (October 9, 2026).
 
+## 2026-10-03
+- **Docx Ingestion & Specification Indexing:**
+  - Ingested and indexed authoritative `SettleFlow_PRD.docx` (Draft v0.2) and `SettleFlow_Differentiation.docx`.
+  - Extracted clean markdown specifications to `docs/SettleFlow_PRD.md` and `docs/SettleFlow_Differentiation.md`.
+  - Positioned SettleFlow as the trade-level coordination layer sitting on top of CIP-56 allocations and complementary to execution engines (CIP-112).
+- **Core Requirements Implementation & Verification:**
+  - **FR-8 (Demo Assets):** Implemented `POST /assets/issue` issuing tokenized collateral (`CBTC`) and cash payment tokens (`USDCx`) as CIP-56 holdings.
+  - **FR-9 (Per-Party Audit View):** Scoped event trails and receipts per party in `partyView`, ensuring regulators inspect receipts with `visibleTokens: []`.
+  - **FR-10 (Failure Paths & Permissioning):** Added strict verification rejecting unauthorized executors on settlement, releasing locked allocations upon cancellation, and blocking execution during partial allocations.
+  - **FR-11 (Shared Readiness View):** Added `GET /compositions/:id/readiness` returning trade status, outstanding parties, and unallocated legs.
+- **8-Step Demo Scenario Runner (PRD §7):**
+  - Created `scripts/run-demo-scenario.mjs` and added `npm run demo:scenario` executing the complete 8-step PRD sequence in one command.
+- **Verification Gates Status:**
+  - Backend Test Gates: **27/27 test gates passing** (1871ms), zero regressions.
+  - Live Socket E2E Runner: **13/13 tests passing** (100% success).
+  - Next.js Production Build: **11/11 static routes prerendered** with 0 errors.
+
+
 
 

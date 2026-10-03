@@ -229,6 +229,63 @@ compositionsRouter.post("/:id/allocate", (req, res) => {
 });
 
 /**
+ * GET /compositions/:id/readiness
+ * FR-5 & FR-11: Shared readiness view showing trade-level readiness, allocated vs pending legs,
+ * and outstanding parties.
+ */
+compositionsRouter.get("/:id/readiness", (req, res) => {
+  try {
+    const c = demoStore.require(req.params.id);
+    const unallocatedLegs = c.legs.filter(
+      (l) => !c.allocations.some((a) => a.legId === l.legId),
+    );
+    const allocatedLegs = c.allocations.map((a) => ({
+      legId: a.legId,
+      instrumentId: a.instrumentId,
+      amount: a.amount,
+      provider: a.provider,
+      receiver: a.receiver,
+      matched: a.matched,
+    }));
+    const outstandingParties = [
+      ...c.counterparties.filter((p) => !c.accepted.includes(p)),
+      ...unallocatedLegs.map((l) => l.provider),
+    ];
+    res.json({
+      compositionId: c.id,
+      status: c.status,
+      isReady: c.status === "ready_to_settle",
+      totalLegs: c.legs.length,
+      allocatedLegCount: c.allocations.length,
+      allocatedLegs,
+      outstandingLegs: unallocatedLegs.map((l) => ({
+        legId: l.legId,
+        provider: l.provider,
+        receiver: l.receiver,
+        instrumentId: l.instrumentId,
+        amount: l.amount,
+        deadline: l.deadline,
+      })),
+      parties: {
+        proposer: { party: c.proposer, accepted: true },
+        counterparties: c.counterparties.map((p) => ({
+          party: p,
+          accepted: c.accepted.includes(p),
+          allocated: c.allocations.some(
+            (a) => a.allocator === p || a.provider === p,
+          ),
+        })),
+      },
+      outstandingParties: Array.from(new Set(outstandingParties)),
+      canSettle:
+        c.status === "ready_to_settle" && !demoStore.circuitBreaker.isHalted,
+    });
+  } catch (e) {
+    res.status(404).json({ error: (e as Error).message });
+  }
+});
+
+/**
  * POST /compositions/:id/settle
  * Final settlement execution:
  * - Enforces single Daml transaction atomicity across all legs (R-ATOM-1).
@@ -237,9 +294,9 @@ compositionsRouter.post("/:id/allocate", (req, res) => {
  */
 compositionsRouter.post("/:id/settle", (req, res) => {
   try {
-    const withRegulator = (req.body as { withRegulator?: boolean })
-      ?.withRegulator !== false;
-    const composition = demoStore.settle(req.params.id, withRegulator);
+    const body = (req.body ?? {}) as { withRegulator?: boolean; caller?: PartyId };
+    const withRegulator = body.withRegulator !== false;
+    const composition = demoStore.settle(req.params.id, withRegulator, body.caller);
     console.log(
       `[settlement] deal ${composition.id} settled; receipt: ${composition.receiptCid}`,
     );

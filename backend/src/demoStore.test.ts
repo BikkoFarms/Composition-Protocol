@@ -347,6 +347,81 @@ describe("Settleflow demo gates", () => {
     assert.ok(settled.receiptCid);
     assert.equal(settled.legSummaries?.length, 3);
   });
+
+  it("FR-8: demo assets issuance produces valid CIP-56 holdings", () => {
+    const tAsset = store.mint("Alice", "CBTC", "5.0");
+    const pToken = store.mint("Bob", "USDCx", "25000.0");
+    assert.equal(tAsset.owner, "Alice");
+    assert.equal(tAsset.instrumentId, "CBTC");
+    assert.equal(pToken.owner, "Bob");
+    assert.equal(pToken.instrumentId, "USDCx");
+    assert.ok(store.listTokens("Alice").some((t) => t.contractId === tAsset.contractId));
+    assert.ok(store.listTokens("Bob").some((t) => t.contractId === pToken.contractId));
+  });
+
+  it("FR-9: audit trail provides per-party scoped history", () => {
+    store.runFullDemo();
+    const aliceView = store.partyView("Alice");
+    const bobView = store.partyView("Bob");
+    const regulatorView = store.partyView("Regulator");
+
+    assert.ok(aliceView.auditEvents && aliceView.auditEvents.length > 0);
+    assert.ok(bobView.auditEvents && bobView.auditEvents.length > 0);
+    assert.ok(regulatorView.auditEvents && regulatorView.auditEvents.length > 0);
+    // Regulator sees settlement receipts without token payloads
+    assert.deepEqual(regulatorView.visibleTokens, []);
+    assert.ok(regulatorView.settlementReceipts.length > 0);
+  });
+
+  it("FR-10: failure path — wrong executor rejected", () => {
+    const c = store.proposeTradeFinance();
+    c.executor = "Operator";
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
+    // Calling settle with wrong executor throws error
+    assert.throws(
+      () => store.settle(c.id, true, "Bob"),
+      /settlement rejected: wrong executor \(caller Bob is not designated executor Operator\)/,
+    );
+    assert.equal(store.require(c.id).status, "ready_to_settle");
+    // Valid executor succeeds
+    const settled = store.settle(c.id, true, "Operator");
+    assert.equal(settled.status, "settled");
+  });
+
+  it("FR-10: failure path — cancelled trade releases locked allocations", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
+    assert.equal(store.require(c.id).allocations.length, 3);
+    assert.equal(store.require(c.id).status, "ready_to_settle");
+
+    const cancelled = store.cancel(c.id, "Alice");
+    assert.equal(cancelled.status, "cancelled");
+    // Allocations released back to parties
+    assert.equal(cancelled.allocations.length, 0);
+  });
+
+  it("FR-10 & FR-11: partial allocation blocks settlement until all legs ready", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    // Allocate only 1 of 3 legs
+    const leg0 = c.legs[0];
+    store.allocate(c.id, { ...leg0 });
+    assert.equal(store.require(c.id).status, "allocating");
+    assert.equal(store.require(c.id).allocations.length, 1);
+
+    // Attempting to settle during partial allocation throws
+    assert.throws(
+      () => store.settle(c.id),
+      /expected 3 allocations, got 1/,
+    );
+    assert.equal(store.require(c.id).status, "allocating");
+  });
 });
+
 
 

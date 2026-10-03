@@ -32,7 +32,7 @@ Official testing manual for **Settleflow**: Daml scripts, backend gates, live E2
 
 ---
 
-## 2. Test Gate 1: Backend Automated Suites (22 Passing Gates)
+## 2. Test Gate 1: Backend Automated Suites (27 Passing Gates)
 
 ### How to Run
 ```bash
@@ -41,17 +41,36 @@ npm test
 ```
 
 ### Expected Output
-All **22** tests pass (`# pass 22`, `# fail 0`), including:
+All **27** tests pass (`# pass 27`, `# fail 0`), including:
 - `allocation mismatch rejected — no half-state`
 - `allocate → settle — commits + ready_to_settle gate`
+- `FR-8: demo assets issuance produces valid CIP-56 holdings`
+- `FR-9: audit trail provides per-party scoped history`
+- `FR-10: failure path — wrong executor rejected`
+- `FR-10: failure path — cancelled trade releases locked allocations`
+- `FR-10 & FR-11: partial allocation blocks settlement until all legs ready`
 - Atomic / privacy / BitSafe / SRS §12 gates (see README §6)
 
-### Allocation invariants (headline)
+### Allocation & PRD Invariants (Headline)
 
 | Test | Spec | Verification |
 | :--- | :--- | :--- |
 | **allocation mismatch rejected** | Field match | Wrong amount → `allocation match failed: amount mismatch on leg cash`; allocations stay `0` |
 | **allocate → settle** | Readiness | Settle without allocations fails; after 3 matches → `ready_to_settle` → receipt |
+| **wrong executor rejected** | Permissioning | Non-designated caller attempting settlement fails with `wrong executor` |
+| **cancel releases allocations** | Clean withdrawal | Cancelled trade clears locked allocations back to parties without half-state |
+| **partial allocation gate** | Readiness tracking | Settlement is rejected if any leg remains unallocated |
+| **audit trail per party** | Stakeholder privacy | Each party receives scoped events and receipts; regulator sees `visibleTokens: []` |
+
+---
+
+## 2.1 Test Gate 1.1: PRD §7 8-Step Demo Scenario Runner
+
+Run the authoritative PRD §7 sequence in one automated, deterministic runbook:
+```bash
+npm run demo:scenario
+```
+Verifies: Issue (FR-8) → Propose (FR-1) → Authorize (FR-2, FR-3) → Mismatch (FR-4) → Status (FR-5, FR-11) → Execute (FR-6) → Cancel & Release (FR-7, FR-10) → Audit Trail (FR-9).
 
 ---
 

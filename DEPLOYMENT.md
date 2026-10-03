@@ -253,7 +253,54 @@ npm run dev:web
 
 ---
 
-## 7. Production Build & Optimization
+## 7. Topology 5: Cloud Deployment on Render via Blueprint (`render.yaml`)
+
+The repository includes a production-ready **Render Blueprint** ([`render.yaml`](../render.yaml)) that automatically configures and orchestrates all three services as free-tier or production web services with automated SSL, continuous deployment, and zero-downtime health-checked rollouts.
+
+### Step 1: Push Code to GitHub
+Ensure all code and the `render.yaml` file are committed and pushed to your GitHub repository (e.g. `BikkoFarms/Composition-Protocol` or your fork).
+
+### Step 2: One-Click Blueprint Deployment on Render
+1. Log in to [Render Dashboard](https://dashboard.render.com/).
+2. Click **New +** in the top navigation bar and select **Blueprint**.
+3. Connect your GitHub account and select the **`Composition-Protocol`** repository.
+4. Render will parse `render.yaml` and display the 3 services to be created:
+   - **`settleflow-frontend`**: Next.js 15 Web Service (`rootDir: frontend`, `npm install && npm run build`, `npm start`)
+   - **`settleflow-backend`**: Express REST API & Canton Gateway (`rootDir: backend`, `npm install && npm run build`, `npm start`)
+   - **`settleflow-oracle`**: Commodity Price & Attestation Service (`rootDir: .`, `node mocks/oracle/server.mjs`)
+5. Click **Apply**. Render will automatically provision build environments, build all three applications, and deploy them.
+
+### Step 3: Wire Frontend to Backend URL
+By default, the client-side Next.js browser views require the public HTTPS address of your deployed backend:
+1. In the Render Dashboard, open the **`settleflow-backend`** service and copy its public URL (e.g., `https://settleflow-backend.onrender.com`).
+2. Open the **`settleflow-frontend`** service -> **Environment** tab.
+3. Set the environment variable:
+   ```env
+   NEXT_PUBLIC_API_URL=https://settleflow-backend.onrender.com
+   ```
+4. Save and trigger a redeploy of the frontend.
+
+### Step 4: Connecting Render to HackCanton Live DevNet (Optional)
+If you wish to switch the backend on Render from high-fidelity demo mode to the shared HackCanton DevNet node:
+1. In Render Dashboard, open **`settleflow-backend`** -> **Environment**.
+2. Add the following variables:
+   ```env
+   LEDGER_MODE=ledger
+   LEDGER_API_URL=https://ledger-api-json.participant.hackcanton-01.devnet.naas.noders.services
+   OIDC_TOKEN_URL=https://keycloak.naas.noders.services/realms/noders-appsfactory/protocol/openid-connect/token
+   OIDC_AUDIENCE=https://hackcanton-01.devnet.naas.noders.services
+   OIDC_CLIENT_ID=<your-client-id>
+   OIDC_CLIENT_SECRET=<your-client-secret>
+   OIDC_USERNAME=<your-username>
+   OIDC_PASSWORD=<your-password>
+   DAML_PACKAGE_ID=<your-dar-package-id>
+   DAML_PACKAGE_NAME=composition
+   ```
+3. Save changes. Render will automatically perform a rolling restart and connect directly to the live Canton DevNet participant.
+
+---
+
+## 8. Production Build & Optimization
 
 For production grade deployments (e.g. AWS ECS, GCP Cloud Run, Kubernetes, or VPS):
 

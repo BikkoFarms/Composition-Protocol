@@ -88,6 +88,7 @@ export type Composition = {
   agreementCid: string | null;
   receiptCid: string | null;
   governanceCid: string | null;
+  executor?: PartyId;
   proposer: PartyId;
   counterparties: PartyId[];
   accepted: PartyId[];
@@ -292,6 +293,7 @@ export class DemoStore {
         Partial<Pick<LegSpec, "reference" | "deadline">>
     >;
     description: string;
+    executor?: PartyId;
     forceFail?: boolean;
     requireGovernance?: boolean;
     expiresAt?: string;
@@ -344,6 +346,7 @@ export class DemoStore {
       receiptCid: null,
       governanceCid: null,
       proposer: input.proposer,
+      executor: input.executor ?? "Operator",
       counterparties: input.counterparties,
       accepted: [],
       legs,
@@ -672,16 +675,17 @@ export class DemoStore {
   cancel(compositionId: string, caller: PartyId): Composition {
     const c = this.require(compositionId);
     if (c.status === "settled") throw new Error("cannot cancel settled composition");
-    if (c.proposer !== caller && caller !== "Operator") {
+    if (c.proposer !== caller && caller !== "Operator" && !c.counterparties.includes(caller)) {
       throw new Error(`only proposer ${c.proposer} or Operator can cancel`);
     }
     c.status = "cancelled";
+    c.allocations = []; // release locked allocations
     this.recordEvent({
       id: c.id,
       type: "reverted",
       timestamp: new Date().toISOString(),
       legs: c.legs.length,
-      description: `${c.description} (Cancelled by ${caller})`,
+      description: `${c.description} (Cancelled by ${caller} — allocations released)`,
     });
     return c;
   }
@@ -743,13 +747,18 @@ export class DemoStore {
   /**
    * Atomic settle. Enforces circuit breaker, governance gates, and all-or-nothing execution.
    */
-  settle(compositionId: string, withRegulator = true): Composition {
+  settle(compositionId: string, withRegulator = true, caller?: PartyId): Composition {
     if (this.circuitBreaker.isHalted) {
       throw new Error(
         `settlement rejected: protocol circuit breaker is active (${this.circuitBreaker.haltReason ?? "emergency halt"})`,
       );
     }
     const c = this.require(compositionId);
+    if (caller && c.executor && caller !== c.executor && caller !== "Operator") {
+      throw new Error(
+        `settlement rejected: wrong executor (caller ${caller} is not designated executor ${c.executor})`,
+      );
+    }
     if (
       c.status !== "accepted" &&
       c.status !== "allocating" &&
@@ -920,6 +929,9 @@ export class DemoStore {
     const c = this.require(gov.compositionId);
     c.requireGovernance = false;
     c.status = "accepted";
+    if (c.allocations.length < c.legs.length) {
+      this.allocateAll(c.id);
+    }
     const settled = this.executeSettle(c, true);
     gov.status = "executed";
     this._rawMetrics.governedSettlements += 1;
@@ -1049,12 +1061,32 @@ export class DemoStore {
       g.governors.includes(party) || party === "Operator",
     );
 
+    const auditEvents = this.events
+      .filter((e) => {
+        if (party === "Operator" || party === "Regulator") return true;
+        const c = this.compositions.get(e.id);
+        if (!c) return false;
+        return (
+          c.proposer === party ||
+          c.counterparties.includes(party) ||
+          e.description.includes(party)
+        );
+      })
+      .map((e) => ({
+        id: e.id,
+        type: e.type,
+        timestamp: e.timestamp,
+        legs: e.legs,
+        description: e.description,
+      }));
+
     return {
       party,
       visibleTokens: tokens,
       compositions: compositions.map((c) => this.redactForParty(c, party)),
       settlementReceipts: receipts,
       governance,
+      auditEvents,
       privacy: {
         claim:
           party === "Regulator"

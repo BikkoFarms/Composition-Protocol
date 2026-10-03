@@ -31,3 +31,38 @@ assetsRouter.post("/mint", (req, res) => {
     res.status(400).json({ error: (e as Error).message });
   }
 });
+
+/**
+ * POST /assets/issue
+ * FR-8: Issues demo assets as CIP-56 holdings (tokenized asset, payment token, sponsor token).
+ */
+assetsRouter.post("/issue", (req, res) => {
+  try {
+    const body = (req.body ?? {}) as {
+      tokenizedAssetOwner?: PartyId;
+      tokenizedAssetInstrument?: string;
+      tokenizedAssetAmount?: string;
+      paymentTokenOwner?: PartyId;
+      paymentTokenInstrument?: string;
+      paymentTokenAmount?: string;
+    };
+    const tAsset = demoStore.mint(
+      body.tokenizedAssetOwner ?? "Alice",
+      body.tokenizedAssetInstrument ?? "CBTC",
+      body.tokenizedAssetAmount ?? "2.0",
+    );
+    const pToken = demoStore.mint(
+      body.paymentTokenOwner ?? "Bob",
+      body.paymentTokenInstrument ?? "USDCx",
+      body.paymentTokenAmount ?? "10000.0",
+    );
+    const sponsorToken = demoStore.mint("Oracle", "cETH", "1.5");
+    res.status(201).json({
+      status: "issued",
+      standard: "CIP-0056",
+      holdings: [tAsset, pToken, sponsorToken],
+    });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});

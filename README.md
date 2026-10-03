@@ -234,7 +234,7 @@ Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshol
 ```bash
 npm test
 ```
-**Automated Gate Results (22/22 Passing):**
+**Automated Gate Results (27/27 Passing):**
 - `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
 - `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
 - `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
@@ -257,6 +257,11 @@ npm test
 - `SRS §12: testWorkflowAcceptance` — confirms acceptance and state progression **[Pass]**
 - `SRS §12: testWorkflowExpiryOrCancel` — confirms stalled workflows resolve cleanly **[Pass]**
 - `SRS §12: testWorkflowSettlement` — confirms settlement completes end to end **[Pass]**
+- `FR-8: demo assets issuance` — tokenized asset & payment tokens as CIP-56 holdings **[Pass]**
+- `FR-9: audit trail per party` — per-party scoped history without privacy leakage **[Pass]**
+- `FR-10: failure path — wrong executor rejected` — blocks unauthorized caller from settlement **[Pass]**
+- `FR-10: failure path — cancelled trade releases allocations` — clean lock release **[Pass]**
+- `FR-10 & FR-11: partial allocation blocks settlement` — gates readiness until all legs matched **[Pass]**
 
 ### 2. Daml Script Test Suite
 Verifies on-ledger sub-transaction semantics, Canton stakeholder visibility, and SRS §12 gates (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
@@ -282,6 +287,12 @@ Runs full network socket tests across backend (:4000) and oracle (:4002):
 npm run test:e2e
 ```
 
+### 4. PRD §7 8-Step Demo Scenario Runner
+Executes the authoritative 8-step PRD walkthrough in a single automated runbook:
+```bash
+npm run demo:scenario
+```
+
 ---
 
 ## 7. Implementation Status & Next Milestones
@@ -292,8 +303,9 @@ npm run test:e2e
 | **Daml Script Test Gates** | Complete (9/9) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV, and SRS §12 |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, circuit-breaker, admin |
 | **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts |
-| **Backend Test Gates** | Passing (22/22) | `npm test` — includes allocation mismatch + allocate→settle |
+| **Backend Test Gates** | Passing (27/27) | `npm test` — covers atomicity, privacy, BitSafe M-of-N, failure paths, and PRD FR-1..11 |
 | **Live E2E Socket Tests** | Passing (13/13) | `npm run test:e2e` verifying live integration across ports :4000 and :4002 |
+| **PRD Demo Scenario Runner** | Passing (8/8) | `npm run demo:scenario` verifying PRD §7 8-step sequence |
 | **Frontend Next.js Views** | Complete (11/11 routes) | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
 | **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
 | **Documentation & Runbooks** | Complete | `DEPLOYMENT.md`, `TESTING.md`, PRD, SRS, Architecture, API, Risk assessment |
@@ -302,11 +314,14 @@ npm run test:e2e
 
 ## 8. Documentation Hub & Deep Dives
 
+- [**CONTRIBUTIONS_REPORT.md**](CONTRIBUTIONS_REPORT.md) — Comprehensive engineering contribution report detailing code, architectures, test suites, and commits delivered by John Okyere (`mhiskall282`) and Demiladepy.
+- [**SettleFlow_PRD.docx**](SettleFlow_PRD.docx) / [**docs/SettleFlow_PRD.md**](docs/SettleFlow_PRD.md) — Authoritative SettleFlow PRD (October 2026 Edition for HackCanton S3).
+- [**SettleFlow_Differentiation.docx**](SettleFlow_Differentiation.docx) / [**docs/SettleFlow_Differentiation.md**](docs/SettleFlow_Differentiation.md) — Authoritative differentiation matrix against CIP-0056, Daml Finance, and CIP-112.
 - [**DEPLOYMENT.md**](DEPLOYMENT.md) — Step-by-step deployment guide covering LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet.
-- [**TESTING.md**](TESTING.md) — Testing manual: Daml scripts, 22 backend gates, E2E, browser allocation walkthrough.
+- [**TESTING.md**](TESTING.md) — Testing manual: Daml scripts, 27 backend gates, E2E, browser allocation walkthrough.
 - [**docs/POSITIONING.md**](docs/POSITIONING.md) — How Settleflow differs from CIP-0056 / Daml Finance / engines.
 - [**docs/SIDE_BY_SIDE.md**](docs/SIDE_BY_SIDE.md) — ~99 vs ~192 LOC builder proof (`examples/`).
-- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Updated PRD.
+- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Historical PRD archive.
 - [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Updated SRS.
 - [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) — PRD PDF archive.
 - [**docs/Composition_Protocol_SRD.pdf**](docs/Composition_Protocol_SRD.pdf) — SRD PDF archive.

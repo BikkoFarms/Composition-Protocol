@@ -1,0 +1,99 @@
+# SettleFlow (Composition Protocol) — Render Blueprint Infrastructure-as-Code
+# Documentation: https://render.com/docs/blueprint-spec
+
+services:
+  # =========================================================================
+  # 1. FRONTEND: Next.js 15 Web Application
+  # =========================================================================
+  - type: web
+    name: settleflow-frontend
+    runtime: node
+    plan: free
+    region: oregon # or frankfurt / ohio / singapore
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          type: web
+          name: settleflow-backend
+          property: host
+          # In production, Render injects the https hostname automatically.
+          # If your client browser requires the full URL, set value to:
+          # https://settleflow-backend.onrender.com
+      - key: NEXT_PUBLIC_ORACLE_URL
+        fromService:
+          type: web
+          name: settleflow-oracle
+          property: host
+
+  # =========================================================================
+  # 2. BACKEND: Express REST API & Canton Ledger Gateway
+  # =========================================================================
+  - type: web
+    name: settleflow-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT
+        value: "4000"
+      - key: LEDGER_MODE
+        value: demo # Set to "ledger" when connecting to live Canton node
+      
+      # Optional live Canton JSON Ledger API v2 credentials
+      # (Leave blank to run in resilient high-fidelity demo mode)
+      - key: LEDGER_API_URL
+        sync: false
+      - key: LEDGER_API_TOKEN
+        sync: false
+      - key: DAML_PACKAGE_ID
+        sync: false
+      - key: DAML_PACKAGE_NAME
+        value: composition
+      
+      # Optional Keycloak OIDC Authentication for shared HackCanton DevNet
+      - key: OIDC_TOKEN_URL
+        sync: false
+      - key: OIDC_AUDIENCE
+        sync: false
+      - key: OIDC_CLIENT_ID
+        sync: false
+      - key: OIDC_CLIENT_SECRET
+        sync: false
+      - key: OIDC_USERNAME
+        sync: false
+      - key: OIDC_PASSWORD
+        sync: false
+
+  # =========================================================================
+  # 3. ORACLE: Canton Commodity Price & Inspection Attestation Service
+  # =========================================================================
+  - type: web
+    name: settleflow-oracle
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: .
+    buildCommand: npm install
+    startCommand: node mocks/oracle/server.mjs
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: PORT
+        value: "4002"
+      - key: ORACLE_SIGNING_KEY
+        generateValue: true
