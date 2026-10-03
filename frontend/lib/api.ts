@@ -6,8 +6,20 @@
  * and structured error unwrapping for atomic revert and governance rejections.
  */
 
-function resolveApiUrl(): string {
+export function resolveApiUrl(): string {
+  // If explicitly configured in environment, use it
   let url = process.env.NEXT_PUBLIC_API_URL;
+
+  // In the browser: if no URL configured or it defaulted to localhost while deployed on Render,
+  // automatically target the live deployed backend service.
+  if (typeof window !== "undefined") {
+    if (!url || url.includes("localhost")) {
+      if (window.location.hostname.includes("onrender.com")) {
+        return "https://settleflow-backend-zcp7.onrender.com";
+      }
+    }
+  }
+
   if (!url) return "http://localhost:4000";
   url = url.trim().replace(/\/+$/, "");
   if (!url.startsWith("http://") && !url.startsWith("https://")) {
@@ -28,7 +40,8 @@ export const API_URL = resolveApiUrl();
  * @throws Error containing server error message (e.g. atomic revert or below threshold)
  */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${API_URL}${path}`;
+  const baseUrl = resolveApiUrl();
+  const url = `${baseUrl}${path}`;
   try {
     const res = await fetch(url, {
       ...init,
