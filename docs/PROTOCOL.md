@@ -1,6 +1,6 @@
-# Composition Protocol — Protocol Interface (PI) & Daml Specification
+# Settleflow — Protocol Interface (PI) & Daml Specification
 
-The **Composition Protocol** is a native, reusable smart contract primitive on Canton that provides **atomic, private, multi-asset settlement**. This document specifies the Protocol Interface (PI), Daml contract schemas, Canton participant integration patterns, and cryptographic privacy guarantees.
+The **Settleflow** is a native, reusable smart contract primitive on Canton that provides **atomic, private, multi-asset settlement**. This document specifies the Protocol Interface (PI), Daml contract schemas, Canton participant integration patterns, and cryptographic privacy guarantees.
 
 ---
 

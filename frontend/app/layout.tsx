@@ -12,7 +12,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata = {
-  title: "Composition Protocol",
+  title: "Settleflow",
   description:
     "Reusable Daml settlement-workflow package on Canton — 3-party DvP with CBTC, USDCx, and cETH, BitSafe governance, and ledger-enforced privacy.",
 };
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton · Composition Layer · CBTC + USDCx + cETH
+          Live on Canton · Settleflow · CBTC + USDCx + cETH
           {" · "}
           <Link href="/demo">Initiate / Settle DvP →</Link>
         </div>
@@ -40,8 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/" className="brand">
               <BrandMark size={30} />
               <span className="brand-text">
-                <span className="brand-name">Composition</span>
-                <span className="brand-sub">Protocol</span>
+                <span className="brand-name">Settleflow</span>
               </span>
             </Link>
             <nav className="nav-scroll" aria-label="Primary">
@@ -70,7 +69,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/" className="brand">
                 <BrandMark size={32} />
                 <span className="brand-text">
-                  <span className="brand-name">Composition Protocol</span>
+                  <span className="brand-name">Settleflow</span>
                 </span>
               </Link>
               <p>
@@ -102,7 +101,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© {new Date().getFullYear()} Composition Protocol</span>
+            <span>© {new Date().getFullYear()} Settleflow</span>
             <span>TradFi settlement discipline · Canton privacy</span>
           </div>
         </footer>

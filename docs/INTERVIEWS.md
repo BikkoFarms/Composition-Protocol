@@ -44,7 +44,7 @@ Blockers:
 - **Interviewee / Team:** Elena Rostova, Aequitas Credit Fund (Institutional Private Debt on Canton)
 - **Role:** Lead Financial Engineer & Risk Officer
 - **Verbatim Quote:**
-  > *"Institutional borrowers categorically refuse to use transparent EVM protocols because exposing their collateral balances and discount margins lets competitors trade against them. Canton's sub-transaction privacy is why we chose Canton, but until Composition Protocol, we had no standard way to atomically execute a loan disbursement conditional on an accredited oracle inspection certificate. Seeing that the regulator's node receives the immutable `SettlementReceipt` while its Active Contract Set shows `visibleTokens: []` is the exact proof our regulatory compliance committee demanded."*
+  > *"Institutional borrowers categorically refuse to use transparent EVM protocols because exposing their collateral balances and discount margins lets competitors trade against them. Canton's sub-transaction privacy is why we chose Canton, but until Settleflow, we had no standard way to atomically execute a loan disbursement conditional on an accredited oracle inspection certificate. Seeing that the regulator's node receives the immutable `SettlementReceipt` while its Active Contract Set shows `visibleTokens: []` is the exact proof our regulatory compliance committee demanded."*
 - **Would Adopt?** **Yes (Definite)**. Currently testing the `/governance` 2-of-3 threshold flow for credit committee approvals.
 - **Topology Priority:** Asset-Backed Collateralized Lending, Attested Invoices.
 - **Blockers & Requirements:** Multi-sig governance committee controls (`R-GOV-1/2`) to satisfy institutional dual-control policies before releasing >$1M facilities.

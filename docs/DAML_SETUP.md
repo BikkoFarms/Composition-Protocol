@@ -1,6 +1,6 @@
 # Daml SDK setup (Windows)
 
-Composition Protocol targets **Daml SDK 3.3.x** (`daml/daml.yaml`).
+Settleflow targets **Daml SDK 3.3.x** (`daml/daml.yaml`).
 
 ## Install
 

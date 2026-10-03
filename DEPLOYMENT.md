@@ -1,6 +1,6 @@
-# Deployment Guide — Canton Composition Layer
+# Deployment Guide — Settleflow
 
-This document provides complete, step-by-step deployment instructions for the **Canton Composition Layer** across all supported operational topologies:
+This document provides complete, step-by-step deployment instructions for the **Settleflow** across all supported operational topologies:
 1. **LocalNet / Demo Mode** (Zero external dependencies; in-memory Daml ACS simulation)
 2. **Docker Compose Multi-Service Topology** (Containerized Backend, Frontend, and Oracle)
 3. **Local Canton Participant Node / DevKit Sandbox** (Daml SDK 3.3.x on `:7575`)

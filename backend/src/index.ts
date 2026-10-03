@@ -8,7 +8,7 @@ import { auditRouter } from "./routes/audit.js";
 import { adminRouter } from "./routes/admin.js";
 
 /**
- * Composition Protocol Backend API Gateway
+ * Settleflow Backend API Gateway
  *
  * Provides a unified REST API layer interfacing with both:
  * 1. Live Canton JSON Ledger API v2 (when LEDGER_API_URL / credentials configured)
@@ -83,7 +83,7 @@ app.use("/admin", adminRouter);
 
 app.listen(port, async () => {
   console.log(
-    `Composition Protocol API on :${port} (mode=${ledger ? "ledger" : "demo"})`,
+    `Settleflow API on :${port} (mode=${ledger ? "ledger" : "demo"})`,
   );
   if (!ledger) {
     console.log(

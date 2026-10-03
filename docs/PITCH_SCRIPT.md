@@ -1,4 +1,4 @@
-# Canton Composition Layer — HackCanton Season 3 Video Pitch Script & Judge Guide
+# Settleflow — HackCanton Season 3 Video Pitch Script & Judge Guide
 
 **Duration:** Under 3 minutes (Target: 175 seconds)  
 **Track:** Track 1: Real-World Assets (RWA) & Business Workflows  
@@ -10,7 +10,7 @@
 ## 1. Executive Framing for Judges
 
 > **What it is:**  
-> Canton Composition Layer is a reusable, wallet-compatible Daml package for structured settlement workflows on Canton, starting with a concrete 3-party Delivery-versus-Payment (DvP) pattern. It packages the repeated workflow logic around settlement (pre-atomic authorization, propose/accept coordination, disclosed contract handling, expiry/cancel paths, and reusable settlement completion) so builders do not have to rebuild it from scratch for each new use case.
+> Settleflow is a reusable, wallet-compatible Daml package for structured settlement workflows on Canton, starting with a concrete 3-party Delivery-versus-Payment (DvP) pattern. It packages the repeated workflow logic around settlement (pre-atomic authorization, propose/accept coordination, disclosed contract handling, expiry/cancel paths, and reusable settlement completion) so builders do not have to rebuild it from scratch for each new use case.
 
 > **What it is NOT:**  
 > - Not a general Canton execution layer  
@@ -28,7 +28,7 @@
 
 | Segment | Timing | Visual Action (Screen) | Spoken Audio Voiceover Script |
 | :--- | :---: | :--- | :--- |
-| **Opening** | 0:00 – 0:25 | Landing page (`/`), displaying the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Canton Composition Layer is a reusable Daml package for structured settlement workflows on Canton. The problem is that builders keep rewriting the same workflow plumbing for every new use case. We start with a 3-party DvP pattern to show how that logic can be reused instead of rebuilt."* |
+| **Opening** | 0:00 – 0:25 | Landing page (`/`), displaying the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Settleflow is a reusable Daml package for structured settlement workflows on Canton. The problem is that builders keep rewriting the same workflow plumbing for every new use case. We start with a 3-party DvP pattern to show how that logic can be reused instead of rebuilt."* |
 | **Step 1 — Setup** | 0:25 – 0:50 | Switch to `/demo`. Highlight the configured parties (Party A: Exporter Alice, Party B: Lender Bob, Party C: Oracle). | *"I’ll start by showing the workflow configuration and the parties involved. This is the reusable package loaded with a structured settlement pattern: Alice brings tokenized commodity collateral, Bob provides USDCx working capital, and our Oracle supplies a cryptographically verified quality grade."* |
 | **Step 2 — Create Workflow** | 0:50 – 1:15 | Click **"Initiate Proposal"** or observe the active proposal specimen card. Show proposal details. | *"Now the workflow is initiated. You can see the proposal created and the relevant parties notified, with only the intended parties seeing the right parts of the flow via Canton's native stakeholder model."* |
 | **Step 3 — Accept / Coordinate** | 1:15 – 1:40 | Show counterparty acceptances checking off in real time on the `AcceptanceTracker`. | *"Next, the counterparties accept and the workflow advances. This is the repeated multi-party co-signing logic that teams normally rebuild by hand across weeks of bespoke Daml engineering."* |

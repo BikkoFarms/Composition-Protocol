@@ -1,5 +1,5 @@
 /**
- * Composition Protocol — Frontend HTTP API Client
+ * Settleflow — Frontend HTTP API Client
  *
  * Provides a type-safe fetch wrapper communicating with the Express backend (:4000).
  * Enforces JSON serialization, cache: "no-store" for real-time ledger polling,

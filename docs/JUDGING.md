@@ -1,6 +1,6 @@
 # HackCanton Season 3 — Judging & Evaluation Guide
 
-This guide assists judges in evaluating the **Composition Protocol** (Canton Composition Layer) against HackCanton Season 3's official criteria and prize categories.
+This guide assists judges in evaluating the **Settleflow** (Settleflow) against HackCanton Season 3's official criteria and prize categories.
 
 **Team:** Revotoken Africa  
 **Primary Track:** Track 1 (RWA & Business Workflows)  
@@ -38,7 +38,7 @@ This guide assists judges in evaluating the **Composition Protocol** (Canton Com
 
 ## 2. Alignment with HackCanton Season 3 Track 1: RWA & Business Workflows
 
-| Track 1 Pillar | Official HackCanton Focus | Composition Protocol Implementation | Verification Reference |
+| Track 1 Pillar | Official HackCanton Focus | Settleflow Implementation | Verification Reference |
 | :--- | :--- | :--- | :--- |
 | **1. Issuance** | Tokenization of RWAs, registry models, CIP-0056. | `ComposableAsset` wrapping commodities and sponsor assets (**CBTC, USDCx, cETH**). Treasury mint via Admin. | [ComposableAsset.daml](../daml/daml/ComposableAsset.daml), [admin.ts](../backend/src/routes/admin.ts) |
 | **2. Transfers** | Multi-asset exchange, atomic DvP/PvP. | Single-transaction multi-leg settlement (`R-ATOM-1/2`). | [Composition.daml](../daml/daml/Composition.daml) |
@@ -61,7 +61,7 @@ This guide assists judges in evaluating the **Composition Protocol** (Canton Com
 
 ## 4. Judging Matrix Alignment
 
-| Criterion | How Composition Protocol Excels |
+| Criterion | How Settleflow Excels |
 | :--- | :--- |
 | **1. Value** | Removes repeated propose/accept/disclose/expiry/settle plumbing. |
 | **2. ICP** | Builders (venues calling the package) and trade-finance operators. |

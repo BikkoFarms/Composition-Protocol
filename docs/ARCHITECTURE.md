@@ -1,12 +1,12 @@
-# Composition Protocol — Architectural Specification & Technical Blueprint
+# Settleflow — Architectural Specification & Technical Blueprint
 
-This document details the architectural design, security properties, transaction mechanics, and privacy boundaries of the **Composition Protocol**, an atomic, private, multi-asset settlement primitive built on Canton for HackCanton Season 3.
+This document details the architectural design, security properties, transaction mechanics, and privacy boundaries of the **Settleflow**, an atomic, private, multi-asset settlement primitive built on Canton for HackCanton Season 3.
 
 ---
 
 ## 1. Architectural Overview & System Decomposition
 
-Composition Protocol separates concerns into four distinct, loosely coupled layers:
+Settleflow separates concerns into four distinct, loosely coupled layers:
 
 ```mermaid
 graph TD

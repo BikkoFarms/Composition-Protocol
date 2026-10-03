@@ -1,4 +1,4 @@
-# Composition Protocol — Implementation Audit & Requirements Verification
+# Settleflow — Implementation Audit & Requirements Verification
 
 This document cross-references every Functional Requirement (FR), System Requirement (SR), and validation gate defined in the **Product Requirements Document (PRD)** and **Software Requirements Document (SRD)** against the active codebase.
 
@@ -32,7 +32,7 @@ This document cross-references every Functional Requirement (FR), System Require
 ### Backend Unit & Integration Gates (`npm test` — 20/20 Passing)
 ```
 TAP version 13
-# Subtest: Composition Protocol demo gates
+# Subtest: Settleflow demo gates
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
     ok 2 - testAtomicRevert — failed leg leaves no half-state
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt

@@ -1,8 +1,8 @@
-# Composition Protocol — Project Context & System Architecture
+# Settleflow — Project Context & System Architecture
 
 ## 1. Executive Summary & Problem Space
 
-**Composition Protocol** is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; Track 2: Financial Applications framing; BitSafe Decentralization challenge secondary).
+**Settleflow** is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; Track 2: Financial Applications framing; BitSafe Decentralization challenge secondary).
 
 - **Team:** Revotoken Africa
 - **Core Motto:** *"The protocol is the product. The trade-finance flow is the demo that gives it a face."*
@@ -13,7 +13,7 @@ While **CIP-0056** made single assets portable across Canton domains, real insti
 - A bond-plus-CDS is a bond leg + a protection leg + a premium leg.
 - African commodity trade finance is tokenized warehouse collateral + liquidity cash disbursal + third-party grade attestation.
 
-Prior to Composition Protocol, every protocol team on Canton had to rebuild atomic multi-leg settlement and party-visibility logic from scratch. Composition Protocol eliminates this redundancy by providing a shared, verifiable primitive.
+Prior to Settleflow, every protocol team on Canton had to rebuild atomic multi-leg settlement and party-visibility logic from scratch. Settleflow eliminates this redundancy by providing a shared, verifiable primitive.
 
 ---
 

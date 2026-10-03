@@ -1,4 +1,4 @@
-# Composition Protocol
+# Settleflow
 
 **Atomic, private, multi-asset settlement primitive built on Canton.**  
 Demonstrated through cross-border African commodity trade finance.
@@ -16,7 +16,7 @@ Demonstrated through cross-border African commodity trade finance.
 
 While **CIP-0056** made digital assets portable across Canton domains, real-world finance requires them to be **combinable**. Standard business transactions do not happen in isolation: a delivery-versus-payment (DvP) trade or collateralized trade-finance facility requires collateral transfer, cash disbursal, and third-party attestations to settle concurrently.
 
-**Composition Protocol** delivers a reusable Daml primitive that bundles multiple distinct asset transfers into a single transaction that **either fully settles or completely aborts (all-or-nothing)**, while enforcing **per-leg privacy** directly through Canton’s cryptographic stakeholder model (`signatory` and `observer`).
+**Settleflow** delivers a reusable Daml primitive that bundles multiple distinct asset transfers into a single transaction that **either fully settles or completely aborts (all-or-nothing)**, while enforcing **per-leg privacy** directly through Canton’s cryptographic stakeholder model (`signatory` and `observer`).
 
 ### Hackathon Tracks
 - **Primary Track — Track 1 (RWA & Business Workflows):** Multi-asset atomic settlement primitive solving DvP, trade-finance collateralization, and multi-party asset orchestration without trusted central escrow.
@@ -26,8 +26,7 @@ While **CIP-0056** made digital assets portable across Canton domains, real-worl
 ### Reference Use Case: African Commodity Trade Finance (3 Legs)
 ```
              ┌─────────────────────────┐
-             │       Composition       │
-             │        Protocol         │
+             │       Settleflow        │
              └───────────┬─────────────┘
                          │
      ┌───────────────────┼───────────────────┐

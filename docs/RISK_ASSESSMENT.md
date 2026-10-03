@@ -1,6 +1,6 @@
-# Composition Protocol — Risk Assessment & Status Audit
+# Settleflow — Risk Assessment & Status Audit
 
-**Project:** Composition Protocol  
+**Project:** Settleflow  
 **Repository:** [https://github.com/BikkoFarms/Composition-Protocol.git](https://github.com/BikkoFarms/Composition-Protocol.git)  
 **Hackathon:** HackCanton Season 3 (Track 1: RWA & Business Workflows | BitSafe Decentralization Challenge)  
 **Date:** September 2026  
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Composition Protocol is an atomic, private, multi-asset settlement primitive built natively on the Canton Network. This document provides a transparent, rigorous technical and operational risk assessment for judges, contributors, and institutional operators.
+Settleflow is an atomic, private, multi-asset settlement primitive built natively on the Canton Network. This document provides a transparent, rigorous technical and operational risk assessment for judges, contributors, and institutional operators.
 
 Every protocol subsystem is evaluated across two axes:
 1. **Mathematical / Protocol-Level Guarantees:** Invariants enforced strictly by Daml semantics and Canton's distributed consensus engine.

@@ -1,12 +1,12 @@
-# Contributing to Composition Protocol
+# Contributing to Settleflow
 
-Welcome to **Composition Protocol**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
+Welcome to **Settleflow**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
 
 ---
 
 ## 1. Quick Onboarding & Architecture Map
 
-Composition Protocol is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
+Settleflow is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
 
 ```
 Composition-Protocol/

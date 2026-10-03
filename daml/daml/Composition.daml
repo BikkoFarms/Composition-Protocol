@@ -1,4 +1,4 @@
--- | Canton Composition Layer — reusable settlement-workflow package (Daml 3.x).
+-- | Settleflow — reusable settlement-workflow package (Daml 3.x).
 -- Contracts: ComposableWorkflow, WorkflowProposal, AcceptanceTracker,
 --            WorkflowAgreement, LegAllocation, SettlementReceipt.
 -- Lifecycle: Propose → Accept (tracker gates) → Allocate → Settle (atomic match) → Expire/Cancel.

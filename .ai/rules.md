@@ -1,8 +1,8 @@
-# Composition Protocol — Agentic Architectural Rules & System Constraints
+# Settleflow — Agentic Architectural Rules & System Constraints
 
 ## 1. System Identity & Mission
-Composition Protocol is an atomic, private, multi-asset settlement primitive built on Canton for HackCanton Season 3 (Track 1: RWA & Business Workflows primary; BitSafe Decentralization challenge secondary).
-- **Core Premise:** While CIP-0056 made individual assets portable, Composition Protocol makes them *combinable*.
+Settleflow is an atomic, private, multi-asset settlement primitive built on Canton for HackCanton Season 3 (Track 1: RWA & Business Workflows primary; BitSafe Decentralization challenge secondary).
+- **Core Premise:** While CIP-0056 made individual assets portable, Settleflow makes them *combinable*.
 - **Reference Flow:** African commodity trade finance across 3 legs (Collateral: CBTC, Cash: USDCx, Attestation: Oracle Grade).
 - **Golden Rule:** "The protocol is the product. The trade-finance flow is the demo that gives it a face."
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import { DemoStore } from "./demoStore.js";
 
-describe("Composition Protocol demo gates", () => {
+describe("Settleflow demo gates", () => {
   let store: DemoStore;
 
   beforeEach(() => {

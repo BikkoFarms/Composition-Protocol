@@ -1,8 +1,8 @@
-# Side-by-side: Composition Protocol vs hand-rolled 3-party DvP
+# Side-by-side: Settleflow vs hand-rolled 3-party DvP
 
 **Pitch proof:** adopt the Composition layer instead of writing coordination by hand.
 
-| | **With Composition Protocol** | **Hand-rolled equivalent** |
+| | **With Settleflow** | **Hand-rolled equivalent** |
 |---|---|---|
 | Artifact | [`examples/with-layer/ThreePartyDvp.daml`](../examples/with-layer/ThreePartyDvp.daml) | [`examples/hand-rolled/HandRolledDvp.daml`](../examples/hand-rolled/HandRolledDvp.daml) |
 | Lines (approx.) | **~99** (orchestration only) | **~192** (proposal, accept gate, allocations, atomic settle, privacy receipt, expire/cancel) |

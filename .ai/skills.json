@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "name": "composition-protocol-agent-skills",
   "version": "1.0.0",
-  "description": "Agent capabilities for Composition Protocol: Daml template development, Canton Ledger API v2 integration, Express routing, and atomicity/privacy test gates.",
+  "description": "Agent capabilities for Settleflow: Daml template development, Canton Ledger API v2 integration, Express routing, and atomicity/privacy test gates.",
   "skills": [
     {
       "id": "build-daml-templates",

@@ -1,6 +1,6 @@
-# Comprehensive Testing Guide — Canton Composition Layer
+# Comprehensive Testing Guide — Settleflow
 
-This document is the official, step-by-step testing manual for verifying the **Canton Composition Layer**. It guides developers, auditors, and hackathon judges through each test layer—from on-ledger Daml contracts to automated backend test gates, live end-to-end network tests, and interactive UI verification.
+This document is the official, step-by-step testing manual for verifying the **Settleflow**. It guides developers, auditors, and hackathon judges through each test layer—from on-ledger Daml contracts to automated backend test gates, live end-to-end network tests, and interactive UI verification.
 
 ---
 
@@ -49,7 +49,7 @@ npm test
 All 20 test suites pass with **0 failures**:
 ```
 TAP version 13
-# Subtest: Composition Protocol demo gates
+# Subtest: Settleflow demo gates
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
     ok 2 - testAtomicRevert — failed leg leaves no half-state
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt
@@ -71,7 +71,7 @@ TAP version 13
     ok 19 - SRS §12: testWorkflowExpiryOrCancel — confirms stalled workflows resolve cleanly
     ok 20 - SRS §12: testWorkflowSettlement — confirms settlement completes end to end
 1..20
-ok 1 - Composition Protocol demo gates
+ok 1 - Settleflow demo gates
 # tests 20
 # suites 1
 # pass 20

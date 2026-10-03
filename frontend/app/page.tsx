@@ -6,7 +6,7 @@ export default function HomePage() {
       <section className="hero hero-product">
         <div>
           <span className="pill">
-            Canton Composition Layer
+            Settleflow
             <span className="pill-arrow">→</span>
           </span>
           <h1>Close the whole deal. Or nothing moves.</h1>
@@ -223,14 +223,13 @@ export default function HomePage() {
         </div>
         <div className="faq-list">
           <details className="faq-item" open>
-            <summary>What is Composition Protocol?</summary>
+            <summary>What is Settleflow?</summary>
             <p>
-              The product name for our Canton Composition Layer: a reusable Daml
-              package for structured settlement workflows. Builders get
-              propose/accept coordination, disclosed contracts, expiry/cancel
-              paths, and atomic settlement completion without rewriting that
-              plumbing for every use case. The CBTC / USDCx / cETH desk is the
-              working 3-party DvP specimen.
+              Settleflow is a reusable Daml package for structured settlement
+              workflows on Canton. Builders get propose/accept coordination,
+              disclosed contracts, expiry/cancel paths, and atomic settlement
+              completion without rewriting that plumbing for every use case.
+              The CBTC / USDCx / cETH desk is the working 3-party DvP specimen.
             </p>
           </details>
           <details className="faq-item">

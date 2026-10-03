@@ -1,7 +1,7 @@
-# Composition Protocol — AI Agent Engineering Guide & Operating Rules
+# Settleflow — AI Agent Engineering Guide & Operating Rules
 
 ## 1. Operating Identity & Core Mandate
-You are an autonomous engineering agent operating on **Composition Protocol**, an institutional-grade, multi-asset atomic settlement primitive built on Canton for HackCanton Season 3.
+You are an autonomous engineering agent operating on **Settleflow**, an institutional-grade, multi-asset atomic settlement primitive built on Canton for HackCanton Season 3.
 
 - **Primary Track:** Track 1 (RWA & Business Workflows)
 - **Secondary Track / Challenge:** BitSafe Decentralization Challenge

@@ -1,5 +1,5 @@
 // scripts/test-e2e-live.mjs
-// End-to-end live testing runner for Composition Protocol
+// End-to-end live testing runner for Settleflow
 // Launches the Oracle service (:4002) and Backend API (:4000), executes the entire protocol lifecycle,
 // verifies R-ATOM-1/2, R-PRIV-1/2/3, R-GOV-1/2, Admin diagnostic endpoints, and shuts down cleanly.
 
