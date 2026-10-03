@@ -1,4 +1,4 @@
-# Settleflow
+# Settle Flow
 
 **Trade-level settlement coordination on Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, on top of CIP-0056.  
 Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / USDCx / cETH).
@@ -8,7 +8,7 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 [![Challenge](https://img.shields.io/badge/Secondary-BitSafe%20Decentralization%20Challenge-purple.svg)](#bitsafe-decentralization-challenge)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settleflow owns the trade. The trade-finance desk is the demo that gives it a face.
+> **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settle Flow owns the trade. The trade-finance desk is the demo that gives it a face.
 
 **How we differ from CIP-0056 / Daml Finance / other engines:** [docs/POSITIONING.md](docs/POSITIONING.md)
 
@@ -16,9 +16,9 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 
 ## 1. Project Overview & Track Details
 
-While **CIP-0056** made digital assets portable and defined **per-leg allocations** (execute / withdraw / cancel), apps still hand-write the **trade**: one deal object, allocation matching, readiness across legs, who may execute or cancel, and failure cleanup. Atomic multi-leg settlement is already a Canton capability — it is not Settleflow’s differentiator.
+While **CIP-0056** made digital assets portable and defined **per-leg allocations** (execute / withdraw / cancel), apps still hand-write the **trade**: one deal object, allocation matching, readiness across legs, who may execute or cancel, and failure cleanup. Atomic multi-leg settlement is already a Canton capability — it is not Settle Flow’s differentiator.
 
-**Settleflow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel, and ledger-enforced per-party privacy (`SettlementReceipt` for auditors; legs stay off their ACS).
+**Settle Flow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel, and ledger-enforced per-party privacy (`SettlementReceipt` for auditors; legs stay off their ACS).
 
 ### Hackathon Tracks
 - **Primary Track — Track 1 (RWA & Business Workflows):** Multi-asset atomic settlement primitive solving DvP, trade-finance collateralization, and multi-party asset orchestration without trusted central escrow.
@@ -234,7 +234,7 @@ Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshol
 ```bash
 npm test
 ```
-**Automated Gate Results (27/27 Passing):**
+**Automated Gate Results (33/33 Passing):**
 - `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
 - `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
 - `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
@@ -262,6 +262,12 @@ npm test
 - `FR-10: failure path — wrong executor rejected` — blocks unauthorized caller from settlement **[Pass]**
 - `FR-10: failure path — cancelled trade releases allocations` — clean lock release **[Pass]**
 - `FR-10 & FR-11: partial allocation blocks settlement` — gates readiness until all legs matched **[Pass]**
+- `FR-10: failure path — withdrawn leg blocks settlement` — unallocating blocks settle until restored **[Pass]**
+- `FR-12: allocate-by and settle-by deadlines` — time-bounded expiration prevents stranded trades **[Pass]**
+- `FR-13: permissioning matrix` — stage-based execute and cancel access control **[Pass]**
+- `FR-14: privacy rules` — strict third-party isolation vs counterparties **[Pass]**
+- `FR-16: settlement backend adapter` — pluggable settlement engine abstraction **[Pass]**
+- `FR-19: policy hooks` — sanctions eligibility, transaction limits, and fees **[Pass]**
 
 ### 2. Daml Script Test Suite
 Verifies on-ledger sub-transaction semantics, Canton stakeholder visibility, and SRS §12 gates (requires [Daml SDK 3.3.x](https://docs.daml.com/)):

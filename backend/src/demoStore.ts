@@ -81,6 +81,12 @@ export type DisclosedContract = {
   payload?: Record<string, unknown>;
 };
 
+export type PolicyConfig = {
+  maxTransactionAmount?: number;
+  blockedParties?: PartyId[];
+  feeBps?: number;
+};
+
 export type Composition = {
   id: string;
   proposalCid: string;
@@ -101,6 +107,9 @@ export type Composition = {
   collateralRatio?: string;
   ltvPercent?: number;
   expiresAt?: string;
+  allocateBy?: string;
+  settleBy?: string;
+  policyConfig?: PolicyConfig;
   rejectionReason?: string;
   disclosedContracts?: DisclosedContract[];
   settledAt?: string;
@@ -297,9 +306,40 @@ export class DemoStore {
     forceFail?: boolean;
     requireGovernance?: boolean;
     expiresAt?: string;
+    allocateBy?: string;
+    settleBy?: string;
+    policyConfig?: PolicyConfig;
     disclosedContracts?: DisclosedContract[];
   }): Composition {
     if (input.legs.length < 2) throw new Error("at least two legs required");
+
+    // Policy hooks: Eligibility & limits checks (FR-19)
+    if (input.policyConfig) {
+      if (input.policyConfig.blockedParties) {
+        if (input.policyConfig.blockedParties.includes(input.proposer)) {
+          throw new Error(
+            `policy violation: proposer ${input.proposer} is ineligible / sanctioned`,
+          );
+        }
+        for (const cp of input.counterparties) {
+          if (input.policyConfig.blockedParties.includes(cp)) {
+            throw new Error(
+              `policy violation: counterparty ${cp} is ineligible / sanctioned`,
+            );
+          }
+        }
+      }
+      if (input.policyConfig.maxTransactionAmount) {
+        for (const leg of input.legs) {
+          if (Number(leg.amount) > input.policyConfig.maxTransactionAmount) {
+            throw new Error(
+              `policy violation: leg ${leg.legId} amount ${leg.amount} exceeds max transaction limit ${input.policyConfig.maxTransactionAmount}`,
+            );
+          }
+        }
+      }
+    }
+
     const defaultDeadline = new Date(
       Date.now() + 7 * 24 * 60 * 60 * 1000,
     ).toISOString();
@@ -337,6 +377,8 @@ export class DemoStore {
     const expiresAt =
       input.expiresAt ??
       new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const allocateBy = input.allocateBy ?? defaultDeadline;
+    const settleBy = input.settleBy ?? defaultDeadline;
 
     const c: Composition = {
       id,
@@ -358,6 +400,9 @@ export class DemoStore {
       collateralRatio,
       ltvPercent,
       expiresAt,
+      allocateBy,
+      settleBy,
+      policyConfig: input.policyConfig,
       disclosedContracts: input.disclosedContracts ?? [],
       forceFail: input.forceFail,
       requireGovernance: input.requireGovernance,
@@ -523,6 +568,11 @@ export class DemoStore {
     },
   ): { composition: Composition; allocation: Allocation; commit: CommitRecord } {
     const c = this.require(compositionId);
+    if (c.allocateBy && new Date(c.allocateBy).getTime() < Date.now()) {
+      throw new Error(
+        `allocation match failed: allocate-by deadline passed (${c.allocateBy})`,
+      );
+    }
     if (
       c.status !== "accepted" &&
       c.status !== "allocating" &&
@@ -671,13 +721,72 @@ export class DemoStore {
     return this.require(compositionId);
   }
 
-  /** Proposer cancellation before execution */
+  /**
+   * FR-10: Withdraw a previously posted leg allocation before settlement.
+   * Reverts composition status from ready_to_settle to allocating.
+   * Releases the allocation back to the provider.
+   */
+  withdrawLeg(
+    compositionId: string,
+    legId: string,
+    caller: PartyId,
+  ): { composition: Composition; withdrawnAllocation: Allocation; commit: CommitRecord } {
+    const c = this.require(compositionId);
+    if (c.status === "settled") {
+      throw new Error("cannot withdraw leg: composition already settled");
+    }
+    const allocIndex = c.allocations.findIndex((a) => a.legId === legId);
+    if (allocIndex === -1) {
+      throw new Error(`cannot withdraw leg: no allocation posted for leg ${legId}`);
+    }
+    const alloc = c.allocations[allocIndex];
+    if (alloc.provider !== caller && caller !== "Operator") {
+      throw new Error(
+        `cannot withdraw leg: only leg provider ${alloc.provider} or Operator can withdraw allocation`,
+      );
+    }
+    const [withdrawnAllocation] = c.allocations.splice(allocIndex, 1);
+    c.status = "allocating";
+    const commit = this.pushCommit(
+      c,
+      "WithdrawLegAllocation",
+      alloc.allocationCid,
+      ["Operator", caller],
+      `Withdrew CIP-56 allocation for leg ${legId} by ${caller}`,
+    );
+    this.recordEvent({
+      id: c.id,
+      type: "reverted",
+      timestamp: new Date().toISOString(),
+      legs: c.legs.length,
+      description: `${c.description} (Leg ${legId} allocation withdrawn by ${caller})`,
+    });
+    return { composition: c, withdrawnAllocation, commit };
+  }
+
+  /**
+   * FR-13 & FR-7: Stage-based cancellation permissioning.
+   * - In proposed/partially_accepted stage: only proposer or Operator can cancel.
+   * - In accepted/allocating/ready_to_settle stage: proposer, counterparties, or Operator can cancel.
+   * - In settled stage: cancellation is permanently blocked.
+   * Releases any locked leg allocations back to participants (FR-7 & FR-10).
+   */
   cancel(compositionId: string, caller: PartyId): Composition {
     const c = this.require(compositionId);
     if (c.status === "settled") throw new Error("cannot cancel settled composition");
-    if (c.proposer !== caller && caller !== "Operator" && !c.counterparties.includes(caller)) {
-      throw new Error(`only proposer ${c.proposer} or Operator can cancel`);
+    
+    const isProposer = c.proposer === caller;
+    const isOperator = caller === "Operator";
+    const isCounterparty = c.counterparties.includes(caller);
+
+    if ((c.status === "proposed" || c.status === "partially_accepted") && !isProposer && !isOperator) {
+      throw new Error(`stage permission: only proposer ${c.proposer} or Operator can cancel proposal`);
     }
+
+    if (!isProposer && !isOperator && !isCounterparty) {
+      throw new Error(`stage permission: unauthorized caller ${caller} cannot cancel trade`);
+    }
+
     c.status = "cancelled";
     c.allocations = []; // release locked allocations
     this.recordEvent({
@@ -690,7 +799,10 @@ export class DemoStore {
     return c;
   }
 
-  /** Expiry path: resolves stalled or timed-out proposals cleanly */
+  /**
+   * FR-12: Expiry path: resolves stalled or timed-out proposals/settlements cleanly.
+   * Releases any locked allocations so no trade is stranded.
+   */
   expire(
     compositionId: string,
     caller: PartyId = "Operator",
@@ -699,16 +811,24 @@ export class DemoStore {
     const c = this.require(compositionId);
     if (c.status === "settled") throw new Error("cannot expire settled composition");
     const now = simulatedNow ?? new Date();
-    if (c.expiresAt && now < new Date(c.expiresAt)) {
-      throw new Error(`proposal has not expired (expires at ${c.expiresAt})`);
+
+    const isExpiredAt = Boolean(c.expiresAt && now >= new Date(c.expiresAt));
+    const isAllocateByExpired = Boolean(
+      c.allocateBy && now >= new Date(c.allocateBy) && c.status !== "ready_to_settle",
+    );
+    const isSettleByExpired = Boolean(c.settleBy && now >= new Date(c.settleBy));
+
+    if (!isExpiredAt && !isAllocateByExpired && !isSettleByExpired) {
+      throw new Error(`proposal has not expired (expires at ${c.expiresAt ?? c.allocateBy ?? c.settleBy})`);
     }
     c.status = "expired";
+    c.allocations = []; // release locked allocations so funds are never stranded (FR-12)
     this.recordEvent({
       id: c.id,
       type: "reverted",
       timestamp: now.toISOString(),
       legs: c.legs.length,
-      description: `${c.description} (Expired by ${caller})`,
+      description: `${c.description} (Expired by ${caller} — allocations released)`,
     });
     return c;
   }
@@ -754,6 +874,11 @@ export class DemoStore {
       );
     }
     const c = this.require(compositionId);
+    if (c.settleBy && new Date(c.settleBy).getTime() < Date.now()) {
+      throw new Error(
+        `settlement rejected: settle-by deadline passed (${c.settleBy})`,
+      );
+    }
     if (caller && c.executor && caller !== c.executor && caller !== "Operator") {
       throw new Error(
         `settlement rejected: wrong executor (caller ${caller} is not designated executor ${c.executor})`,

@@ -1,5 +1,5 @@
 /**
- * Settleflow mark — seal geometry with interlocking SF (Settleflow).
+ * Settle Flow mark — seal geometry with interlocking SF (Settle Flow).
  */
 export function BrandMark({
   size = 28,
@@ -17,7 +17,7 @@ export function BrandMark({
       viewBox="0 0 48 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-label="Settleflow"
+      aria-label="Settle Flow"
       role="img"
     >
       <defs>

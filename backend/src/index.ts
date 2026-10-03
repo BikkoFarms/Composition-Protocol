@@ -83,7 +83,7 @@ app.use("/admin", adminRouter);
 
 app.listen(port, async () => {
   console.log(
-    `Settleflow API on :${port} (mode=${ledger ? "ledger" : "demo"})`,
+    `Settle Flow API on :${port} (mode=${ledger ? "ledger" : "demo"})`,
   );
   if (!ledger) {
     console.log(

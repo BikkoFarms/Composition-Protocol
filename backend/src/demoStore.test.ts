@@ -421,6 +421,259 @@ describe("Settleflow demo gates", () => {
     );
     assert.equal(store.require(c.id).status, "allocating");
   });
+
+  it("FR-10: failure path — withdrawn leg blocks settlement until re-allocated", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
+    assert.equal(store.require(c.id).status, "ready_to_settle");
+
+    // Oracle withdraws the sponsor leg
+    const { withdrawnAllocation } = store.withdrawLeg(c.id, "sponsor", "Oracle");
+    assert.equal(withdrawnAllocation.legId, "sponsor");
+    assert.equal(store.require(c.id).status, "allocating");
+    assert.equal(store.require(c.id).allocations.length, 2);
+
+    // Settlement must reject because a leg was withdrawn
+    assert.throws(
+      () => store.settle(c.id),
+      /expected 3 allocations, got 2/,
+    );
+
+    // Re-allocating the withdrawn leg restores readiness and allows atomic settlement
+    const sponsorLeg = c.legs.find((l) => l.legId === "sponsor")!;
+    store.allocate(c.id, { ...sponsorLeg });
+    assert.equal(store.require(c.id).status, "ready_to_settle");
+    const settled = store.settle(c.id);
+    assert.equal(settled.status, "settled");
+  });
+
+  it("FR-12: allocate-by and settle-by deadlines prevent stranded trades", () => {
+    const past = new Date(Date.now() - 10_000).toISOString();
+    const future = new Date(Date.now() + 100_000).toISOString();
+    const aliceTok = store.listTokens("Alice").find((t) => t.instrumentId === "CBTC")!;
+    const bobTok = store.listTokens("Bob").find((t) => t.instrumentId === "USDCx")!;
+
+    // Past allocateBy deadline
+    const expiredAlloc = store.propose({
+      proposer: "Alice",
+      counterparties: ["Bob"],
+      description: "Expired allocation test",
+      allocateBy: past,
+      legs: [
+        {
+          legId: "leg1",
+          instrumentId: "CBTC",
+          amount: aliceTok.amount,
+          provider: "Alice",
+          receiver: "Bob",
+          assetCid: aliceTok.contractId,
+        },
+        {
+          legId: "leg2",
+          instrumentId: "USDCx",
+          amount: bobTok.amount,
+          provider: "Bob",
+          receiver: "Alice",
+          assetCid: bobTok.contractId,
+        },
+      ],
+    });
+    store.accept(expiredAlloc.id, "Bob");
+    assert.throws(
+      () => store.allocate(expiredAlloc.id, { ...expiredAlloc.legs[0] }),
+      /allocate-by deadline passed/,
+    );
+    // Expiry can be cleanly triggered to release trade
+    const expired = store.expire(expiredAlloc.id);
+    assert.equal(expired.status, "expired");
+
+    // Past settleBy deadline
+    const expiredSettle = store.propose({
+      proposer: "Alice",
+      counterparties: ["Bob"],
+      description: "Expired settlement test",
+      allocateBy: future,
+      settleBy: past,
+      legs: [
+        {
+          legId: "leg1",
+          instrumentId: "CBTC",
+          amount: aliceTok.amount,
+          provider: "Alice",
+          receiver: "Bob",
+          assetCid: aliceTok.contractId,
+        },
+        {
+          legId: "leg2",
+          instrumentId: "USDCx",
+          amount: bobTok.amount,
+          provider: "Bob",
+          receiver: "Alice",
+          assetCid: bobTok.contractId,
+        },
+      ],
+    });
+    store.accept(expiredSettle.id, "Bob");
+    store.allocate(expiredSettle.id, { ...expiredSettle.legs[0] });
+    store.allocate(expiredSettle.id, { ...expiredSettle.legs[1] });
+    assert.throws(
+      () => store.settle(expiredSettle.id),
+      /settle-by deadline passed/,
+    );
+  });
+
+  it("FR-13: permissioning matrix enforces stage-based execute and cancel rights", () => {
+    const c = store.proposeTradeFinance();
+    // In proposed stage: counterparty Bob cannot cancel yet (only proposer Alice or Operator)
+    assert.throws(
+      () => store.cancel(c.id, "Bob"),
+      /stage permission: only proposer Alice or Operator can cancel proposal/,
+    );
+    // Unrelated party cannot cancel
+    assert.throws(
+      () => store.cancel(c.id, "Gov1"),
+      /stage permission: only proposer Alice or Operator can cancel proposal/,
+    );
+
+    // Once accepted: counterparties can cancel
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
+
+    // Settled stage: cannot be cancelled
+    const settled = store.settle(c.id);
+    assert.equal(settled.status, "settled");
+    assert.throws(
+      () => store.cancel(c.id, "Alice"),
+      /cannot cancel settled composition/,
+    );
+  });
+
+  it("FR-14: privacy rules enforce strict isolation between third parties and counterparties", () => {
+    store.runFullDemo();
+    // Counterparty Bob sees his own holdings and settlement receipts
+    const bobView = store.partyView("Bob");
+    assert.ok(bobView.visibleTokens.length > 0);
+    assert.ok(bobView.compositions.length > 0);
+
+    // Regulator sees settlement receipts only with zero tokens
+    const regulatorView = store.partyView("Regulator");
+    assert.deepEqual(regulatorView.visibleTokens, []);
+    assert.ok(regulatorView.settlementReceipts.length > 0);
+    assert.deepEqual(regulatorView.settlementReceipts[0].visibleLegPayloads, []);
+
+    // Unconnected governor Gov3 (not in governance for this deal) sees 0 uninvited compositions
+    const govView = store.partyView("Gov3");
+    assert.deepEqual(govView.compositions, []);
+    assert.deepEqual(govView.visibleTokens, []);
+  });
+
+  it("FR-16: settlement backend adapter interface abstracts lifecycle operations", async () => {
+    const { getSettlementBackendAdapter } = await import("./adapter.js");
+    const adapter = getSettlementBackendAdapter(store);
+    assert.equal(adapter.mode, "demo");
+
+    const aliceTok = store.listTokens("Alice").find((t) => t.instrumentId === "CBTC")!;
+    const bobTok = store.listTokens("Bob").find((t) => t.instrumentId === "USDCx")!;
+
+    const comp = await adapter.propose({
+      proposer: "Alice",
+      counterparties: ["Bob"],
+      description: "Adapter abstraction test",
+      legs: [
+        {
+          legId: "legA",
+          instrumentId: "CBTC",
+          amount: aliceTok.amount,
+          provider: "Alice",
+          receiver: "Bob",
+          assetCid: aliceTok.contractId,
+        },
+        {
+          legId: "legB",
+          instrumentId: "USDCx",
+          amount: bobTok.amount,
+          provider: "Bob",
+          receiver: "Alice",
+          assetCid: bobTok.contractId,
+        },
+      ],
+    });
+    assert.ok(comp.id);
+    const accepted = await adapter.accept(comp.id, "Bob");
+    assert.equal(accepted.status, "accepted");
+    const readiness = await adapter.getReadiness(comp.id);
+    assert.equal(readiness.isReady, false);
+    assert.equal(readiness.totalLegs, 2);
+  });
+
+  it("FR-19: policy hooks enforce eligibility and limits", () => {
+    // Ineligible/blocked party policy violation
+    assert.throws(
+      () =>
+        store.propose({
+          proposer: "Alice",
+          counterparties: ["Bob"],
+          description: "Policy blocked test",
+          policyConfig: {
+            blockedParties: ["Bob"],
+          },
+          legs: [
+            {
+              legId: "l1",
+              instrumentId: "CBTC",
+              amount: "1.0",
+              provider: "Alice",
+              receiver: "Bob",
+              assetCid: store.listTokens("Alice")[0].contractId,
+            },
+            {
+              legId: "l2",
+              instrumentId: "USDCx",
+              amount: "100.0",
+              provider: "Bob",
+              receiver: "Alice",
+              assetCid: store.listTokens("Bob")[0].contractId,
+            },
+          ],
+        }),
+      /policy violation: counterparty Bob is ineligible/,
+    );
+
+    // Max transaction amount limit policy violation
+    assert.throws(
+      () =>
+        store.propose({
+          proposer: "Alice",
+          counterparties: ["Bob"],
+          description: "Policy limit test",
+          policyConfig: {
+            maxTransactionAmount: 1000,
+          },
+          legs: [
+            {
+              legId: "l1",
+              instrumentId: "CBTC",
+              amount: "1.0",
+              provider: "Alice",
+              receiver: "Bob",
+              assetCid: store.listTokens("Alice")[0].contractId,
+            },
+            {
+              legId: "l2",
+              instrumentId: "USDCx",
+              amount: "5000.0", // exceeds 1000 limit
+              provider: "Bob",
+              receiver: "Alice",
+              assetCid: store.listTokens("Bob")[0].contractId,
+            },
+          ],
+        }),
+      /policy violation: leg l2 amount 5000.0 exceeds max transaction limit 1000/,
+    );
+  });
 });
 
 

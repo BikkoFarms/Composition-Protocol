@@ -6,8 +6,17 @@
  * and structured error unwrapping for atomic revert and governance rejections.
  */
 
-export const API_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
+function resolveApiUrl(): string {
+  let url = process.env.NEXT_PUBLIC_API_URL;
+  if (!url) return "http://localhost:4000";
+  url = url.trim().replace(/\/+$/, "");
+  if (!url.startsWith("http://") && !url.startsWith("https://")) {
+    url = url.includes("localhost") ? `http://${url}` : `https://${url}`;
+  }
+  return url;
+}
+
+export const API_URL = resolveApiUrl();
 
 /**
  * Perform an authenticated or unauthenticated JSON request to the protocol backend.

@@ -277,6 +277,10 @@ compositionsRouter.get("/:id/readiness", (req, res) => {
         })),
       },
       outstandingParties: Array.from(new Set(outstandingParties)),
+      allocateBy: c.allocateBy,
+      settleBy: c.settleBy,
+      isAllocateExpired: c.allocateBy ? new Date(c.allocateBy).getTime() < Date.now() : false,
+      isSettleExpired: c.settleBy ? new Date(c.settleBy).getTime() < Date.now() : false,
       canSettle:
         c.status === "ready_to_settle" && !demoStore.circuitBreaker.isHalted,
     });
@@ -308,6 +312,25 @@ compositionsRouter.post("/:id/settle", (req, res) => {
       atomic: true,
       halfState: false,
     });
+  }
+});
+
+/**
+ * POST /compositions/:id/withdraw-leg
+ * FR-10: Withdraw a previously posted leg allocation before settlement.
+ * Releases the allocated leg back to the provider and transitions status back to allocating.
+ */
+compositionsRouter.post("/:id/withdraw-leg", (req, res) => {
+  try {
+    const { legId, caller } = (req.body ?? {}) as { legId: string; caller: PartyId };
+    if (!legId || !caller) {
+      res.status(400).json({ error: "legId and caller are required" });
+      return;
+    }
+    const result = demoStore.withdrawLeg(req.params.id, legId, caller);
+    res.json(result);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
   }
 });
 

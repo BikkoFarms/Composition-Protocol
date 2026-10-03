@@ -528,7 +528,7 @@ export default function DemoPage() {
             </p>
             <div className="loc-compare" aria-label="Lines of code comparison">
               <div>
-                <span className="loc-label">With Settleflow</span>
+                <span className="loc-label">With Settle Flow</span>
                 <strong className="loc-n">~99</strong>
                 <span className="loc-unit">LOC</span>
                 <span className="muted" style={{ fontSize: 12 }}>

@@ -17,18 +17,22 @@ This document cross-references every Functional Requirement (FR), System Require
 | **`FR-7`** | **Clean Cancellation & Lock Release:** Cancelled trade releases all committed allocations back to parties without residual lock. | PRD §8 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`cancel`) | `demoStore.test.ts` (test 9, 21, 26)<br>`scripts/run-demo-scenario.mjs` (Step 7) | **VERIFIED & PASSING** |
 | **`FR-8`** | **Demo Assets (CIP-56 Holdings):** Custodian tokenized asset (`CBTC`) and payment token (`USDCx`) issued as CIP-56 holdings. | PRD §8, §7 | `backend/src/routes/assets.ts` (`POST /assets/issue`)<br>`daml/daml/MockToken.daml` | `demoStore.test.ts` (test 23)<br>`scripts/run-demo-scenario.mjs` (Step 1) | **VERIFIED & PASSING** |
 | **`FR-9`** | **Per-Party Audit Trail View:** History of authorizations and outcomes scoped per party; auditor sees receipts with `visibleTokens: []`. | PRD §8, §7 | `backend/src/routes/audit.ts`<br>`frontend/app/observer/page.tsx` | `demoStore.test.ts` (test 3, 24)<br>`scripts/run-demo-scenario.mjs` (Step 8) | **VERIFIED & PASSING** |
-| **`FR-10`** | **Automated Failure-Path Tests:** Suite covering partial allocation, withdrawn leg, mismatched leg, and wrong executor. | PRD §8 | `backend/src/demoStore.test.ts`<br>`daml/daml/Test.daml` | `demoStore.test.ts` (tests 4, 14, 15, 16, 25, 26, 27) | **VERIFIED & PASSING** |
-| **`FR-11`** | **Shared Readiness View:** Minimal readiness status view (API & CLI) detailing outstanding parties and legs. | PRD §8 | `GET /compositions/:id/readiness`<br>`scripts/run-demo-scenario.mjs` | `demoStore.test.ts` (test 27)<br>REST response on `:4000` | **VERIFIED & PASSING** |
-| **`FR-12`** | **Deadlines & Anti-Strand Guards:** Time-bounded allocate-by and settle-by deadlines resolving stalled workflows cleanly. | PRD §8 | `backend/src/demoStore.ts` (`expire`)<br>`daml/daml/Composition.daml` | `demoStore.test.ts` (test 14, 21)<br>`POST /compositions/:id/expire` | **VERIFIED & PASSING** |
-| **`FR-13`** | **Permissioning Enforcement:** Only designated executor may settle; only authorized parties may cancel. Unauthorized attempts rejected. | PRD §8 | `backend/src/demoStore.ts` (`settle`, `cancel`) | `demoStore.test.ts` (test 9, 25) | **VERIFIED & PASSING** |
-| **`FR-14`** | **Canton Sub-Transaction Privacy:** Cryptographic stakeholder privacy (`signatory`, `observer`) preventing leg data leakage. | PRD §9, SRD §4 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`partyView`) | `Test.daml:testAuditorCannotSeeLegs`<br>`demoStore.test.ts` (test 3, 24) | **VERIFIED & PASSING** |
-| **`FR-15`** | **Daml Finance Leg Support:** Compatible adapters and examples for Daml Finance asset types. | PRD §8 | `examples/with-layer/ThreePartyDvp.daml`<br>`daml/daml/ComposableAsset.daml` | Side-by-side LOC audit in `docs/SIDE_BY_SIDE.md` | **VERIFIED & PASSING** |
+| **`FR-10`** | **Automated Failure-Path Tests:** Suite covering partial allocation, withdrawn leg, mismatched leg, and wrong executor. | PRD §8 | `backend/src/demoStore.ts` (`withdrawLeg`)<br>`backend/src/routes/compositions.ts` | `demoStore.test.ts` (tests 4, 14, 15, 16, 25, 26, 27, 28) | **VERIFIED & PASSING** |
+| **`FR-11`** | **Shared Readiness View:** Minimal readiness status view (web page, API, & CLI) detailing outstanding parties and legs. | PRD §8 | `frontend/app/readiness/page.tsx`<br>`GET /compositions/:id/readiness` | `demoStore.test.ts` (test 27)<br>`frontend` Next.js route `/readiness` | **VERIFIED & PASSING** |
+| **`FR-12`** | **Deadlines & Anti-Strand Guards:** Time-bounded allocate-by and settle-by deadlines resolving stalled workflows cleanly. | PRD §8 | `backend/src/demoStore.ts` (`allocateBy`, `settleBy`, `expire`) | `demoStore.test.ts` (test 14, 21, 29)<br>`POST /compositions/:id/expire` | **VERIFIED & PASSING** |
+| **`FR-13`** | **Permissioning Enforcement:** Stage-based permission matrix: only designated executor may settle; stage-governed cancellation. | PRD §8 | `backend/src/demoStore.ts` (`settle`, `cancel`) | `demoStore.test.ts` (test 9, 25, 30) | **VERIFIED & PASSING** |
+| **`FR-14`** | **Canton Sub-Transaction Privacy:** Third party sees zero uninvited compositions; regulator sees receipts only; counterparties see own legs. | PRD §9, SRD §4 | `backend/src/demoStore.ts` (`partyView`)<br>`frontend/app/observer/page.tsx` | `Test.daml:testAuditorCannotSeeLegs`<br>`demoStore.test.ts` (test 3, 24, 31) | **VERIFIED & PASSING** |
+| **`FR-15`** | **Daml Finance Leg Support:** Compatible templates for Daml Finance asset types. | PRD §8 | `examples/with-layer/ThreePartyDvp.daml`<br>`daml/daml/ComposableAsset.daml` | Side-by-side LOC audit in `docs/SIDE_BY_SIDE.md` | **VERIFIED & PASSING** |
+| **`FR-16`** | **Settlement Backend Adapter Interface:** Modular abstraction decoupling coordination from ledger substrate. | PRD §8 | `backend/src/adapter.ts` (`ISettlementBackendAdapter`) | `demoStore.test.ts` (test 32) | **VERIFIED & PASSING** |
+| **`FR-17`** | **Custodian Integrations:** External custodian rails (Fireblocks / Copper / Zodia APIs). | PRD §8 | Roadmap (60–90 days) | Architecture documented in `docs/POSITIONING.md` | **PLANNED (60-90 Days)** |
+| **`FR-18`** | **Market-Standard Settlement Templates:** ISDA/ISLA standard DvP/PvP contract templates. | PRD §8 | Roadmap (6 months) | Architecture documented in `docs/POSITIONING.md` | **PLANNED (6 Months)** |
+| **`FR-19`** | **Policy Hooks:** Pre-execution compliance checks (sanctions eligibility, limits, fees). | PRD §8 | `backend/src/demoStore.ts` (`policyConfig`) | `demoStore.test.ts` (test 33) | **VERIFIED & PASSING** |
 
 ---
 
 ## 2. Test Suite Execution Summary
 
-### Backend Unit & Integration Gates (`npm test` — 27/27 Passing)
+### Backend Unit & Integration Gates (`npm test` — 33/33 Passing)
 ```
 TAP version 13
 # Subtest: Settleflow demo gates
@@ -59,10 +63,16 @@ TAP version 13
     ok 25 - FR-10: failure path — wrong executor rejected
     ok 26 - FR-10: failure path — cancelled trade releases locked allocations
     ok 27 - FR-10 & FR-11: partial allocation blocks settlement until all legs ready
-1..27
-# tests 27
+    ok 28 - FR-10: failure path — withdrawn leg blocks settlement until re-allocated
+    ok 29 - FR-12: allocate-by and settle-by deadlines prevent stranded trades
+    ok 30 - FR-13: permissioning matrix enforces stage-based execute and cancel rights
+    ok 31 - FR-14: privacy rules enforce strict isolation between third parties and counterparties
+    ok 32 - FR-16: settlement backend adapter interface abstracts lifecycle operations
+    ok 33 - FR-19: policy hooks enforce eligibility and limits
+1..33
+# tests 33
 # suites 1
-# pass 27
+# pass 33
 # fail 0
 ```
 

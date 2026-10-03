@@ -6,7 +6,7 @@ export default function HomePage() {
       <section className="hero hero-product">
         <div>
           <span className="pill">
-            Settleflow
+            Settle Flow
             <span className="pill-arrow">→</span>
           </span>
           <h1>Close the whole deal. Or nothing moves.</h1>
@@ -223,9 +223,9 @@ export default function HomePage() {
         </div>
         <div className="faq-list">
           <details className="faq-item" open>
-            <summary>What is Settleflow?</summary>
+            <summary>What is Settle Flow?</summary>
             <p>
-              Settleflow is a reusable Daml package for structured settlement
+              Settle Flow is a reusable Daml package for structured settlement
               workflows on Canton. Builders get propose/accept coordination,
               disclosed contracts, expiry/cancel paths, and atomic settlement
               completion without rewriting that plumbing for every use case.

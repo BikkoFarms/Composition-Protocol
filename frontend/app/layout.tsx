@@ -12,13 +12,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata = {
-  title: "Settleflow",
+  title: "Settle Flow",
   description:
     "Reusable Daml settlement-workflow package on Canton — 3-party DvP with CBTC, USDCx, and cETH, BitSafe governance, and ledger-enforced privacy.",
 };
 
 const links = [
   { href: "/demo", label: "Settle" },
+  { href: "/readiness", label: "Readiness" },
   { href: "/proposer", label: "Exporter" },
   { href: "/counterparty", label: "Lender" },
   { href: "/observer", label: "Auditor" },
@@ -31,7 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton · Settleflow · CBTC + USDCx + cETH
+          Live on Canton · Settle Flow · CBTC + USDCx + cETH
           {" · "}
           <Link href="/demo">Allocation matching desk →</Link>
         </div>
@@ -40,7 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <Link href="/" className="brand">
               <BrandMark size={30} />
               <span className="brand-text">
-                <span className="brand-name">Settleflow</span>
+                <span className="brand-name">Settle Flow</span>
               </span>
             </Link>
             <nav className="nav-scroll" aria-label="Primary">
@@ -69,7 +70,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/" className="brand">
                 <BrandMark size={32} />
                 <span className="brand-text">
-                  <span className="brand-name">Settleflow</span>
+                  <span className="brand-name">Settle Flow</span>
                 </span>
               </Link>
               <p>
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <div>
                 <h3>Product</h3>
                 <Link href="/demo">Settlement desk</Link>
+                <Link href="/readiness">Readiness dashboard</Link>
                 <Link href="/proposer">Exporter workspace</Link>
                 <Link href="/counterparty">Lender workspace</Link>
                 <Link href="/observer">Auditor view</Link>
@@ -101,7 +103,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© {new Date().getFullYear()} Settleflow</span>
+            <span>© {new Date().getFullYear()} Settle Flow</span>
             <span>TradFi settlement discipline · Canton privacy</span>
           </div>
         </footer>
