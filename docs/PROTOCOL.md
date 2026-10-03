@@ -66,8 +66,8 @@ data LegSpec = LegSpec with
   deriving (Eq, Show)
 ```
 
-- `legId`: Unique identifier for the leg (e.g. `"collateral"`, `"cash"`, `"attestation"`).
-- `instrumentId`: Asset symbol or ticker (e.g. `"CBTC"`, `"USDCx"`, `"ATTEST"`).
+- `legId`: Unique identifier for the leg (e.g. `"collateral"`, `"cash"`, `"sponsor"`).
+- `instrumentId`: Asset symbol or ticker (e.g. `"CBTC"`, `"USDCx"`, `"cETH"`).
 - `amount`: Decimal quantity transferred.
 - `provider`: Debtor party transferring the asset.
 - `receiver`: Beneficiary party receiving the asset.

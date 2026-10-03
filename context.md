@@ -21,15 +21,14 @@ Prior to Settleflow, every protocol team on Canton had to rebuild atomic multi-l
 
 ```
              ┌─────────────────────────┐
-             │       Composition       │
-             │        Protocol         │
+             │       Settleflow        │
              └───────────┬─────────────┘
                          │
      ┌───────────────────┼───────────────────┐
      │                   │                   │
    Leg 1               Leg 2               Leg 3
-[Collateral]          [Cash]          [Attestation]
-    CBTC               USDCx           Grade Report
+[Collateral]          [Cash]            [Sponsor]
+    CBTC               USDCx              cETH
 Exporter (Alice)   Lender (Bob)      Quality Oracle
       ↓                   ↓                   ↓
  Lender (Bob)     Exporter (Alice)      Lender (Bob)
@@ -37,9 +36,9 @@ Exporter (Alice)   Lender (Bob)      Quality Oracle
 
 | Leg | Role | Asset | Provider → Receiver | Visibility Scoping |
 |:---|:---|:---|:---|:---|
-| **Leg 1** | Collateral | `CBTC` (1.0) | Exporter (Alice) → Lender (Bob) | Alice, Bob, Operator |
-| **Leg 2** | Liquidity Cash | `USDCx` (100.0) | Lender (Bob) → Exporter (Alice) | Bob, Alice, Operator |
-| **Leg 3** | Attestation | `ATTEST` (1.0) | Quality Oracle → Lender (Bob) | Oracle, Bob, Operator |
+| **Leg 1** | Collateral | `CBTC` (2.0) | Exporter (Alice) → Lender (Bob) | Alice, Bob, Operator |
+| **Leg 2** | Liquidity Cash | `USDCx` (10000.0) | Lender (Bob) → Exporter (Alice) | Bob, Alice, Operator |
+| **Leg 3** | Sponsor | `cETH` (1.5) | Quality Oracle → Lender (Bob) | Oracle, Bob, Operator |
 | **Receipt**| Settlement Proof | `SettlementReceipt` | Emitted by Operator | Alice, Bob, Oracle, **Regulator** |
 
 ---
@@ -49,7 +48,7 @@ Exporter (Alice)   Lender (Bob)      Quality Oracle
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │ L1: Frontend UI (Next.js 15 App Router / TypeScript)                   │
-│  /demo (One-click pitch)     /proposer (Alice)      /counterparty (Bob)│
+│  /demo (Allocate + match)    /proposer (Alice)      /counterparty (Bob)│
 │  /observer (Regulator ACS)   /governance (BitSafe)  /metrics (Evidence)│
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ HTTP / JSON REST
@@ -101,5 +100,4 @@ Exporter (Alice)   Lender (Bob)      Quality Oracle
 
 - **USDCx:** Cash leg representing Canton-native settlement liquidity.
 - **CBTC (BitSafe):** Tokenized Bitcoin collateral backing the credit facility.
-- **cETH (onRails):** CIP-0056-compliant token proving multi-asset composability.
-- **ATTEST:** Non-fungible commodity inspection grade certificate issued by the Oracle.
+- **cETH (onRails):** Sponsor-leg CIP-0056-shaped asset proving multi-asset composability (specimen leg 3).

@@ -29,7 +29,7 @@ This document cross-references every Functional Requirement (FR), System Require
 
 ## 2. Test Suite Execution Summary
 
-### Backend Unit & Integration Gates (`npm test` — 20/20 Passing)
+### Backend Unit & Integration Gates (`npm test` — 22/22 Passing)
 ```
 TAP version 13
 # Subtest: Settleflow demo gates

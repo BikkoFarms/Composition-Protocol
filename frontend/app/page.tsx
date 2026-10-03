@@ -18,7 +18,7 @@ export default function HomePage() {
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/demo">
-              Initiate / Settle DvP
+              Open allocation desk
             </Link>
             <Link className="btn" href="/observer">
               Observer money shot
@@ -149,7 +149,7 @@ export default function HomePage() {
             <div className="icon-circle">St</div>
             <h3 className="card-title">Settlement</h3>
             <p className="card-body">
-              Initiate / Settle DvP or force an atomic revert. Then jump to the
+              Open allocation desk or force an atomic revert. Then jump to the
               money shot and BitSafe beats.
             </p>
             <span className="link-arrow">Open settlement desk →</span>
@@ -253,7 +253,7 @@ export default function HomePage() {
           <details className="faq-item">
             <summary>Where do I start?</summary>
             <p>
-              Open the settlement desk, click Initiate / Settle DvP, then open
+              Open the settlement desk, run allocation matching, then open
               the auditor money shot. For multi-sig, run the BitSafe camera beat
               (refuse below threshold, then settle).
             </p>
@@ -264,12 +264,12 @@ export default function HomePage() {
       <section className="section cta-final">
         <h2 className="section-title">Ready when the desk is.</h2>
         <p className="muted">
-          No slide deck required. Propose, accept, settle, and prove privacy on
-          the same ledger the judges will ask about.
+          No slide deck required. Propose, allocate (match), settle, and prove
+          privacy on the same ledger the judges will ask about.
         </p>
         <div className="row">
           <Link className="btn primary" href="/demo">
-            Initiate / Settle DvP
+            Open allocation desk
           </Link>
           <Link className="btn" href="/observer">
             Money shot

@@ -1,22 +1,24 @@
 # Settleflow
 
-**Atomic, private, multi-asset settlement primitive built on Canton.**  
-Demonstrated through cross-border African commodity trade finance.
+**Trade-level settlement coordination on Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, on top of CIP-0056.  
+Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / USDCx / cETH).
 
 [![HackCanton Season 3](https://img.shields.io/badge/HackCanton-Season%203-blue.svg)](https://hackcanton.devpost.com/)
 [![Track](https://img.shields.io/badge/Track-Track%201%20(RWA%20%26%20Business%20Workflows)-emerald.svg)](#track-details)
 [![Challenge](https://img.shields.io/badge/Secondary-BitSafe%20Decentralization%20Challenge-purple.svg)](#bitsafe-decentralization-challenge)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> **"The protocol is the product. The trade-finance flow is the demo that gives it a face."**
+> **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settleflow owns the trade. The trade-finance desk is the demo that gives it a face.
+
+**How we differ from CIP-0056 / Daml Finance / other engines:** [docs/POSITIONING.md](docs/POSITIONING.md)
 
 ---
 
 ## 1. Project Overview & Track Details
 
-While **CIP-0056** made digital assets portable across Canton domains, real-world finance requires them to be **combinable**. Standard business transactions do not happen in isolation: a delivery-versus-payment (DvP) trade or collateralized trade-finance facility requires collateral transfer, cash disbursal, and third-party attestations to settle concurrently.
+While **CIP-0056** made digital assets portable and defined **per-leg allocations** (execute / withdraw / cancel), apps still hand-write the **trade**: one deal object, allocation matching, readiness across legs, who may execute or cancel, and failure cleanup. Atomic multi-leg settlement is already a Canton capability — it is not Settleflow’s differentiator.
 
-**Settleflow** delivers a reusable Daml primitive that bundles multiple distinct asset transfers into a single transaction that **either fully settles or completely aborts (all-or-nothing)**, while enforcing **per-leg privacy** directly through Canton’s cryptographic stakeholder model (`signatory` and `observer`).
+**Settleflow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel, and ledger-enforced per-party privacy (`SettlementReceipt` for auditors; legs stay off their ACS).
 
 ### Hackathon Tracks
 - **Primary Track — Track 1 (RWA & Business Workflows):** Multi-asset atomic settlement primitive solving DvP, trade-finance collateralization, and multi-party asset orchestration without trusted central escrow.
@@ -32,8 +34,8 @@ While **CIP-0056** made digital assets portable across Canton domains, real-worl
      ┌───────────────────┼───────────────────┐
      │                   │                   │
    Leg 1               Leg 2               Leg 3
-[Collateral]          [Cash]          [Attestation]
-    CBTC               USDCx           Grade Report
+[Collateral]          [Cash]            [Sponsor]
+    CBTC               USDCx              cETH
 Exporter (Alice)   Lender (Bob)      Quality Oracle
       ↓                   ↓                   ↓
  Lender (Bob)     Exporter (Alice)      Lender (Bob)
@@ -41,9 +43,9 @@ Exporter (Alice)   Lender (Bob)      Quality Oracle
 
 | Leg | Type | Instrument | From → To | Business Purpose |
 |:---|:---|:---|:---|:---|
-| **Leg 1** | Collateral | `CBTC` (1.0) | Exporter (Alice) → Lender (Bob) | Tokenized warehouse collateral locked |
-| **Leg 2** | Cash | `USDCx` (100.0) | Lender (Bob) → Exporter (Alice) | Trade finance liquidity disbursed |
-| **Leg 3** | Attestation | `ATTEST` (1.0) | Quality Oracle → Lender (Bob) | Commodity grade & inspection verified |
+| **Leg 1** | Collateral | `CBTC` (2.0) | Exporter (Alice) → Lender (Bob) | Tokenized warehouse collateral locked |
+| **Leg 2** | Cash | `USDCx` (10000.0) | Lender (Bob) → Exporter (Alice) | Trade finance liquidity disbursed |
+| **Leg 3** | Sponsor | `cETH` (1.5) | Quality Oracle → Lender (Bob) | onRails sponsor asset (multi-asset proof) |
 
 ---
 
@@ -54,7 +56,7 @@ The protocol is structured across four decoupled architectural tiers:
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
 │ L1: Frontend UI (Next.js 15 App Router / TypeScript)                   │
-│  /demo (One-click pitch)     /proposer (Alice)      /counterparty (Bob)│
+│  /demo (Allocate + match)    /proposer (Alice)      /counterparty (Bob)│
 │  /observer (Regulator ACS)   /governance (BitSafe)  /metrics (Evidence)│
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ HTTP / JSON REST
@@ -108,49 +110,43 @@ The protocol is structured across four decoupled architectural tiers:
 ## 4. Repository Structure
 
 ```
-Composition-Protocol/
-├── .ai/                    # AI agent rules, capabilities, and skill definitions
-│   ├── rules.md            # System constraints (atomicity, privacy, stack rules)
-│   ├── skills.json         # Agent capability registry
-│   └── skills/             # Modular skill guides (daml, ledger, express, tests)
-├── daml/                   # Daml 3.x contracts and Daml Script test gates
-│   ├── daml.yaml           # SDK 3.3.0 configuration (target 2.1)
+composition-protcol/          # repo root (Settleflow)
+├── .ai/                      # AI agent rules, capabilities, skill definitions
+├── daml/                     # Daml 3.x contracts + Script gates
 │   └── daml/
-│       ├── ComposableAsset.daml  # CIP-0056 asset interface
-│       ├── MockToken.daml        # Interface-implementing token template
-│       ├── Composition.daml      # Proposal, Tracker, Agreement, Receipt
-│       ├── Governance.daml       # BitSafe M-of-N GovernedSettlement
-│       ├── Test.daml             # Acceptance gates: atomic swap, revert, privacy
-│       └── TestGovernance.daml   # BitSafe M-of-N acceptance tests
-├── backend/                # Express API & Ledger API v2 bridge (:4000)
-│   ├── src/
-│   │   ├── index.ts        # Server entry & route registration
-│   │   ├── ledger.ts       # Canton JSON Ledger API v2 client
-│   │   ├── demoStore.ts    # High-fidelity ACS simulation engine
-│   │   ├── demoStore.test.ts # Node.js test gates (5 suites)
-│   │   └── routes/         # Assets, Compositions, Governance, Audit routes
-│   └── tsconfig.json
-├── frontend/               # Next.js 15 App Router web app (:3000)
-│   ├── app/
-│   │   ├── page.tsx        # Landing page & architecture summary
-│   │   ├── demo/           # One-click pitch demo with step-by-step walkthrough
-│   │   ├── proposer/       # Exporter (Alice) proposal creation & asset view
-│   │   ├── counterparty/   # Lender (Bob) & Oracle acceptance portal
-│   │   ├── observer/       # Regulator / Auditor ACS zero-leak verification
-│   │   ├── governance/     # BitSafe 2-of-3 multi-sig approval dashboard
-│   │   ├── metrics/        # Real-time protocol performance & load metrics
-│   │   └── admin/          # Principal Architect & Operator Mission Control
-│   └── lib/api.ts          # API client wrapper
-├── mocks/
-│   └── oracle/             # Live Commodity Oracle & Cryptographic Attestation service (:4002)
-├── scripts/
-│   └── oidc-token.mjs      # Keycloak OIDC token generator for shared DevNet
-├── docs/                   # PRD, SRD, DevNet, and hackathon journal
-│   ├── Composition_Protocol_PRD.pdf
-│   ├── Composition_Protocol_SRD.pdf
+│       ├── ComposableAsset.daml
+│       ├── MockToken.daml
+│       ├── Composition.daml  # Propose → Accept → Allocate → Settle
+│       ├── Governance.daml   # BitSafe M-of-N
+│       ├── Test.daml
+│       └── TestGovernance.daml
+├── backend/                  # Express API & Ledger API v2 bridge (:4000)
+│   └── src/
+│       ├── demoStore.ts      # Demo ACS + allocation matching
+│       ├── demoStore.test.ts # Node test gates (22)
+│       ├── ledger.ts
+│       └── routes/
+├── frontend/                 # Next.js 15 App Router (:3000)
+│   ├── app/demo/             # Allocation matching centerpiece
+│   ├── components/BrandMark.tsx  # Settleflow SF mark
+│   └── lib/api.ts
+├── examples/                 # Builder LOC proof
+│   ├── with-layer/ThreePartyDvp.daml      # ~99 LOC
+│   └── hand-rolled/HandRolledDvp.daml     # ~192 LOC
+├── mocks/oracle/             # Price / grade oracle (:4002)
+├── scripts/oidc-token.mjs    # Keycloak OIDC for HackCanton DevNet
+├── docs/
+│   ├── POSITIONING.md
+│   ├── SIDE_BY_SIDE.md
+│   ├── JUDGING.md
 │   ├── DEVNET.md
-│   └── JOURNAL.md
-└── docker-compose.yml      # Multi-container orchestration (API, UI, Oracle)
+│   ├── Composition_Protocol_PRD.pdf
+│   └── Composition_Protocol_SRD.pdf
+├── TESTING.md
+├── DEPLOYMENT.md
+├── PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx
+├── Technical Specification- H.docx
+└── docker-compose.yml
 ```
 
 ---
@@ -176,8 +172,8 @@ node mocks/oracle/server.mjs
 ```
 
 Open your browser to:
-- **Pitch Demo:** [http://localhost:3000/demo](http://localhost:3000/demo) (Run the full happy path or trigger an atomic revert)
-- **Observer Money Shot:** [http://localhost:3000/observer](http://localhost:3000/observer) (Verify `visibleTokens: []`)
+- **Settlement desk:** [http://localhost:3000/demo](http://localhost:3000/demo) — **Run allocation matching demo** (Propose → Allocate → mismatch reject → Settle; LOC adopt panel)
+- **Observer Money Shot:** [http://localhost:3000/observer](http://localhost:3000/observer) (Verify `visibleTokens: []` + receipt)
 - **BitSafe Governance:** [http://localhost:3000/governance](http://localhost:3000/governance) (2-of-3 threshold demo)
 - **Load Metrics:** [http://localhost:3000/metrics](http://localhost:3000/metrics) (Settle 50+ batch deals)
 
@@ -238,10 +234,12 @@ Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshol
 ```bash
 npm test
 ```
-**Automated Gate Results (20/20 Passing):**
+**Automated Gate Results (22/22 Passing):**
 - `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
 - `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
 - `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
+- `allocation mismatch rejected — no half-state` — wrong amount rejected verbatim **[Pass]**
+- `allocate → settle — commits + ready_to_settle gate` — per-leg match before settle **[Pass]**
 - `R-GOV-1 below threshold rejected` — execution blocked with < M approvals **[Pass]**
 - `R-GOV-1 at threshold succeeds` — execution unlocked with == M approvals (`R-GOV-2`) **[Pass]**
 - `Judge Metrics` — throughput, average legs/deal, and success/revert rates **[Pass]**
@@ -294,7 +292,7 @@ npm run test:e2e
 | **Daml Script Test Gates** | Complete (9/9) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV, and SRS §12 |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, circuit-breaker, admin |
 | **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts |
-| **Backend Test Gates** | Passing (20/20) | `npm test` passing across all invariants and SRS §12 gates |
+| **Backend Test Gates** | Passing (22/22) | `npm test` — includes allocation mismatch + allocate→settle |
 | **Live E2E Socket Tests** | Passing (13/13) | `npm run test:e2e` verifying live integration across ports :4000 and :4002 |
 | **Frontend Next.js Views** | Complete (11/11 routes) | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
 | **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
@@ -305,9 +303,13 @@ npm run test:e2e
 ## 8. Documentation Hub & Deep Dives
 
 - [**DEPLOYMENT.md**](DEPLOYMENT.md) — Step-by-step deployment guide covering LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet.
-- [**TESTING.md**](TESTING.md) — Comprehensive testing manual covering Daml scripts, 20 backend test gates, 13 live E2E tests, and browser walkthrough.
-- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Authoritative updated Product Requirements Document (PRD).
-- [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Authoritative updated Software Requirements Specification (SRS).
+- [**TESTING.md**](TESTING.md) — Testing manual: Daml scripts, 22 backend gates, E2E, browser allocation walkthrough.
+- [**docs/POSITIONING.md**](docs/POSITIONING.md) — How Settleflow differs from CIP-0056 / Daml Finance / engines.
+- [**docs/SIDE_BY_SIDE.md**](docs/SIDE_BY_SIDE.md) — ~99 vs ~192 LOC builder proof (`examples/`).
+- [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Updated PRD.
+- [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Updated SRS.
+- [**docs/Composition_Protocol_PRD.pdf**](docs/Composition_Protocol_PRD.pdf) — PRD PDF archive.
+- [**docs/Composition_Protocol_SRD.pdf**](docs/Composition_Protocol_SRD.pdf) — SRD PDF archive.
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — Contributor onboarding, engineering rules, status matrix, and pre-commit checklists.
 - [**docs/RISK_ASSESSMENT.md**](docs/RISK_ASSESSMENT.md) — Rigorous protocol and operational risk assessment, invariant guarantees, and threat mitigations.
 - [**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) — Technical blueprint, Mermaid lifecycle diagrams, sub-transaction privacy models, and failure modes.

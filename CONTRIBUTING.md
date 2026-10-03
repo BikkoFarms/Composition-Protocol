@@ -52,7 +52,7 @@ Composition-Protocol/
 | **Canton JSON Ledger API v2 Client** | Complete | [backend/src/ledger.ts](backend/src/ledger.ts) handles `/v2/commands/submit-and-wait`, active-contracts queries, and Keycloak OIDC caching. |
 | **Mission Control Admin Console** | Complete | [frontend/app/admin/page.tsx](frontend/app/admin/page.tsx) with live latency ping, mode toggles, treasury minting, and state resets. |
 | **Commodity Oracle & Attestation Service** | Complete | [mocks/oracle/server.mjs](mocks/oracle/server.mjs) serving dynamic spot prices and HMAC-SHA256 signed inspection certificates. |
-| **Automated Test Gates** | 20/20 Passing | `npm test` (or `cd backend && npm test`) passing across all SRS §12 gates. |
+| **Automated Test Gates** | 22/22 Passing | `npm test` (or `cd backend && npm test`) — includes allocation mismatch + allocate→settle. |
 | **Live E2E Socket Suite** | 13/13 Passing | `npm run test:e2e` verifying live integration across backend & oracle. |
 | **Frontend Production Build** | 11/11 Static Routes | `npm run build` compiled with 0 errors. |
 | **Operational Manuals** | Complete | [DEPLOYMENT.md](DEPLOYMENT.md) & [TESTING.md](TESTING.md) available in root. |

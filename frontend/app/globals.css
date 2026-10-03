@@ -1192,6 +1192,53 @@ h1.page-title {
   font-weight: 500;
 }
 
+.loc-compare {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: start;
+  margin: 12px 0 14px;
+  text-align: center;
+}
+
+.loc-compare > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.loc-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-lichen-gray);
+}
+
+.loc-n {
+  font-family: var(--font-display, Georgia, serif);
+  font-size: 36px;
+  line-height: 1;
+  color: var(--color-deep-teal);
+  font-weight: 600;
+}
+
+.loc-n-warn {
+  color: #7a2251;
+}
+
+.loc-unit {
+  font-size: 12px;
+  color: var(--color-mist);
+}
+
+.loc-vs {
+  align-self: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-mist);
+  padding-top: 18px;
+}
+
 .proof-list {
   margin: 0;
   padding-left: 18px;

@@ -77,7 +77,7 @@ sequenceDiagram
     participant Ledger as Canton Ledger / Daml
 
     Note over Alice,Ledger: Phase 1: Proposal Creation
-    Alice->>Ledger: create CompositionProposal (legs: CBTC, USDCx, ATTEST)
+    Alice->>Ledger: create CompositionProposal (legs: CBTC, USDCx, cETH)
     Ledger-->>Bob: Disclose proposal via observer role
     Ledger-->>Oracle: Disclose proposal via observer role
 
@@ -96,7 +96,7 @@ sequenceDiagram
     critical Single Daml Transaction
         Ledger->>Ledger: exercise Leg 1 Transfer (CBTC: Alice -> Bob)
         Ledger->>Ledger: exercise Leg 2 Transfer (USDCx: Bob -> Alice)
-        Ledger->>Ledger: exercise Leg 3 Transfer (ATTEST: Oracle -> Bob)
+        Ledger->>Ledger: exercise Leg 3 Transfer (cETH: Oracle -> Bob)
         Ledger->>Ledger: create SettlementReceipt (observer: Alice, Bob, Oracle, Regulator)
     end
 
@@ -122,11 +122,11 @@ Traditional transparent blockchains require complex zero-knowledge (ZK) circuits
 | **`CompositionAgreement`** | Operator | Proposer, All counterparties | Regulators, public network |
 | **Leg 1: `CBTC` Token** | Operator, Exporter (Alice) | Lender (Bob) | Oracle, Regulator |
 | **Leg 2: `USDCx` Token** | Operator, Lender (Bob) | Exporter (Alice) | Oracle, Regulator |
-| **Leg 3: `ATTEST` Token** | Operator, Quality Oracle | Lender (Bob) | Exporter (Alice), Regulator |
+| **Leg 3: `cETH` Token** | Operator, Quality Oracle | Lender (Bob) | Exporter (Alice), Regulator |
 | **`SettlementReceipt`** | Operator | All deal parties, **Regulator** | Non-disclosed external entities |
 
 ### 3.2 The "Money Shot" Architecture
-- **Participant ACS (Bob):** Sees his inbound `CBTC` collateral, outbound `USDCx` debit, inbound `ATTEST` certificate, and the `SettlementReceipt`.
+- **Participant ACS (Bob):** Sees his inbound `CBTC` collateral, outbound `USDCx` debit, inbound `cETH` sponsor asset, and the `SettlementReceipt`.
 - **Observer ACS (Regulator):** Queries Canton's Active Contract Set (ACS) at the ledger end offset. Because `MockToken` instances declare only leg stakeholders, Canton's domain sequencer **never projects token contract data to the regulator's node**.
 - **Audit Outcome:**
   ```text
@@ -171,7 +171,7 @@ choice SettleWithRegulator : ContractId SettlementReceipt
 If Leg 2 fails (e.g., Lender Bob has insufficient `USDCx` balance or contract ID was double-spent):
 1. The Daml execution engine traps the abort.
 2. The transaction rolls back **100% of state changes**.
-3. Alice retains her `CBTC` collateral contract; Oracle retains the `ATTEST` contract.
+3. Alice retains her `CBTC` collateral contract; Oracle retains the `cETH` contract.
 4. No intermediate or half-settled contract is ever committed to Canton's synchronization domain (`R-ATOM-2`).
 
 ---

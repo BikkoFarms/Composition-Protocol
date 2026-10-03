@@ -141,7 +141,7 @@ adminRouter.post("/mint", (req, res) => {
 
 /**
  * POST /admin/reset
- * Resets the demo store to clean initial state (restores standard CBTC, USDCx, ATTEST tokens).
+ * Resets the demo store to clean initial state (restores standard CBTC, USDCx, cETH tokens).
  */
 adminRouter.post("/reset", (_req, res) => {
   try {
@@ -159,7 +159,7 @@ adminRouter.post("/reset", (_req, res) => {
     // Re-seed standard portfolio
     demoStore.mint("Alice", "CBTC", "2.0");
     demoStore.mint("Bob", "USDCx", "10000.0");
-    demoStore.mint("Oracle", "ATTEST", "1.0");
+    demoStore.mint("Oracle", "cETH", "1.5");
 
     res.json({ ok: true, message: "System state reset and standard assets re-seeded." });
   } catch (e) {

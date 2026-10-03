@@ -30,13 +30,43 @@ export type LegSpec = {
   provider: PartyId;
   receiver: PartyId;
   assetCid: string;
+  reference: string;
+  deadline: string;
   cantonDomain?: string;
+};
+
+/** Posted pledge mirrored from Daml LegAllocation — matched field-by-field on settle. */
+export type Allocation = {
+  allocationCid: string;
+  updateId: string;
+  legId: string;
+  instrumentId: string;
+  amount: string;
+  provider: PartyId;
+  receiver: PartyId;
+  assetCid: string;
+  reference: string;
+  deadline: string;
+  allocator: PartyId;
+  matched: true;
+  matchedFields: string[];
+};
+
+export type CommitRecord = {
+  updateId: string;
+  contractId: string;
+  choice: string;
+  actAs: PartyId[];
+  at: string;
+  detail?: string;
 };
 
 export type CompositionStatus =
   | "proposed"
   | "partially_accepted"
   | "accepted"
+  | "allocating"
+  | "ready_to_settle"
   | "awaiting_governance"
   | "settled"
   | "reverted"
@@ -62,6 +92,8 @@ export type Composition = {
   counterparties: PartyId[];
   accepted: PartyId[];
   legs: LegSpec[];
+  allocations: Allocation[];
+  commits: CommitRecord[];
   description: string;
   status: CompositionStatus;
   dealHash?: string;
@@ -228,7 +260,7 @@ export class DemoStore {
   private seed() {
     this.mint("Alice", "CBTC", "2.0");
     this.mint("Bob", "USDCx", "10000.0");
-    this.mint("Oracle", "ATTEST", "1.0");
+    this.mint("Oracle", "cETH", "1.5");
     this.mint("Alice", "cETH", "5.0");
     this.mint("Bob", "CBTC", "1.0");
   }
@@ -255,7 +287,10 @@ export class DemoStore {
   propose(input: {
     proposer: PartyId;
     counterparties: PartyId[];
-    legs: LegSpec[];
+    legs: Array<
+      Omit<LegSpec, "reference" | "deadline"> &
+        Partial<Pick<LegSpec, "reference" | "deadline">>
+    >;
     description: string;
     forceFail?: boolean;
     requireGovernance?: boolean;
@@ -263,7 +298,15 @@ export class DemoStore {
     disclosedContracts?: DisclosedContract[];
   }): Composition {
     if (input.legs.length < 2) throw new Error("at least two legs required");
-    for (const leg of input.legs) {
+    const defaultDeadline = new Date(
+      Date.now() + 7 * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const legs: LegSpec[] = input.legs.map((leg) => ({
+      ...leg,
+      reference: leg.reference ?? `ref-${leg.legId}`,
+      deadline: leg.deadline ?? defaultDeadline,
+    }));
+    for (const leg of legs) {
       const tok = this.tokens.get(leg.assetCid);
       if (!tok) throw new Error(`unknown asset ${leg.assetCid}`);
       if (tok.owner !== leg.provider) {
@@ -272,14 +315,14 @@ export class DemoStore {
     }
     const id = randomUUID();
     const dealHash = createHash("sha256")
-      .update(JSON.stringify({ proposer: input.proposer, counterparties: input.counterparties, legs: input.legs }))
+      .update(JSON.stringify({ proposer: input.proposer, counterparties: input.counterparties, legs }))
       .digest("hex");
 
     // Institutional collateral valuation (e.g. 1 CBTC = $65,000 reference valuation vs USDCx loan)
     let collateralRatio: string | undefined;
     let ltvPercent: number | undefined;
-    const cbtcLeg = input.legs.find((l) => l.instrumentId === "CBTC");
-    const usdcLeg = input.legs.find((l) => l.instrumentId === "USDCx");
+    const cbtcLeg = legs.find((l) => l.instrumentId === "CBTC");
+    const usdcLeg = legs.find((l) => l.instrumentId === "USDCx");
     if (cbtcLeg && usdcLeg) {
       const cbtcVal = Number(cbtcLeg.amount) * 65000;
       const loanVal = Number(usdcLeg.amount);
@@ -303,7 +346,9 @@ export class DemoStore {
       proposer: input.proposer,
       counterparties: input.counterparties,
       accepted: [],
-      legs: input.legs,
+      legs,
+      allocations: [],
+      commits: [],
       description: input.description,
       status: "proposed",
       dealHash,
@@ -315,6 +360,13 @@ export class DemoStore {
       requireGovernance: input.requireGovernance,
     };
     this.compositions.set(id, c);
+    this.pushCommit(
+      c,
+      "Propose",
+      c.proposalCid,
+      ["Operator", input.proposer],
+      `WorkflowProposal created — ${input.legs.length} legs`,
+    );
     return c;
   }
 
@@ -370,6 +422,8 @@ export class DemoStore {
           provider: "Alice",
           receiver: "Bob",
           assetCid: collateral.contractId,
+          reference: "tf-collateral",
+          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           cantonDomain: "canton-domain-rwa-01.eu",
         },
         {
@@ -379,6 +433,8 @@ export class DemoStore {
           provider: "Bob",
           receiver: "Alice",
           assetCid: cash.contractId,
+          reference: "tf-cash",
+          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           cantonDomain: "canton-domain-liquidity-02.us",
         },
         {
@@ -388,10 +444,31 @@ export class DemoStore {
           provider: "Oracle",
           receiver: "Bob",
           assetCid: ceth.contractId,
+          reference: "tf-sponsor",
+          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           cantonDomain: "canton-domain-onrails-03.global",
         },
       ],
     });
+  }
+
+  private pushCommit(
+    c: Composition,
+    choice: string,
+    contractId: string,
+    actAs: PartyId[],
+    detail?: string,
+  ): CommitRecord {
+    const commit: CommitRecord = {
+      updateId: `upd-${randomUUID().slice(0, 12)}`,
+      contractId,
+      choice,
+      actAs,
+      at: new Date().toISOString(),
+      detail,
+    };
+    c.commits = [...c.commits, commit];
+    return commit;
   }
 
   accept(compositionId: string, acceptor: PartyId): Composition {
@@ -403,8 +480,192 @@ export class DemoStore {
     c.accepted = [...c.accepted, acceptor];
     const allAccepted = c.counterparties.every((p) => c.accepted.includes(p));
     c.status = allAccepted ? "accepted" : "partially_accepted";
-    if (allAccepted) c.agreementCid = `agr-${c.id}`;
+    if (allAccepted) {
+      c.agreementCid = `agr-${c.id}`;
+      this.pushCommit(
+        c,
+        "FinalizeAgreement",
+        c.agreementCid,
+        ["Operator"],
+        "All counterparties accepted — agreement formed; allocations required before Settle",
+      );
+    } else {
+      this.pushCommit(
+        c,
+        "AcceptProposal",
+        c.trackerCid ?? c.proposalCid,
+        ["Operator", acceptor],
+        `${acceptor} recorded on AcceptanceTracker`,
+      );
+    }
     return c;
+  }
+
+  /**
+   * Post a LegAllocation against one agreed leg.
+   * Mirrors Daml matchAllocationToLeg — ANY field mismatch rejects (no store mutation).
+   */
+  allocate(
+    compositionId: string,
+    input: {
+      legId: string;
+      instrumentId: string;
+      amount: string;
+      provider: PartyId;
+      receiver: PartyId;
+      assetCid: string;
+      reference: string;
+      deadline: string;
+      allocator?: PartyId;
+    },
+  ): { composition: Composition; allocation: Allocation; commit: CommitRecord } {
+    const c = this.require(compositionId);
+    if (
+      c.status !== "accepted" &&
+      c.status !== "allocating" &&
+      c.status !== "ready_to_settle"
+    ) {
+      throw new Error(
+        "allocation match failed: agreement not ready — accept all counterparties first",
+      );
+    }
+    const leg = c.legs.find((l) => l.legId === input.legId);
+    if (!leg) {
+      throw new Error(
+        `allocation match failed: no allocation posted for leg ${input.legId}`,
+      );
+    }
+    if (c.allocations.some((a) => a.legId === input.legId)) {
+      throw new Error(
+        `allocation match failed: leg ${input.legId} already allocated`,
+      );
+    }
+
+    const allocator = input.allocator ?? input.provider;
+    // Field-by-field checks — same message prefixes as Composition.daml
+    if (input.legId !== leg.legId) {
+      throw new Error(
+        `allocation match failed: legId mismatch (agreed=${leg.legId}, allocated=${input.legId})`,
+      );
+    }
+    if (input.provider !== leg.provider) {
+      throw new Error(
+        `allocation match failed: provider party mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (input.receiver !== leg.receiver) {
+      throw new Error(
+        `allocation match failed: receiver party mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (allocator !== leg.provider) {
+      throw new Error(
+        `allocation match failed: allocator must be provider on leg ${leg.legId}`,
+      );
+    }
+    if (input.amount !== leg.amount) {
+      throw new Error(
+        `allocation match failed: amount mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (input.instrumentId !== leg.instrumentId) {
+      throw new Error(
+        `allocation match failed: instrumentId mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (input.reference !== leg.reference) {
+      throw new Error(
+        `allocation match failed: reference mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (input.deadline !== leg.deadline) {
+      throw new Error(
+        `allocation match failed: deadline mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (new Date(input.deadline).getTime() < Date.now()) {
+      throw new Error(
+        `allocation match failed: settlement past deadline on leg ${leg.legId}`,
+      );
+    }
+    if (input.assetCid !== leg.assetCid) {
+      throw new Error(
+        `allocation match failed: assetCid mismatch on leg ${leg.legId}`,
+      );
+    }
+    const tok = this.tokens.get(input.assetCid);
+    if (!tok) {
+      throw new Error(
+        `allocation match failed: live asset missing on leg ${leg.legId}`,
+      );
+    }
+    if (tok.owner !== leg.provider) {
+      throw new Error(
+        `allocation match failed: live asset owner != provider on leg ${leg.legId}`,
+      );
+    }
+    if (tok.instrumentId !== leg.instrumentId) {
+      throw new Error(
+        `allocation match failed: live asset instrumentId mismatch on leg ${leg.legId}`,
+      );
+    }
+    if (tok.amount !== leg.amount) {
+      throw new Error(
+        `allocation match failed: live asset amount mismatch on leg ${leg.legId}`,
+      );
+    }
+
+    const allocationCid = `alloc-${c.id}-${leg.legId}`;
+    const allocation: Allocation = {
+      allocationCid,
+      updateId: "",
+      legId: leg.legId,
+      instrumentId: leg.instrumentId,
+      amount: leg.amount,
+      provider: leg.provider,
+      receiver: leg.receiver,
+      assetCid: leg.assetCid,
+      reference: leg.reference,
+      deadline: leg.deadline,
+      allocator,
+      matched: true,
+      matchedFields: [
+        "legId",
+        "provider",
+        "receiver",
+        "amount",
+        "instrumentId",
+        "reference",
+        "deadline",
+        "assetCid",
+        "liveOwner",
+        "liveInstrument",
+        "liveAmount",
+      ],
+    };
+    c.allocations = [...c.allocations, allocation];
+    c.status =
+      c.allocations.length === c.legs.length ? "ready_to_settle" : "allocating";
+    const commit = this.pushCommit(
+      c,
+      "AllocateLeg",
+      allocationCid,
+      ["Operator", allocator],
+      `Matched ${allocation.matchedFields.join(", ")} on leg ${leg.legId}`,
+    );
+    allocation.updateId = commit.updateId;
+    return { composition: c, allocation, commit };
+  }
+
+  /** Allocate every leg with agreed terms (happy path / one-click). */
+  allocateAll(compositionId: string): Composition {
+    const c = this.require(compositionId);
+    for (const leg of c.legs) {
+      if (!c.allocations.some((a) => a.legId === leg.legId)) {
+        this.allocate(compositionId, { ...leg });
+      }
+    }
+    return this.require(compositionId);
   }
 
   /** Proposer cancellation before execution */
@@ -489,11 +750,37 @@ export class DemoStore {
       );
     }
     const c = this.require(compositionId);
-    if (c.status !== "accepted" && c.status !== "awaiting_governance") {
+    if (
+      c.status !== "accepted" &&
+      c.status !== "allocating" &&
+      c.status !== "ready_to_settle" &&
+      c.status !== "awaiting_governance"
+    ) {
       throw new Error("composition not fully accepted");
     }
 
-    if (c.requireGovernance && c.status === "accepted") {
+    // Completeness gate (same as Daml fetchAllocationsByLeg)
+    if (c.status !== "awaiting_governance") {
+      if (c.allocations.length !== c.legs.length) {
+        throw new Error(
+          `allocation match failed: expected ${c.legs.length} allocations, got ${c.allocations.length}`,
+        );
+      }
+      for (const leg of c.legs) {
+        if (!c.allocations.some((a) => a.legId === leg.legId)) {
+          throw new Error(
+            `allocation match failed: no allocation posted for leg ${leg.legId}`,
+          );
+        }
+      }
+    }
+
+    if (
+      c.requireGovernance &&
+      (c.status === "accepted" ||
+        c.status === "ready_to_settle" ||
+        c.status === "allocating")
+    ) {
       const gov = this.openGovernance(c.id, ["Gov1", "Gov2", "Gov3"], 2);
       c.governanceCid = gov.id;
       c.status = "awaiting_governance";
@@ -510,6 +797,11 @@ export class DemoStore {
   }
 
   private executeSettle(c: Composition, withRegulator: boolean): Composition {
+    if (c.allocations.length !== c.legs.length) {
+      throw new Error(
+        `allocation match failed: expected ${c.legs.length} allocations, got ${c.allocations.length}`,
+      );
+    }
     if (c.forceFail) {
       c.status = "reverted";
       this._rawMetrics.compositionsReverted += 1;
@@ -549,6 +841,13 @@ export class DemoStore {
       instrumentId: l.instrumentId,
       status: "LegSettled",
     }));
+    this.pushCommit(
+      c,
+      withRegulator ? "SettleWithRegulator" : "Settle",
+      c.receiptCid,
+      ["Operator", ...new Set(c.legs.flatMap((l) => [l.provider, l.receiver]))],
+      "All allocations matched — legs transferred atomically; SettlementReceipt created",
+    );
     this._rawMetrics.compositionsSettled += 1;
     this._rawMetrics.legsSettled += c.legs.length;
     this.recordEvent({
@@ -560,7 +859,6 @@ export class DemoStore {
       receiptCid: c.receiptCid,
       governanceCid: c.governanceCid,
     });
-    void withRegulator;
     return c;
   }
 
@@ -570,7 +868,12 @@ export class DemoStore {
     threshold: number,
   ): Governance {
     const c = this.require(compositionId);
-    if (c.status !== "accepted" && c.status !== "awaiting_governance") {
+    if (
+      c.status !== "accepted" &&
+      c.status !== "ready_to_settle" &&
+      c.status !== "allocating" &&
+      c.status !== "awaiting_governance"
+    ) {
       throw new Error("governance requires an accepted agreement");
     }
     if (threshold < 1 || threshold > governors.length) {
@@ -647,12 +950,13 @@ export class DemoStore {
     return gov;
   }
 
-  /** Pitch path: propose → accept all → settle → money-shot payload. */
+  /** Pitch path: propose → accept all → allocate all → settle → money-shot payload. */
   runFullDemo(opts?: { forceFail?: boolean; requireGovernance?: boolean }) {
     const composition = this.proposeTradeFinance(opts);
     for (const p of composition.counterparties) {
       this.accept(composition.id, p);
     }
+    this.allocateAll(composition.id);
     let settled: Composition | null = null;
     let error: string | null = null;
     try {
@@ -685,9 +989,9 @@ export class DemoStore {
     const results = [];
     for (let i = 0; i < count; i++) {
       // Fresh inventory each deal
-      this.mint("Alice", "CBTC", "1.0");
-      this.mint("Bob", "USDCx", "1000.0");
-      this.mint("Oracle", "ATTEST", "1.0");
+      this.mint("Alice", "CBTC", "2.0");
+      this.mint("Bob", "USDCx", "10000.0");
+      this.mint("Oracle", "cETH", "1.5");
       results.push(this.runFullDemo());
     }
     return { ran: count, metrics: this.metrics, last: results.at(-1) };

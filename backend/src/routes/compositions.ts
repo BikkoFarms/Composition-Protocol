@@ -17,8 +17,8 @@ compositionsRouter.get("/", (_req, res) => {
 
 /**
  * POST /compositions/demo/run-full
- * One-click pitch orchestration:
- * 1. Proposes 3-leg trade-finance deal (CBTC collateral, USDCx cash, Oracle ATTEST).
+ * One-click orchestration (allocate-all + settle; secondary to /demo matching path):
+ * 1. Proposes 3-leg trade-finance deal (CBTC collateral, USDCx cash, Oracle cETH).
  * 2. Collects co-signatures from all counterparties (AcceptanceTracker).
  * 3. Executes atomic settlement choice (R-ATOM-1) or forced revert (R-ATOM-2).
  * 4. Assembles side-by-side observer vs participant visibility payload.
@@ -169,6 +169,62 @@ compositionsRouter.post("/:id/accept", (req, res) => {
     res.json(composition);
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * POST /compositions/demo/open-desk
+ * Judge path step 1: propose 3-leg trade-finance + accept all counterparties.
+ * Returns agreement ready for per-leg Allocate (not yet settled).
+ */
+compositionsRouter.post("/demo/open-desk", (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { forceFail?: boolean };
+    const composition = demoStore.proposeTradeFinance({
+      forceFail: body.forceFail,
+    });
+    for (const p of composition.counterparties) {
+      demoStore.accept(composition.id, p);
+    }
+    res.status(201).json({
+      composition: demoStore.require(composition.id),
+      legs: demoStore.require(composition.id).legs,
+      commits: demoStore.require(composition.id).commits,
+      next: "Allocate each leg — matching parties, amount, instrument, reference, deadline",
+    });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
+ * POST /compositions/:id/allocate
+ * Post one LegAllocation; field-by-field match against agreed LegSpec (CIP-56 coordination).
+ * On mismatch returns 409 with verbatim allocation match failed: … reason (no state change).
+ */
+compositionsRouter.post("/:id/allocate", (req, res) => {
+  try {
+    const body = req.body as {
+      legId: string;
+      instrumentId: string;
+      amount: string;
+      provider: PartyId;
+      receiver: PartyId;
+      assetCid: string;
+      reference: string;
+      deadline: string;
+      allocator?: PartyId;
+    };
+    const result = demoStore.allocate(req.params.id, body);
+    res.status(201).json(result);
+  } catch (e) {
+    const msg = (e as Error).message;
+    const isMatch = msg.startsWith("allocation match failed");
+    res.status(isMatch ? 409 : 400).json({
+      error: msg,
+      rejected: isMatch,
+      halfState: false,
+    });
   }
 });
 

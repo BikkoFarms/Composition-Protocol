@@ -30,5 +30,6 @@ cd daml && daml test   # includes testAllocHappyPath3PartyDvp + testAuditorCanno
 cd backend && npm test # demoStore mirrors the same claims
 ```
 
+**On the judge path:** http://localhost:3000/demo — panel **Why builders adopt this** (~99 vs ~192).  
 UI money shot: http://localhost:3000/observer  
 BitSafe beat: http://localhost:3000/governance

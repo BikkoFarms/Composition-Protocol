@@ -51,10 +51,44 @@ describe("Settleflow demo gates", () => {
     );
   });
 
+  it("allocation mismatch rejected — no half-state", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    const leg = store.require(c.id).legs.find((l) => l.legId === "cash")!;
+    assert.throws(
+      () =>
+        store.allocate(c.id, {
+          ...leg,
+          amount: "999999.0",
+        }),
+      /allocation match failed: amount mismatch on leg cash/,
+    );
+    assert.equal(store.require(c.id).allocations.length, 0);
+    assert.equal(store.require(c.id).status, "accepted");
+  });
+
+  it("allocate → settle — commits + ready_to_settle gate", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    assert.throws(() => store.settle(c.id), /expected 3 allocations, got 0/);
+    for (const leg of store.require(c.id).legs) {
+      const { commit } = store.allocate(c.id, { ...leg });
+      assert.ok(commit.updateId.startsWith("upd-"));
+      assert.equal(commit.choice, "AllocateLeg");
+    }
+    assert.equal(store.require(c.id).status, "ready_to_settle");
+    const settled = store.settle(c.id);
+    assert.equal(settled.status, "settled");
+    assert.ok(settled.commits.some((x) => x.choice === "AllocateLeg"));
+  });
+
   it("R-GOV-1 below threshold rejected", () => {
     const c = store.proposeTradeFinance({ requireGovernance: true });
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
     const opened = store.settle(c.id);
     assert.equal(opened.status, "awaiting_governance");
     assert.ok(opened.governanceCid);
@@ -70,6 +104,7 @@ describe("Settleflow demo gates", () => {
     const c = store.proposeTradeFinance({ requireGovernance: true });
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
     const opened = store.settle(c.id);
     store.approveGovernance(opened.governanceCid!, "Gov1");
     store.approveGovernance(opened.governanceCid!, "Gov2");
@@ -109,6 +144,7 @@ describe("Settleflow demo gates", () => {
     const c = store.proposeTradeFinance();
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
     // Trigger emergency halt
     store.toggleCircuitBreaker("Operator", "Suspected Oracle Anomaly");
     assert.throws(() => store.settle(c.id), /circuit breaker is active/);
@@ -123,6 +159,7 @@ describe("Settleflow demo gates", () => {
     const c = store.proposeTradeFinance({ requireGovernance: true });
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
     const opened = store.settle(c.id);
     const govId = opened.governanceCid!;
     const vetoed = store.vetoGovernance(govId, "Gov1", "Collateral valuation anomaly");
@@ -239,6 +276,7 @@ describe("Settleflow demo gates", () => {
     });
     store.accept(deal1.id, "Bob");
     store.accept(deal1.id, "Oracle");
+    store.allocateAll(deal1.id);
     const settled1 = store.settle(deal1.id);
     assert.equal(settled1.status, "settled");
 
@@ -259,6 +297,7 @@ describe("Settleflow demo gates", () => {
     });
     store.accept(deal2.id, "Bob");
     store.accept(deal2.id, "Oracle");
+    store.allocateAll(deal2.id);
     const settled2 = store.settle(deal2.id);
     assert.equal(settled2.status, "settled");
     assert.notEqual(settled1.id, settled2.id);
@@ -302,6 +341,7 @@ describe("Settleflow demo gates", () => {
     const c = store.proposeTradeFinance();
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
+    store.allocateAll(c.id);
     const settled = store.settle(c.id);
     assert.equal(settled.status, "settled");
     assert.ok(settled.receiptCid);

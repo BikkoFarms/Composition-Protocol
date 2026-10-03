@@ -1,4 +1,4 @@
--- | WITHOUT the Composition layer — hand-rolled 3-party DvP coordination (~220 lines).
+-- | WITHOUT the Settleflow layer — hand-rolled 3-party DvP coordination (~192 LOC).
 -- Everything the package gives you (accept gate, allocation match, atomic settle,
 -- blinded receipt, expire/cancel) re-implemented ad hoc. Do not ship this; it is
 -- the pitch contrast ("adopt the layer instead of writing it").

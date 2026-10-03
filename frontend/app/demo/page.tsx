@@ -1,75 +1,362 @@
 "use client";
 
 /**
- * Settlement desk — primary pitch path for GUIDE v2 / PITCH_SCRIPT.
+ * Settlement desk — centerpiece: Propose → Allocate (match) → mismatch reject → Settle.
+ * Steps call live API; phases track real composition status / commits (no cosmetic timers).
  */
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 
-type RunFullResult = {
-  composition: { id: string; status: string; description: string };
-  error: string | null;
-  moneyShot: {
-    participant: { visibleTokens: unknown[]; settlementReceipts: unknown[] };
-    observer: {
-      visibleTokens: unknown[];
-      settlementReceipts: unknown[];
-      privacy: { claim: string };
-    };
-  };
-  metrics: {
-    compositionsSettled: number;
-    compositionsReverted: number;
-    legsSettled: number;
+type PartyId = "Operator" | "Alice" | "Bob" | "Oracle" | "Regulator";
+
+type LegSpec = {
+  legId: string;
+  instrumentId: string;
+  amount: string;
+  provider: PartyId;
+  receiver: PartyId;
+  assetCid: string;
+  reference: string;
+  deadline: string;
+};
+
+type Allocation = {
+  allocationCid: string;
+  updateId: string;
+  legId: string;
+  matchedFields: string[];
+};
+
+type CommitRecord = {
+  updateId: string;
+  contractId: string;
+  choice: string;
+  actAs: PartyId[];
+  at: string;
+  detail?: string;
+};
+
+type Composition = {
+  id: string;
+  proposalCid: string;
+  agreementCid: string | null;
+  receiptCid: string | null;
+  status: string;
+  description: string;
+  legs: LegSpec[];
+  allocations: Allocation[];
+  commits: CommitRecord[];
+  legSummaries?: { legId: string; instrumentId: string; status: string }[];
+};
+
+type MoneyShot = {
+  participant: { visibleTokens: unknown[]; settlementReceipts: unknown[] };
+  observer: {
+    visibleTokens: unknown[];
+    settlementReceipts: unknown[];
+    privacy: { claim: string };
   };
 };
 
-const PHASES = [
-  { id: 0, label: "Ready", hint: "3-party DvP specimen staged" },
-  { id: 1, label: "Proposed", hint: "CBTC + USDCx + cETH" },
-  { id: 2, label: "Accepted", hint: "Lender and oracle co-signed" },
-  { id: 3, label: "Settling", hint: "One atomic Canton transaction" },
-  { id: 4, label: "Settled", hint: "Prove privacy on auditor desk" },
+type StepId =
+  | "idle"
+  | "proposed"
+  | "allocating"
+  | "mismatch"
+  | "ready"
+  | "settled"
+  | "reverted";
+
+const PHASES: { id: StepId; label: string; hint: string }[] = [
+  { id: "proposed", label: "Proposed", hint: "Agreement formed after accept" },
+  {
+    id: "allocating",
+    label: "Allocating",
+    hint: "Each leg matched to trade terms",
+  },
+  {
+    id: "mismatch",
+    label: "Mismatch reject",
+    hint: "Wrong amount rejected — trade stays not ready",
+  },
+  { id: "ready", label: "All ready", hint: "Every allocation matched" },
+  { id: "settled", label: "Settled", hint: "Receipt + prove privacy" },
 ];
 
+function phaseActive(current: StepId, target: StepId): boolean {
+  const order: StepId[] = [
+    "idle",
+    "proposed",
+    "allocating",
+    "mismatch",
+    "ready",
+    "settled",
+  ];
+  return order.indexOf(current) >= order.indexOf(target);
+}
+
 export default function DemoPage() {
-  const [result, setResult] = useState<RunFullResult | null>(null);
+  const [composition, setComposition] = useState<Composition | null>(null);
+  const [step, setStep] = useState<StepId>("idle");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [mismatchReason, setMismatchReason] = useState<string | null>(null);
+  const [moneyShot, setMoneyShot] = useState<MoneyShot | null>(null);
+  const [log, setLog] = useState<string[]>([]);
   const [loadStats, setLoadStats] = useState<{
     ran: number;
-    metrics: RunFullResult["metrics"];
+    metrics: { compositionsSettled: number; legsSettled: number };
   } | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [phase, setPhase] = useState(0);
-  const [mode, setMode] = useState<"idle" | "happy" | "revert">("idle");
 
-  async function settleTrade(forceFail = false) {
+  const pushLog = useCallback((line: string) => {
+    setLog((prev) => [...prev, line]);
+  }, []);
+
+  async function openDesk() {
     setBusy(true);
     setError(null);
-    setResult(null);
-    setMode(forceFail ? "revert" : "happy");
-    setPhase(1);
+    setMismatchReason(null);
+    setMoneyShot(null);
+    setLog([]);
+    setComposition(null);
     try {
-      await new Promise((r) => setTimeout(r, 420));
-      setPhase(2);
-      await new Promise((r) => setTimeout(r, 320));
-      setPhase(3);
-      const data = await api<RunFullResult>("/compositions/demo/run-full", {
+      const data = await api<{
+        composition: Composition;
+        commits: CommitRecord[];
+      }>("/compositions/demo/open-desk", { method: "POST", body: "{}" });
+      setComposition(data.composition);
+      setStep("proposed");
+      const last = data.composition.commits.at(-1);
+      pushLog(
+        `Propose+Accept → agreement ${data.composition.agreementCid} · updateId ${last?.updateId ?? "—"}`,
+      );
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function allocateLeg(leg: LegSpec, override?: Partial<LegSpec>) {
+    if (!composition) return null;
+    const payload = { ...leg, ...override };
+    try {
+      const data = await api<{
+        composition: Composition;
+        allocation: Allocation;
+        commit: CommitRecord;
+      }>(`/compositions/${composition.id}/allocate`, {
         method: "POST",
-        body: JSON.stringify({ forceFail }),
+        body: JSON.stringify(payload),
       });
-      setResult(data);
+      setComposition(data.composition);
+      pushLog(
+        `AllocateLeg ${leg.legId} MATCHED · cid ${data.allocation.allocationCid} · updateId ${data.commit.updateId}`,
+      );
+      pushLog(`  fields: ${data.allocation.matchedFields.join(", ")}`);
+      if (data.composition.status === "ready_to_settle") {
+        setStep("ready");
+      } else {
+        setStep("allocating");
+      }
+      return data;
+    } catch (e) {
+      const msg = String((e as Error).message);
+      throw Object.assign(new Error(msg), { rejectMessage: msg });
+    }
+  }
+
+  /** Default judge path: allocate, deliberate mismatch, correct, settle. */
+  async function runAllocationCenterpiece() {
+    setBusy(true);
+    setError(null);
+    setMismatchReason(null);
+    setMoneyShot(null);
+    setLog([]);
+    try {
+      const opened = await api<{ composition: Composition }>(
+        "/compositions/demo/open-desk",
+        { method: "POST", body: "{}" },
+      );
+      let c = opened.composition;
+      setComposition(c);
+      setStep("proposed");
+      pushLog(
+        `1. Proposed · proposalCid ${c.proposalCid} · agreementCid ${c.agreementCid}`,
+      );
+      const lastOpen = c.commits.at(-1);
+      pushLog(`   updateId ${lastOpen?.updateId} · ${lastOpen?.choice}`);
+
+      setStep("allocating");
+      // Leg 1 — Alice CBTC correct
+      const legA = c.legs.find((l) => l.legId === "collateral")!;
+      const a1 = await api<{
+        composition: Composition;
+        allocation: Allocation;
+        commit: CommitRecord;
+      }>(`/compositions/${c.id}/allocate`, {
+        method: "POST",
+        body: JSON.stringify(legA),
+      });
+      c = a1.composition;
+      setComposition(c);
+      pushLog(
+        `2. Alice allocated CBTC · MATCHED · ${a1.allocation.allocationCid} · ${a1.commit.updateId}`,
+      );
+
+      // Leg 2 — deliberate wrong amount (headline reject)
+      const legB = c.legs.find((l) => l.legId === "cash")!;
+      setStep("mismatch");
+      let rejectMsg = "";
+      try {
+        await api(`/compositions/${c.id}/allocate`, {
+          method: "POST",
+          body: JSON.stringify({
+            ...legB,
+            amount: "999999.0", // wrong vs agreed trade terms
+          }),
+        });
+      } catch (err) {
+        rejectMsg = String((err as Error).message);
+      }
+      if (!rejectMsg) {
+        throw new Error("expected mismatch rejection did not fire");
+      }
+      setMismatchReason(rejectMsg);
+      pushLog(`3. MISMATCH REJECT (wrong amount on cash) — trade NOT ready`);
+      pushLog(`   ${rejectMsg}`);
+      // Refresh composition — must be unchanged (still one allocation)
+      const mid = await api<Composition>(`/compositions/${c.id}`);
+      c = mid;
+      setComposition(c);
+      if (c.allocations.length !== 1) {
+        throw new Error("half-state: allocation count changed after reject");
+      }
+
+      // Correct cash allocation
+      const a2 = await api<{
+        composition: Composition;
+        allocation: Allocation;
+        commit: CommitRecord;
+      }>(`/compositions/${c.id}/allocate`, {
+        method: "POST",
+        body: JSON.stringify(legB),
+      });
+      c = a2.composition;
+      setComposition(c);
+      setStep("allocating");
+      pushLog(
+        `4. Bob allocated USDCx · MATCHED · ${a2.commit.updateId}`,
+      );
+
+      // Leg 3 — Oracle cETH
+      const legC = c.legs.find((l) => l.legId === "sponsor")!;
+      const a3 = await api<{
+        composition: Composition;
+        allocation: Allocation;
+        commit: CommitRecord;
+      }>(`/compositions/${c.id}/allocate`, {
+        method: "POST",
+        body: JSON.stringify(legC),
+      });
+      c = a3.composition;
+      setComposition(c);
+      setStep("ready");
+      pushLog(
+        `5. Oracle allocated cETH · MATCHED · all-ready · ${a3.commit.updateId}`,
+      );
+
+      // Settle
+      const settled = await api<Composition>(`/compositions/${c.id}/settle`, {
+        method: "POST",
+        body: JSON.stringify({ withRegulator: true }),
+      });
+      setComposition(settled);
+      setStep("settled");
+      const settleCommit = settled.commits.at(-1);
+      pushLog(
+        `6. Settle · receipt ${settled.receiptCid} · updateId ${settleCommit?.updateId}`,
+      );
+
+      const shot = await api<{
+        participant: MoneyShot["participant"];
+        observer: MoneyShot["observer"];
+      }>("/audit/money-shot");
+      setMoneyShot({
+        participant: shot.participant,
+        observer: shot.observer,
+      });
+    } catch (e) {
+      setError(String((e as Error).message));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitMismatchOnly() {
+    if (!composition) {
+      setError("Open the desk first (or run the centerpiece flow).");
+      return;
+    }
+    const legB = composition.legs.find((l) => l.legId === "cash");
+    if (!legB) return;
+    if (composition.allocations.some((a) => a.legId === "cash")) {
+      setError("Cash leg already allocated — open a new desk to retry mismatch.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // Ensure collateral allocated so we are in allocating state
+      if (!composition.allocations.some((a) => a.legId === "collateral")) {
+        const legA = composition.legs.find((l) => l.legId === "collateral")!;
+        await allocateLeg(legA);
+      }
+      setStep("mismatch");
+      await allocateLeg(legB, { amount: "999999.0" });
+      setError("Expected rejection did not occur");
+    } catch (e) {
+      const msg = String((e as Error).message);
+      setMismatchReason(msg);
+      pushLog(`MISMATCH REJECT: ${msg}`);
+      const refreshed = await api<Composition>(
+        `/compositions/${composition.id}`,
+      );
+      setComposition(refreshed);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function oneClickSettle() {
+    setBusy(true);
+    setError(null);
+    setMismatchReason(null);
+    setLog([]);
+    try {
+      const data = await api<{
+        composition: Composition;
+        error: string | null;
+        moneyShot: MoneyShot;
+      }>("/compositions/demo/run-full", {
+        method: "POST",
+        body: JSON.stringify({ forceFail: false }),
+      });
+      setComposition(data.composition);
       if (data.error) {
         setError(data.error);
-        setPhase(3);
+        setStep("reverted");
       } else {
-        setPhase(4);
+        setStep("settled");
+        setMoneyShot(data.moneyShot);
+        pushLog(
+          `One-click: allocate-all + settle · receipt ${data.composition.receiptCid}`,
+        );
       }
     } catch (e) {
       setError(String((e as Error).message));
-      setPhase(3);
     } finally {
       setBusy(false);
     }
@@ -77,11 +364,10 @@ export default function DemoPage() {
 
   async function runBatch() {
     setBusy(true);
-    setError(null);
     try {
       const data = await api<{
         ran: number;
-        metrics: RunFullResult["metrics"];
+        metrics: { compositionsSettled: number; legsSettled: number };
       }>("/compositions/demo/load", {
         method: "POST",
         body: JSON.stringify({ count: 50 }),
@@ -95,24 +381,24 @@ export default function DemoPage() {
   }
 
   const observerEmpty =
-    result &&
-    Array.isArray(result.moneyShot.observer.visibleTokens) &&
-    result.moneyShot.observer.visibleTokens.length === 0;
+    moneyShot &&
+    Array.isArray(moneyShot.observer.visibleTokens) &&
+    moneyShot.observer.visibleTokens.length === 0;
 
-  const phaseLabel = PHASES.find((p) => p.id === phase)?.label ?? "Ready";
+  const allocatedIds = new Set(composition?.allocations.map((a) => a.legId));
 
   return (
     <div>
       <div className="page-head">
         <span className="pill">
-          Settlement desk · DvP
+          Settlement desk · Allocation matching
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">Initiate & settle the DvP</h1>
+        <h1 className="page-title">Allocate, match, then settle</h1>
         <p className="lede">
-          The reusable settlement package with a concrete face: CBTC collateral,
-          USDCx cash, and cETH — one atomic Canton transaction. Then prove the
-          auditor cannot see the legs.
+          Headline claim on camera: each allocation is checked against the trade
+          (parties, amount, instrument, reference, deadline). A wrong amount is
+          rejected — the deal stays not ready — then correct pledges unlock Settle.
         </p>
       </div>
 
@@ -120,38 +406,75 @@ export default function DemoPage() {
         <div className="card desk-panel">
           <h2>Workflow specimen</h2>
           <p className="card-title" style={{ fontSize: 22, marginBottom: 4 }}>
-            3-party DvP · West Africa cocoa
+            3-party DvP · CBTC + USDCx + cETH
           </p>
-          <p className="muted" style={{ marginBottom: 20, fontSize: 14 }}>
-            Status: <strong>{phaseLabel}</strong>
-            {mode === "revert" ? " · testing atomic revert" : ""}
+          <p className="muted" style={{ marginBottom: 16, fontSize: 14 }}>
+            Status:{" "}
+            <strong>{composition?.status ?? "idle"}</strong>
+            {composition?.agreementCid
+              ? ` · agreement ${composition.agreementCid}`
+              : ""}
           </p>
 
           <ul className="ticket-legs">
-            <li>
-              <span>Leg A · Collateral (BitSafe)</span>
-              <strong>CBTC → Lender</strong>
-            </li>
-            <li>
-              <span>Leg B · Cash</span>
-              <strong>USDCx → Exporter</strong>
-            </li>
-            <li>
-              <span>Leg C · Sponsor asset</span>
-              <strong>cETH → Lender</strong>
-            </li>
+            {(composition?.legs ?? [
+              {
+                legId: "collateral",
+                instrumentId: "CBTC",
+                amount: "2.0",
+                provider: "Alice" as PartyId,
+                receiver: "Bob" as PartyId,
+                assetCid: "—",
+                reference: "tf-collateral",
+                deadline: "—",
+              },
+              {
+                legId: "cash",
+                instrumentId: "USDCx",
+                amount: "10000.0",
+                provider: "Bob" as PartyId,
+                receiver: "Alice" as PartyId,
+                assetCid: "—",
+                reference: "tf-cash",
+                deadline: "—",
+              },
+              {
+                legId: "sponsor",
+                instrumentId: "cETH",
+                amount: "1.5",
+                provider: "Oracle" as PartyId,
+                receiver: "Bob" as PartyId,
+                assetCid: "—",
+                reference: "tf-sponsor",
+                deadline: "—",
+              },
+            ]).map((leg) => (
+              <li key={leg.legId}>
+                <span>
+                  {leg.legId} · {leg.instrumentId} · ref {leg.reference}
+                  {allocatedIds.has(leg.legId) ? " · allocated ✓" : ""}
+                </span>
+                <strong>
+                  {leg.amount} · {leg.provider}→{leg.receiver}
+                </strong>
+              </li>
+            ))}
           </ul>
 
           <div className="phase-rail" role="list">
-            {PHASES.filter((p) => p.id > 0).map((p) => (
+            {PHASES.map((p) => (
               <div
                 key={p.id}
                 role="listitem"
                 className={`phase-chip ${
-                  phase > p.id ? "done" : phase === p.id ? "active" : ""
-                } ${error && phase === p.id ? "fail" : ""}`}
+                  phaseActive(step, p.id) && step !== p.id ? "done" : ""
+                } ${step === p.id ? "active" : ""} ${
+                  p.id === "mismatch" && mismatchReason ? "fail" : ""
+                }`}
               >
-                <span className="phase-n">{p.id}</span>
+                <span className="phase-n">
+                  {PHASES.findIndex((x) => x.id === p.id) + 1}
+                </span>
                 <div>
                   <strong>{p.label}</strong>
                   <span>{p.hint}</span>
@@ -164,130 +487,167 @@ export default function DemoPage() {
             <button
               className="primary"
               disabled={busy}
-              onClick={() => settleTrade(false)}
+              onClick={() => runAllocationCenterpiece()}
             >
-              {busy && mode === "happy"
-                ? "Settling DvP…"
-                : "Initiate / Settle DvP"}
+              {busy && step !== "idle" && step !== "settled"
+                ? "Running matching demo…"
+                : "Run allocation matching demo"}
+            </button>
+            <button disabled={busy} onClick={() => openDesk()}>
+              Open desk only
             </button>
             <button
               className="danger"
-              disabled={busy}
-              onClick={() => settleTrade(true)}
+              disabled={busy || !composition}
+              onClick={() => submitMismatchOnly()}
             >
-              Atomic revert
+              Submit wrong amount
             </button>
-            <Link className="btn" href="/governance">
-              Open BitSafe desk
-            </Link>
+            <button
+              className="btn"
+              disabled={busy}
+              onClick={() => oneClickSettle()}
+            >
+              One-click settle
+            </button>
           </div>
-          {phase >= 4 && !error && (
+          {step === "settled" && (
             <p style={{ marginTop: 16, marginBottom: 0 }}>
               <Link className="btn primary" href="/observer">
                 Prove money shot →
               </Link>
             </p>
           )}
-          <p className="muted" style={{ marginTop: 14, fontSize: 13 }}>
-            Role desks:{" "}
-            <Link className="link-arrow" href="/proposer">
-              Exporter
-            </Link>
-            {" · "}
-            <Link className="link-arrow" href="/counterparty">
-              Lender
-            </Link>
-            {" · "}
-            <Link className="link-arrow" href="/observer">
-              Auditor
-            </Link>
-          </p>
         </div>
 
         <div className="stack-sm desk-side">
-          <div className="card card-mint">
-            <h2>Pitch path</h2>
-            <ul className="proof-list">
-              <li>1. Initiate / Settle DvP here</li>
-              <li>2. Open auditor desk — observer sees nothing</li>
-              <li>3. BitSafe: refuse below threshold, then settle</li>
-            </ul>
+          <div className="card card-mint adopt-panel">
+            <h2>Why builders adopt this</h2>
+            <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+              Same 3-party DvP — call the layer vs rewrite coordination.
+            </p>
+            <div className="loc-compare" aria-label="Lines of code comparison">
+              <div>
+                <span className="loc-label">With Settleflow</span>
+                <strong className="loc-n">~99</strong>
+                <span className="loc-unit">LOC</span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Propose → Allocate → Settle
+                </span>
+              </div>
+              <div className="loc-vs">vs</div>
+              <div>
+                <span className="loc-label">Hand-rolled</span>
+                <strong className="loc-n loc-n-warn">~192</strong>
+                <span className="loc-unit">LOC</span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Accept gate + match + receipt
+                </span>
+              </div>
+            </div>
+            <p className="card-body" style={{ marginBottom: 0, fontSize: 13 }}>
+              ~2× less Daml surface for one deal — and you don&apos;t pay it again
+              per workflow. Measured in{" "}
+              <code style={{ fontSize: 12 }}>docs/SIDE_BY_SIDE.md</code> ·{" "}
+              <code style={{ fontSize: 12 }}>examples/</code>.
+            </p>
           </div>
           <div className="card card-lime">
+            <h2>Judge path (default)</h2>
+            <ul className="proof-list">
+              <li>1. Propose + accept → agreement</li>
+              <li>2. Allocate CBTC (match)</li>
+              <li>3. Wrong USDCx amount → reject</li>
+              <li>4. Correct cETH + settle</li>
+            </ul>
+          </div>
+          <div className="card card-lavender">
             <h2>Load evidence</h2>
-            <p className="card-body" style={{ marginBottom: 14 }}>
-              Push fifty settlements for the Metrics criterion.
-            </p>
             <button disabled={busy} onClick={runBatch}>
               Settle 50 tickets
             </button>
             {loadStats && (
               <p className="mono" style={{ marginTop: 12, marginBottom: 0 }}>
                 {loadStats.ran} ran · {loadStats.metrics.compositionsSettled}{" "}
-                settled · {loadStats.metrics.legsSettled} legs
+                settled
               </p>
             )}
-          </div>
-          <div className="card card-lavender">
-            <h2>Package, not app</h2>
-            <p className="card-body" style={{ marginBottom: 0 }}>
-              Venues rebuild this plumbing by hand. This specimen shows the
-              reusable layer they call instead.
-            </p>
           </div>
         </div>
       </div>
 
-      {error && (
+      {mismatchReason && (
         <div className="card card-blush" style={{ marginTop: 20 }}>
-          <h2>Atomic revert</h2>
-          <p className="err" style={{ marginBottom: 0 }}>
-            {error}
+          <h2>Allocation rejected</h2>
+          <p className="err mono" style={{ marginBottom: 0, fontSize: 14 }}>
+            {mismatchReason}
           </p>
           <p className="muted" style={{ marginTop: 8, fontSize: 14 }}>
-            No partial state. CBTC, USDCx, and cETH all rolled back.
+            No partial commit — allocations on the deal unchanged. Correct the
+            pledge to continue.
           </p>
         </div>
       )}
 
-      {result && !result.error && (
+      {error && (
+        <div className="card card-blush" style={{ marginTop: 20 }}>
+          <h2>Error</h2>
+          <p className="err" style={{ marginBottom: 0 }}>
+            {error}
+          </p>
+        </div>
+      )}
+
+      {log.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2>Live commits</h2>
+          <ol className="mono" style={{ fontSize: 13, margin: 0, paddingLeft: 18 }}>
+            {log.map((line, i) => (
+              <li key={i} style={{ marginBottom: 6 }}>
+                {line}
+              </li>
+            ))}
+          </ol>
+          {composition && composition.commits.length > 0 && (
+            <div style={{ marginTop: 16 }}>
+              <p className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+                Ledger-shaped commits on this deal
+              </p>
+              <ul className="ticket-legs">
+                {composition.commits.map((cm) => (
+                  <li key={cm.updateId + cm.choice}>
+                    <span>
+                      {cm.choice} · {cm.contractId}
+                    </span>
+                    <strong>{cm.updateId}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {composition?.status === "settled" && moneyShot && (
         <div className="split" style={{ marginTop: 28 }}>
           <div className="card card-mint">
             <h2>Lender view</h2>
-            <p className="card-title" style={{ fontSize: 20 }}>
-              Assets received
-            </p>
-            <div className="row" style={{ marginBottom: 8 }}>
-              <span className="tag ok">
-                Tokens: {result.moneyShot.participant.visibleTokens.length}
-              </span>
-              <span className="tag ok">
-                Receipts:{" "}
-                {result.moneyShot.participant.settlementReceipts.length}
-              </span>
-            </div>
-            <p className="muted" style={{ fontSize: 14, margin: 0 }}>
-              Deal {result.composition.id.slice(0, 8)} ·{" "}
-              {result.composition.status}
+            <span className="tag ok">
+              Tokens: {moneyShot.participant.visibleTokens.length}
+            </span>
+            <p className="muted" style={{ fontSize: 14 }}>
+              Receipt: {composition.receiptCid}
             </p>
           </div>
           <div className="card card-lavender">
             <h2>Auditor preview</h2>
-            <p className="card-title" style={{ fontSize: 20 }}>
-              Privacy check
-            </p>
             {observerEmpty ? (
               <div className="empty-state" style={{ marginTop: 8 }}>
                 visibleTokens: []
-                <br />
-                Legs not in auditor ACS
               </div>
             ) : (
-              <span className="tag warn">Unexpected tokens present</span>
+              <span className="tag warn">Unexpected tokens</span>
             )}
-            <p className="muted" style={{ marginTop: 12, fontSize: 14 }}>
-              {result.moneyShot.observer.privacy.claim}
-            </p>
             <Link className="btn primary" href="/observer">
               Open full money shot →
             </Link>

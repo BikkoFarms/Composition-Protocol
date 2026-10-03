@@ -1,6 +1,5 @@
 /**
- * CP seal — traditional finance crest geometry with colorful composition lattice.
- * Not a generic "Africa" mark: bank seal + multi-asset color bands.
+ * Settleflow mark — seal geometry with interlocking SF (Settleflow).
  */
 export function BrandMark({
   size = 28,
@@ -9,7 +8,7 @@ export function BrandMark({
   size?: number;
   className?: string;
 }) {
-  const id = "cp-seal";
+  const id = "sf-seal";
   return (
     <svg
       className={className}
@@ -18,7 +17,8 @@ export function BrandMark({
       viewBox="0 0 48 48"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
+      aria-label="Settleflow"
+      role="img"
     >
       <defs>
         <linearGradient id={`${id}-ring`} x1="4" y1="4" x2="44" y2="44">
@@ -50,7 +50,7 @@ export function BrandMark({
         rx="9"
         fill={`url(#${id}-face)`}
       />
-      {/* Lattice rails — composition of three settlement legs */}
+      {/* Flow rails — three settlement legs */}
       <path
         d="M14 18h20M14 24h20M14 30h20"
         stroke="#001f1f"
@@ -65,14 +65,14 @@ export function BrandMark({
         strokeOpacity="0.12"
         strokeLinecap="round"
       />
-      {/* C */}
+      {/* S */}
       <path
-        d="M22.5 16.2c-4.2 0-7.1 2.9-7.1 7.8s2.9 7.8 7.1 7.8c2.1 0 3.8-.7 5.1-1.9l-1.5-1.7c-.9.8-2 1.3-3.5 1.3-2.7 0-4.5-1.9-4.5-5.5s1.8-5.5 4.5-5.5c1.5 0 2.6.5 3.5 1.3l1.5-1.7c-1.3-1.2-3-1.9-5.1-1.9Z"
+        d="M21.2 19.2c0-1.8 1.4-2.9 3.6-2.9 1.4 0 2.5.4 3.4 1.1l-1.2 1.6c-.6-.4-1.3-.7-2.2-.7-1.1 0-1.7.5-1.7 1.1 0 .7.4 1 2.2 1.5 2.4.7 4 1.6 4 3.8 0 2.1-1.6 3.4-4.2 3.4-1.7 0-3.1-.5-4.1-1.4l1.3-1.6c.7.6 1.7 1 2.8 1 1.3 0 2-.6 2-1.3 0-.7-.5-1.1-2.4-1.6-2.4-.7-3.8-1.7-3.8-3.9Z"
         fill="#001f1f"
       />
-      {/* P interlocking */}
+      {/* F */}
       <path
-        d="M25.2 16.5h5.2c3.2 0 5.3 1.8 5.3 4.7 0 2.8-2 4.5-4.9 4.5h-2.8v6.8h-2.8V16.5Zm2.8 6.6h2.2c1.5 0 2.4-.8 2.4-2 0-1.2-.9-2-2.4-2h-2.2v4Z"
+        d="M28.4 16.5h7.2v2.4h-4.4v3.2h3.8v2.3h-3.8v6.1h-2.8V16.5Z"
         fill="#003d3d"
       />
       <circle cx="38" cy="12" r="2.2" fill="#a36a14" />

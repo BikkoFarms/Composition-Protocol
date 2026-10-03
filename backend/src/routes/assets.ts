@@ -15,7 +15,7 @@ assetsRouter.get("/", (req, res) => {
 
 /**
  * POST /assets/mint
- * Simulates minting of CIP-0056 compliant composable assets (e.g., CBTC, USDCx, ATTEST).
+ * Simulates minting of CIP-0056 compliant composable assets (e.g., CBTC, USDCx, cETH).
  * Creates a token contract owned by the specified party with positive decimal amount.
  */
 assetsRouter.post("/mint", (req, res) => {

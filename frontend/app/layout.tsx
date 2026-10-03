@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="announce">
           Live on Canton · Settleflow · CBTC + USDCx + cETH
           {" · "}
-          <Link href="/demo">Initiate / Settle DvP →</Link>
+          <Link href="/demo">Allocation matching desk →</Link>
         </div>
         <div className="shell">
           <header className="top">
@@ -56,7 +56,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 Desk online
               </span>
               <Link className="btn primary" href="/demo">
-                Initiate / Settle DvP
+                Allocation desk
               </Link>
             </div>
           </header>

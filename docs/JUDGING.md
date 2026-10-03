@@ -1,11 +1,12 @@
 # HackCanton Season 3 — Judging & Evaluation Guide
 
-This guide assists judges in evaluating the **Settleflow** (Settleflow) against HackCanton Season 3's official criteria and prize categories.
+This guide assists judges in evaluating **Settleflow** against HackCanton Season 3's official criteria and prize categories.
 
 **Team:** Revotoken Africa  
 **Primary Track:** Track 1 (RWA & Business Workflows)  
 **Secondary Challenge:** BitSafe Decentralization Challenge (contribution-pool / LocalNet target)  
 **Live Submission Window:** September 18 – October 9, 2026  
+**Positioning (what already exists vs Settleflow):** [POSITIONING.md](./POSITIONING.md)  
 **Grofty:** Deferred (P3) — do not contort the architecture for wallet signing this sprint.
 
 ---
@@ -19,20 +20,20 @@ This guide assists judges in evaluating the **Settleflow** (Settleflow) against 
    # Terminal 2: Web App (:3100 locally, or :3000)
    cd frontend && npm run dev
    ```
-2. **Initiate / Settle DvP:**
+2. **Allocation matching (headline — `/demo`):**
    - Open `/demo`.
-   - Click **Initiate / Settle DvP**: Propose → AcceptanceTracker co-sign → atomic settlement (CBTC + USDCx + cETH).
-   - Optional: **Atomic revert** to witness zero partial state (`R-ATOM-2`).
+   - Click **Run allocation matching demo**: Propose → Accept → Allocate CBTC → **wrong USDCx amount rejected** → correct USDCx + cETH → Settle + receipt commits.
+   - Same viewport: **Why builders adopt this** (~99 LOC with Settleflow vs ~192 hand-rolled).
+   - Optional secondary: **One-click settle** (no mismatch beat).
 3. **Money shot (observer sees nothing):**
    - Open `/observer` (or click **Prove money shot** after settle).
-   - Click **Settle then prove** if the ACS is empty.
-   - Split-screen: participant query shows tokens; regulator query shows **`visibleTokens: []`** plus `SettlementReceipt` (`R-PRIV-3`, `testAuditorCannotSeeLegs`).
+   - Split-screen: participant tokens; regulator **`visibleTokens: []`** + `SettlementReceipt` (`R-PRIV-3`).
 4. **BitSafe refuse → settle:**
    - Open `/governance`.
-   - Click **Camera beat: refuse → settle** (or manually: Open governed deal → Sign Gov1 → Try execute early → Sign Gov2 → Execute).
-   - Witness `R-GOV-1` refusal below threshold, then `R-GOV-2` settle at 2-of-3.
+   - Click **Camera beat: refuse → settle** (or: Open governed deal → Sign Gov1 → Try execute early → Sign Gov2 → Execute).
+   - Witness `R-GOV-1` below threshold, then `R-GOV-2` at 2-of-3.
 5. **Metrics evidence:**
-   - Open `/metrics` or use **Settle 50 tickets** on `/demo`.
+   - Open `/metrics` or **Settle 50 tickets** on `/demo`.
 
 ---
 
@@ -42,7 +43,7 @@ This guide assists judges in evaluating the **Settleflow** (Settleflow) against 
 | :--- | :--- | :--- | :--- |
 | **1. Issuance** | Tokenization of RWAs, registry models, CIP-0056. | `ComposableAsset` wrapping commodities and sponsor assets (**CBTC, USDCx, cETH**). Treasury mint via Admin. | [ComposableAsset.daml](../daml/daml/ComposableAsset.daml), [admin.ts](../backend/src/routes/admin.ts) |
 | **2. Transfers** | Multi-asset exchange, atomic DvP/PvP. | Single-transaction multi-leg settlement (`R-ATOM-1/2`). | [Composition.daml](../daml/daml/Composition.daml) |
-| **3. State Changes** | Lifecycle from origination to fulfillment/cancel. | Propose → accept → agree → optional BitSafe gate → receipt. Cancel / expire / reject included. | [Composition.daml](../daml/daml/Composition.daml), [PROTOCOL.md](PROTOCOL.md) |
+| **3. State Changes** | Lifecycle from origination to fulfillment/cancel. | Propose → accept → **allocate (match)** → settle → receipt; optional BitSafe. Cancel / expire / reject / mismatch reject. | [Composition.daml](../daml/daml/Composition.daml), [PROTOCOL.md](PROTOCOL.md) |
 | **4. Audit Workflows** | Compliance receipts + privacy. | Observer money shot: regulator ACS has receipt only (`visibleTokens: []`). | [demoStore.ts](../backend/src/demoStore.ts), `/observer` |
 | **5. Organizational Ops** | Mission control / safety. | Admin portal, ledger ping, mode switch, circuit breaker. | `/admin`, [RISK_ASSESSMENT.md](RISK_ASSESSMENT.md) |
 

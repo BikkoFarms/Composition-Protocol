@@ -125,12 +125,12 @@ Creates a new multi-leg proposal.
       "assetCid": "tok-usdc-1"
     },
     {
-      "legId": "attestation",
-      "instrumentId": "ATTEST",
-      "amount": "1.0",
+      "legId": "sponsor",
+      "instrumentId": "cETH",
+      "amount": "1.5",
       "provider": "Oracle",
       "receiver": "Bob",
-      "assetCid": "tok-attest-1"
+      "assetCid": "tok-ceth-1"
     }
   ],
   "forceFail": false,
@@ -175,7 +175,7 @@ Executes atomic settlement across all legs in a single Daml transaction.
   "legSummaries": [
     { "legId": "collateral", "instrumentId": "CBTC", "status": "LegSettled" },
     { "legId": "cash", "instrumentId": "USDCx", "status": "LegSettled" },
-    { "legId": "attestation", "instrumentId": "ATTEST", "status": "LegSettled" }
+    { "legId": "sponsor", "instrumentId": "cETH", "status": "LegSettled" }
   ]
 }
 ```
@@ -194,7 +194,7 @@ Executes atomic settlement across all legs in a single Daml transaction.
 ## 4. Pitch Demo & Metrics Benchmarking
 
 ### `POST /compositions/demo/run-full`
-One-click pitch orchestration endpoint: creates a 3-leg trade-finance proposal, accepts across all counterparties, executes atomic settlement, and returns the side-by-side money shot.
+One-click orchestration: propose 3-leg trade-finance (CBTC / USDCx / cETH), accept all, allocate-all, settle, return money shot. Judge default path uses `/demo/open-desk` + per-leg `/allocate` (with mismatch) instead.
 
 #### Request Body
 ```json
@@ -245,7 +245,7 @@ Returns the side-by-side visibility comparison proving that while participants s
     "party": "Bob",
     "visibleTokens": [
       { "instrumentId": "CBTC", "amount": "1.0" },
-      { "instrumentId": "ATTEST", "amount": "1.0" }
+      { "instrumentId": "cETH", "amount": "1.5" }
     ],
     "settlementReceipts": [...]
   },
@@ -259,7 +259,7 @@ Returns the side-by-side visibility comparison proving that while participants s
         "legSummaries": [
           { "legId": "collateral", "status": "LegSettled" },
           { "legId": "cash", "status": "LegSettled" },
-          { "legId": "attestation", "status": "LegSettled" }
+          { "legId": "sponsor", "status": "LegSettled" }
         ],
         "visibleLegPayloads": []
       }

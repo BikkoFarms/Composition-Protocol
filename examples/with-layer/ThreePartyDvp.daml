@@ -1,4 +1,4 @@
--- | WITH the Settleflow layer — orchestration only (~55 LOC).
+-- | WITH the Settleflow layer — orchestration only (~99 LOC file / thin caller).
 -- Illustrative script for docs/SIDE_BY_SIDE.md (mirrors Test.daml happy path).
 -- Reuses ComposableWorkflow → AcceptanceTracker → Allocate → Settle.
 module ThreePartyDvp where

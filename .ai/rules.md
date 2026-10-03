@@ -3,7 +3,7 @@
 ## 1. System Identity & Mission
 Settleflow is an atomic, private, multi-asset settlement primitive built on Canton for HackCanton Season 3 (Track 1: RWA & Business Workflows primary; BitSafe Decentralization challenge secondary).
 - **Core Premise:** While CIP-0056 made individual assets portable, Settleflow makes them *combinable*.
-- **Reference Flow:** African commodity trade finance across 3 legs (Collateral: CBTC, Cash: USDCx, Attestation: Oracle Grade).
+- **Reference Flow:** African commodity trade finance across 3 legs (Collateral: CBTC, Cash: USDCx, Sponsor: cETH).
 - **Golden Rule:** "The protocol is the product. The trade-finance flow is the demo that gives it a face."
 
 ---

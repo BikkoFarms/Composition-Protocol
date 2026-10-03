@@ -8,7 +8,7 @@
 - Next: `daml test` on SDK 3.3; wire OIDC + upload DAR to shared DevNet; book builder interviews.
 
 ## 2026-09-24
-- **MVP:** One-click pitch demo (`/demo`, `POST /compositions/demo/run-full`).
+- **MVP:** Allocation matching desk (`/demo` — open-desk + allocate + mismatch reject + settle; one-click secondary).
 - **Metrics:** `/metrics` UI + `POST /compositions/demo/load` (50 settlements evidence).
 - **BitSafe secondary:** Daml `Governance` + `TestGovernance`; demo 2-of-3 UI at `/governance`, plus `EmergencyVeto` / `ProtocolCircuitBreaker`.
 - **Validation:** Backend gate suites covering atomicity, revert, privacy, M-of-N, veto, circuit breaker.
