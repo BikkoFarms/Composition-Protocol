@@ -133,20 +133,7 @@ export class DemoSettlementAdapter implements ISettlementBackendAdapter {
   }
 
   async getReadiness(compositionId: string): Promise<ReadinessReport> {
-    const c = this.store.require(compositionId);
-    const now = Date.now();
-    return {
-      compositionId: c.id,
-      status: c.status,
-      isReady: c.status === "ready_to_settle",
-      totalLegs: c.legs.length,
-      allocatedLegCount: c.allocations.length,
-      canSettle: c.status === "ready_to_settle" && !this.store.circuitBreaker.isHalted,
-      allocateBy: c.allocateBy,
-      settleBy: c.settleBy,
-      isAllocateExpired: c.allocateBy ? new Date(c.allocateBy).getTime() < now : false,
-      isSettleExpired: c.settleBy ? new Date(c.settleBy).getTime() < now : false,
-    };
+    return this.store.getReadiness(compositionId);
   }
 
   async getPartyView(party: PartyId): Promise<ReturnType<typeof demoStore.partyView>> {

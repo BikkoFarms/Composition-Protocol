@@ -1259,6 +1259,83 @@ export class DemoStore {
     };
   }
 
+  getReadiness(id: string) {
+    const c = this.compositions.get(id);
+    if (!c) throw new Error(`composition ${id} not found`);
+
+    const allocatedLegs = c.allocations.map((a) => ({
+      legId: a.legId,
+      instrumentId: a.instrumentId,
+      amount: a.amount,
+      provider: a.provider,
+      receiver: a.receiver,
+      matched: a.matched === true,
+    }));
+
+    const allocatedLegIds = new Set(c.allocations.map((a) => a.legId));
+    const outstandingLegs = c.legs
+      .filter((leg) => !allocatedLegIds.has(leg.legId))
+      .map((leg) => ({
+        legId: leg.legId,
+        provider: leg.provider,
+        receiver: leg.receiver,
+        instrumentId: leg.instrumentId,
+        amount: leg.amount,
+        deadline: leg.deadline,
+      }));
+
+    const now = Date.now();
+    const isAllocateExpired = Boolean(c.allocateBy && new Date(c.allocateBy).getTime() < now);
+    const isSettleExpired = Boolean(c.settleBy && new Date(c.settleBy).getTime() < now);
+
+    const outstandingParties = Array.from(
+      new Set([
+        ...c.counterparties.filter((cp) => !c.accepted.includes(cp)),
+        ...outstandingLegs.map((l) => l.provider),
+      ]),
+    );
+
+    const allLegsAllocated = c.legs.length > 0 && c.allocations.length >= c.legs.length;
+    const allAccepted = c.counterparties.every((cp) => c.accepted.includes(cp));
+    const isReady = allLegsAllocated && allAccepted && !isAllocateExpired && !isSettleExpired;
+    const canSettle =
+      isReady &&
+      !this.circuitBreaker.isHalted &&
+      c.status !== "settled" &&
+      c.status !== "reverted" &&
+      c.status !== "cancelled" &&
+      c.status !== "expired" &&
+      c.status !== "rejected";
+
+    return {
+      compositionId: c.id,
+      status: c.status,
+      isReady,
+      totalLegs: c.legs.length,
+      allocatedLegCount: c.allocations.length,
+      allocatedLegs,
+      outstandingLegs,
+      parties: {
+        proposer: {
+          party: c.proposer,
+          accepted: true,
+          allocated: c.allocations.some((a) => a.provider === c.proposer),
+        },
+        counterparties: c.counterparties.map((cp) => ({
+          party: cp,
+          accepted: c.accepted.includes(cp),
+          allocated: c.allocations.some((a) => a.provider === cp),
+        })),
+      },
+      outstandingParties,
+      allocateBy: c.allocateBy,
+      settleBy: c.settleBy,
+      isAllocateExpired,
+      isSettleExpired,
+      canSettle,
+    };
+  }
+
   require(id: string): Composition {
     const c = this.compositions.get(id);
     if (!c) throw new Error(`composition ${id} not found`);

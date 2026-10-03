@@ -235,55 +235,8 @@ compositionsRouter.post("/:id/allocate", (req, res) => {
  */
 compositionsRouter.get("/:id/readiness", (req, res) => {
   try {
-    const c = demoStore.require(req.params.id);
-    const unallocatedLegs = c.legs.filter(
-      (l) => !c.allocations.some((a) => a.legId === l.legId),
-    );
-    const allocatedLegs = c.allocations.map((a) => ({
-      legId: a.legId,
-      instrumentId: a.instrumentId,
-      amount: a.amount,
-      provider: a.provider,
-      receiver: a.receiver,
-      matched: a.matched,
-    }));
-    const outstandingParties = [
-      ...c.counterparties.filter((p) => !c.accepted.includes(p)),
-      ...unallocatedLegs.map((l) => l.provider),
-    ];
-    res.json({
-      compositionId: c.id,
-      status: c.status,
-      isReady: c.status === "ready_to_settle",
-      totalLegs: c.legs.length,
-      allocatedLegCount: c.allocations.length,
-      allocatedLegs,
-      outstandingLegs: unallocatedLegs.map((l) => ({
-        legId: l.legId,
-        provider: l.provider,
-        receiver: l.receiver,
-        instrumentId: l.instrumentId,
-        amount: l.amount,
-        deadline: l.deadline,
-      })),
-      parties: {
-        proposer: { party: c.proposer, accepted: true },
-        counterparties: c.counterparties.map((p) => ({
-          party: p,
-          accepted: c.accepted.includes(p),
-          allocated: c.allocations.some(
-            (a) => a.allocator === p || a.provider === p,
-          ),
-        })),
-      },
-      outstandingParties: Array.from(new Set(outstandingParties)),
-      allocateBy: c.allocateBy,
-      settleBy: c.settleBy,
-      isAllocateExpired: c.allocateBy ? new Date(c.allocateBy).getTime() < Date.now() : false,
-      isSettleExpired: c.settleBy ? new Date(c.settleBy).getTime() < Date.now() : false,
-      canSettle:
-        c.status === "ready_to_settle" && !demoStore.circuitBreaker.isHalted,
-    });
+    const readiness = demoStore.getReadiness(req.params.id);
+    res.json(readiness);
   } catch (e) {
     res.status(404).json({ error: (e as Error).message });
   }

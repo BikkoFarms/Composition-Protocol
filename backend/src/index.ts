@@ -56,6 +56,7 @@ app.get("/", (_req, res) => {
       adminOverview: "/admin/overview",
       adminPing: "/admin/ledger/ping",
       oracleQuote: "/admin/oracle/price",
+      readiness: "/compositions/:id/readiness",
     },
     version: "1.0.0",
     timestamp: new Date().toISOString(),
