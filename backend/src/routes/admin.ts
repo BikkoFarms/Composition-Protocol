@@ -168,16 +168,22 @@ adminRouter.post("/reset", (_req, res) => {
 });
 
 /**
- * GET /admin/oracle/live
+ * GET /admin/oracle/live or /admin/oracle/price
  * Fetches live commodity prices and cryptographic signature from the Oracle service (:4002).
  */
-adminRouter.get("/oracle/live", async (_req, res) => {
+adminRouter.get(["/oracle/live", "/oracle/price"], async (req, res) => {
   try {
-    const oracleUrl = process.env.ORACLE_URL ?? "http://localhost:4002";
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
+    let oracleUrl = process.env.ORACLE_URL ?? "http://localhost:4002";
+    oracleUrl = oracleUrl.trim().replace(/\/+$/, "");
+    if (!oracleUrl.startsWith("http://") && !oracleUrl.startsWith("https://")) {
+      oracleUrl = oracleUrl.includes("localhost") ? `http://${oracleUrl}` : `https://${oracleUrl}`;
+    }
 
-    const priceResp = await fetch(`${oracleUrl}/price?symbol=COCOA`, {
+    const symbol = String(req.query.symbol ?? "COCOA").toUpperCase();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+
+    const priceResp = await fetch(`${oracleUrl}/price?symbol=${encodeURIComponent(symbol)}`, {
       signal: controller.signal,
     }).catch(() => null);
 
@@ -194,7 +200,7 @@ adminRouter.get("/oracle/live", async (_req, res) => {
         ok: true,
         source: "internal-oracle-engine",
         data: {
-          symbol: "COCOA",
+          symbol,
           price,
           currency: "USD",
           unit: "MT",
@@ -207,6 +213,7 @@ adminRouter.get("/oracle/live", async (_req, res) => {
     res.status(500).json({ error: (e as Error).message });
   }
 });
+
 
 /**
  * POST /admin/raw-command

@@ -39,6 +39,30 @@ async function refreshLedgerToken() {
 }
 
 /**
+ * Root discovery endpoint: overview of active endpoints and API status.
+ */
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "Settle Flow API Gateway",
+    mode: ledger ? "ledger" : "demo",
+    status: "online",
+    endpoints: {
+      root: "/",
+      health: "/health",
+      assets: "/assets",
+      compositions: "/compositions",
+      audit: "/audit/money-shot",
+      adminOverview: "/admin/overview",
+      adminPing: "/admin/ledger/ping",
+      oracleQuote: "/admin/oracle/price",
+    },
+    version: "1.0.0",
+    timestamp: new Date().toISOString(),
+  });
+});
+
+/**
  * Health check: execution mode, ledger reachability, OIDC status.
  */
 app.get("/health", async (_req, res) => {
@@ -80,6 +104,14 @@ app.use("/assets", assetsRouter);
 app.use("/compositions", compositionsRouter);
 app.use("/audit", auditRouter);
 app.use("/admin", adminRouter);
+
+app.use((_req, res) => {
+  res.status(404).json({
+    ok: false,
+    error: "endpoint not found",
+    message: "Requested API path does not exist. Available base endpoints: /, /health, /assets, /compositions, /audit, /admin",
+  });
+});
 
 app.listen(port, async () => {
   console.log(

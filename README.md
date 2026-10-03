@@ -8,6 +8,11 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 [![Challenge](https://img.shields.io/badge/Secondary-BitSafe%20Decentralization%20Challenge-purple.svg)](#bitsafe-decentralization-challenge)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+> 🚀 **Live Production Deployments on Render**:
+> - **Web Application**: [https://settleflow-frontend.onrender.com](https://settleflow-frontend.onrender.com)
+> - **API Gateway**: [https://settleflow-backend-zcp7.onrender.com](https://settleflow-backend-zcp7.onrender.com) (`/health`, `/compositions`, `/audit/money-shot`)
+> - **Commodity Oracle**: [https://settleflow-oracle.onrender.com](https://settleflow-oracle.onrender.com) (`/health`, `/price?symbol=COCOA`, `/attest`)
+
 > **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settle Flow owns the trade. The trade-finance desk is the demo that gives it a face.
 
 **How we differ from CIP-0056 / Daml Finance / other engines:** [docs/POSITIONING.md](docs/POSITIONING.md)
@@ -309,10 +314,10 @@ npm run demo:scenario
 | **Daml Script Test Gates** | Complete (9/9) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV, and SRS §12 |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, circuit-breaker, admin |
 | **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts |
-| **Backend Test Gates** | Passing (27/27) | `npm test` — covers atomicity, privacy, BitSafe M-of-N, failure paths, and PRD FR-1..11 |
+| **Backend Test Gates** | Passing (33/33) | `npm test` — covers atomicity, privacy, BitSafe M-of-N, failure paths, deadlines, withdrawn legs, and PRD FR-1..19 |
 | **Live E2E Socket Tests** | Passing (13/13) | `npm run test:e2e` verifying live integration across ports :4000 and :4002 |
 | **PRD Demo Scenario Runner** | Passing (8/8) | `npm run demo:scenario` verifying PRD §7 8-step sequence |
-| **Frontend Next.js Views** | Complete (11/11 routes) | 7 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/admin`) |
+| **Frontend Next.js Views** | Complete (12/12 routes) | 8 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/readiness`, `/admin`) |
 | **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
 | **Documentation & Runbooks** | Complete | `DEPLOYMENT.md`, `TESTING.md`, PRD, SRS, Architecture, API, Risk assessment |
 

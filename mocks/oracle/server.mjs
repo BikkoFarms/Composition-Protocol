@@ -56,6 +56,31 @@ const server = http.createServer((req, res) => {
 
   const url = new URL(req.url, `http://localhost:${port}`);
 
+  // Root discovery endpoint
+  if (url.pathname === "/" || url.pathname === "") {
+    res.end(
+      JSON.stringify(
+        {
+          ok: true,
+          service: "Settle Flow Commodity Oracle & Attestation Service",
+          status: "online",
+          endpoints: {
+            root: "/",
+            health: "/health",
+            price: "/price?symbol=COCOA",
+            attest: "POST /attest",
+            verify: "POST /verify",
+          },
+          supportedSymbols: Object.keys(MARKET_FEEDS),
+          timestamp: new Date().toISOString(),
+        },
+        null,
+        2,
+      ),
+    );
+    return;
+  }
+
   // Health check
   if (url.pathname === "/health") {
     res.end(

@@ -18,18 +18,9 @@ services:
       - key: NODE_VERSION
         value: "22"
       - key: NEXT_PUBLIC_API_URL
-        fromService:
-          type: web
-          name: settleflow-backend
-          property: host
-          # In production, Render injects the https hostname automatically.
-          # If your client browser requires the full URL, set value to:
-          # https://settleflow-backend.onrender.com
+        value: https://settleflow-backend-zcp7.onrender.com
       - key: NEXT_PUBLIC_ORACLE_URL
-        fromService:
-          type: web
-          name: settleflow-oracle
-          property: host
+        value: https://settleflow-oracle.onrender.com
 
   # =========================================================================
   # 2. BACKEND: Express REST API & Canton Ledger Gateway
@@ -51,6 +42,8 @@ services:
         value: "4000"
       - key: LEDGER_MODE
         value: demo # Set to "ledger" when connecting to live Canton node
+      - key: ORACLE_URL
+        value: https://settleflow-oracle.onrender.com
       
       # Optional live Canton JSON Ledger API v2 credentials
       # (Leave blank to run in resilient high-fidelity demo mode)

@@ -272,13 +272,20 @@ Ensure all code and the `render.yaml` file are committed and pushed to your GitH
 
 ### Step 3: Wire Frontend to Backend URL
 By default, the client-side Next.js browser views require the public HTTPS address of your deployed backend:
-1. In the Render Dashboard, open the **`settleflow-backend`** service and copy its public URL (e.g., `https://settleflow-backend.onrender.com`).
+1. In the Render Dashboard, open the **`settleflow-backend`** service and copy its public URL: `https://settleflow-backend-zcp7.onrender.com`.
 2. Open the **`settleflow-frontend`** service -> **Environment** tab.
-3. Set the environment variable:
+3. Verify or set the environment variables:
    ```env
-   NEXT_PUBLIC_API_URL=https://settleflow-backend.onrender.com
+   NEXT_PUBLIC_API_URL=https://settleflow-backend-zcp7.onrender.com
+   NEXT_PUBLIC_ORACLE_URL=https://settleflow-oracle.onrender.com
    ```
-4. Save and trigger a redeploy of the frontend.
+4. Save and trigger a redeploy of the frontend (or let `render.yaml` apply them automatically).
+
+### Live Production Endpoints
+The live Settle Flow deployment is hosted at:
+- **Frontend App**: [https://settleflow-frontend.onrender.com](https://settleflow-frontend.onrender.com)
+- **Backend API Gateway**: [https://settleflow-backend-zcp7.onrender.com](https://settleflow-backend-zcp7.onrender.com)
+- **Commodity Oracle**: [https://settleflow-oracle.onrender.com](https://settleflow-oracle.onrender.com)
 
 ### Step 4: Connecting Render to HackCanton Live DevNet (Optional)
 If you wish to switch the backend on Render from high-fidelity demo mode to the shared HackCanton DevNet node:
