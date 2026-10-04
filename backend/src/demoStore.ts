@@ -893,22 +893,6 @@ export class DemoStore {
       throw new Error("composition not fully accepted");
     }
 
-    // Completeness gate (same as Daml fetchAllocationsByLeg)
-    if (c.status !== "awaiting_governance") {
-      if (c.allocations.length !== c.legs.length) {
-        throw new Error(
-          `allocation match failed: expected ${c.legs.length} allocations, got ${c.allocations.length}`,
-        );
-      }
-      for (const leg of c.legs) {
-        if (!c.allocations.some((a) => a.legId === leg.legId)) {
-          throw new Error(
-            `allocation match failed: no allocation posted for leg ${leg.legId}`,
-          );
-        }
-      }
-    }
-
     if (
       c.requireGovernance &&
       (c.status === "accepted" ||
@@ -925,6 +909,20 @@ export class DemoStore {
       throw new Error(
         "governed settlement: threshold not met — use governance approve/execute",
       );
+    }
+
+    // Completeness gate (same as Daml fetchAllocationsByLeg)
+    if (c.allocations.length !== c.legs.length) {
+      throw new Error(
+        `allocation match failed: expected ${c.legs.length} allocations, got ${c.allocations.length}`,
+      );
+    }
+    for (const leg of c.legs) {
+      if (!c.allocations.some((a) => a.legId === leg.legId)) {
+        throw new Error(
+          `allocation match failed: no allocation posted for leg ${leg.legId}`,
+        );
+      }
     }
 
     return this.executeSettle(c, withRegulator);

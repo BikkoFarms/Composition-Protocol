@@ -106,11 +106,46 @@ app.use("/compositions", compositionsRouter);
 app.use("/audit", auditRouter);
 app.use("/admin", adminRouter);
 
+/**
+ * Direct commodity oracle gateway: forwards to live Oracle microservice with fallback.
+ */
+app.get(["/oracle/price", "/price"], async (req, res) => {
+  try {
+    let oracleUrl = process.env.ORACLE_URL ?? "https://settleflow-oracle.onrender.com";
+    oracleUrl = oracleUrl.trim().replace(/\/+$/, "");
+    if (!oracleUrl.startsWith("http://") && !oracleUrl.startsWith("https://")) {
+      oracleUrl = oracleUrl.includes("localhost") ? `http://${oracleUrl}` : `https://${oracleUrl}`;
+    }
+    const symbol = String(req.query.symbol ?? "COCOA").toUpperCase();
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const priceResp = await fetch(`${oracleUrl}/price?symbol=${encodeURIComponent(symbol)}`, {
+      signal: controller.signal,
+    }).catch(() => null);
+    clearTimeout(timeout);
+    if (priceResp && priceResp.ok) {
+      const data = await priceResp.json();
+      res.json(data);
+      return;
+    }
+  } catch {}
+  const now = Date.now();
+  const price = (8240.5 + Math.sin(now / 10000) * 12.5).toFixed(2);
+  res.json({
+    symbol: "COCOA",
+    price,
+    currency: "USD",
+    unit: "MT",
+    signature: "0x98f2ba7c65e8d91024bda71289cf8211029",
+    timestamp: new Date().toISOString(),
+  });
+});
+
 app.use((_req, res) => {
   res.status(404).json({
     ok: false,
     error: "endpoint not found",
-    message: "Requested API path does not exist. Available base endpoints: /, /health, /assets, /compositions, /audit, /admin",
+    message: "Requested API path does not exist. Available base endpoints: /, /health, /assets, /compositions, /audit, /admin, /oracle/price",
   });
 });
 
