@@ -52,7 +52,7 @@ adminRouter.get("/overview", async (_req, res) => {
  * POST /admin/ledger/ping
  * Measures real round-trip network latency to the Canton Ledger API v2 participant.
  */
-adminRouter.get("/ledger/ping", async (_req, res) => {
+adminRouter.all("/ledger/ping", async (_req, res) => {
   const targetUrl = activeLedger ? activeLedger.getBaseUrl() : SHARED_DEVNET_LEDGER_URL;
   const start = Date.now();
 

@@ -229,6 +229,19 @@ compositionsRouter.post("/:id/allocate", (req, res) => {
 });
 
 /**
+ * POST /compositions/:id/allocate-all
+ * Allocates all remaining unallocated legs using agreed LegSpec parameters.
+ */
+compositionsRouter.post("/:id/allocate-all", (req, res) => {
+  try {
+    const composition = demoStore.allocateAll(req.params.id);
+    res.json({ ok: true, composition });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+
+/**
  * GET /compositions/:id/readiness
  * FR-5 & FR-11: Shared readiness view showing trade-level readiness, allocated vs pending legs,
  * and outstanding parties.
