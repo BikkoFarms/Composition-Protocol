@@ -39,6 +39,8 @@ const OPEN = new Set([
   "proposed",
   "partially_accepted",
   "accepted",
+  "allocating",
+  "ready_to_settle",
   "awaiting_governance",
 ]);
 
@@ -46,6 +48,7 @@ export default function ProposerPage() {
   const [tokens, setTokens] = useState<Token[]>([]);
   const [comps, setComps] = useState<Composition[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -69,8 +72,9 @@ export default function ProposerPage() {
   async function propose(opts?: { forceFail?: boolean; shortLived?: boolean }) {
     setBusy(true);
     setError(null);
+    setSuccess(null);
     try {
-      await api("/compositions/demo/trade-finance", {
+      const created = await api<Composition>("/compositions/demo/trade-finance", {
         method: "POST",
         body: JSON.stringify({
           forceFail: opts?.forceFail ?? false,
@@ -80,6 +84,13 @@ export default function ProposerPage() {
         }),
       });
       await refresh();
+      setSuccess(
+        opts?.forceFail
+          ? `Broken ticket staged (${created.id.slice(0, 8)}) — settle will revert atomically.`
+          : opts?.shortLived
+            ? `Short-lived ticket staged (${created.id.slice(0, 8)}) — use expiry path before settle.`
+            : `Proposal staged (${created.id.slice(0, 8)}) — CBTC + USDCx + cETH. Lender/Oracle must accept, then Settle.`,
+      );
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -90,11 +101,23 @@ export default function ProposerPage() {
   async function settle(id: string) {
     setBusy(true);
     setError(null);
+    setSuccess(null);
     try {
-      await api(`/compositions/${id}/settle`, {
+      // Match agreed terms, then settle (backend also auto-allocates if needed).
+      try {
+        await api(`/compositions/${id}/allocate-all`, { method: "POST" });
+      } catch {
+        // Older backends without allocate-all: settle() will auto-allocate.
+      }
+      const settled = await api<Composition>(`/compositions/${id}/settle`, {
         method: "POST",
-        body: JSON.stringify({ withRegulator: true }),
+        body: JSON.stringify({ withRegulator: true, caller: "Operator" }),
       });
+      setSuccess(
+        settled.status === "awaiting_governance"
+          ? `Opened BitSafe gate — complete approvals on /governance.`
+          : `Settled · receipt ${settled.receiptCid ?? settled.id.slice(0, 8)}`,
+      );
       await refresh();
     } catch (e) {
       setError(String((e as Error).message));
@@ -166,6 +189,11 @@ export default function ProposerPage() {
         </button>
       </div>
       {error && <p className="err">{error}</p>}
+      {success && (
+        <p className="ok" style={{ color: "var(--color-deep-forest)" }}>
+          {success}
+        </p>
+      )}
 
       <div className="grid grid-2">
         <div className="card card-mint">
@@ -249,16 +277,22 @@ export default function ProposerPage() {
                 </p>
               )}
               <div className="row" style={{ marginTop: 10, marginBottom: 0 }}>
-                {c.status === "accepted" && (
+                {(c.status === "accepted" ||
+                  c.status === "ready_to_settle" ||
+                  c.status === "allocating") && (
                   <button
                     className="primary"
                     disabled={busy}
                     onClick={() => settle(c.id)}
                   >
-                    Settle now
+                    {c.status === "accepted"
+                      ? "Allocate + settle"
+                      : "Settle now"}
                   </button>
                 )}
-                {OPEN.has(c.status) && c.status !== "accepted" && (
+                {OPEN.has(c.status) &&
+                  c.status !== "accepted" &&
+                  c.status !== "ready_to_settle" && (
                   <button disabled={busy} onClick={() => cancel(c.id)}>
                     Cancel proposal
                   </button>

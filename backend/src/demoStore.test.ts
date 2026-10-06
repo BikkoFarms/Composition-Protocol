@@ -72,7 +72,7 @@ describe("Settleflow demo gates", () => {
     const c = store.proposeTradeFinance();
     store.accept(c.id, "Bob");
     store.accept(c.id, "Oracle");
-    assert.throws(() => store.settle(c.id), /expected 3 allocations, got 0/);
+    // Explicit per-leg allocate (desk /demo path)
     for (const leg of store.require(c.id).legs) {
       const { commit } = store.allocate(c.id, { ...leg });
       assert.ok(commit.updateId.startsWith("upd-"));
@@ -81,6 +81,17 @@ describe("Settleflow demo gates", () => {
     assert.equal(store.require(c.id).status, "ready_to_settle");
     const settled = store.settle(c.id);
     assert.equal(settled.status, "settled");
+    assert.ok(settled.commits.some((x) => x.choice === "AllocateLeg"));
+  });
+
+  it("settle auto-allocates matched legs when desk skips explicit allocate", () => {
+    const c = store.proposeTradeFinance();
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    assert.equal(store.require(c.id).allocations.length, 0);
+    const settled = store.settle(c.id);
+    assert.equal(settled.status, "settled");
+    assert.equal(settled.allocations.length, 3);
     assert.ok(settled.commits.some((x) => x.choice === "AllocateLeg"));
   });
 

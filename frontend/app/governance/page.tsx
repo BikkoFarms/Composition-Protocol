@@ -86,6 +86,12 @@ export default function GovernancePage() {
         method: "POST",
         body: JSON.stringify({ acceptor: "Oracle" }),
       });
+      // Match all legs before opening the BitSafe gate (required on older backends).
+      try {
+        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
+      } catch {
+        /* settle() auto-allocates when allocate-all is unavailable */
+      }
       await api(`/compositions/${c.id}/settle`, {
         method: "POST",
         body: JSON.stringify({}),
@@ -94,7 +100,7 @@ export default function GovernancePage() {
       setBeat(1);
       setActiveGov("Gov1");
       setSuccessMsg(
-        "Opened BitSafe 2-of-3 governed deal. Named governors: Gov1, Gov2, Gov3. Threshold M=2.",
+        "Opened BitSafe 2-of-3 governed deal. Named governors: Gov1, Gov2, Gov3. Threshold M=2. Sign as Gov1 next.",
       );
     } catch (e) {
       setError(String((e as Error).message));
@@ -180,11 +186,21 @@ export default function GovernancePage() {
         method: "POST",
         body: JSON.stringify({ acceptor: "Oracle" }),
       });
+      try {
+        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
+      } catch {
+        /* settle() auto-allocates when allocate-all is unavailable */
+      }
       const opened = await api<Composition>(`/compositions/${c.id}/settle`, {
         method: "POST",
         body: JSON.stringify({}),
       });
       const govId = opened.governanceCid!;
+      if (!govId) {
+        throw new Error(
+          "governed deal did not open — missing governanceCid after settle",
+        );
+      }
       setBeat(1);
 
       await api(`/compositions/governance/${govId}/approve`, {
@@ -294,12 +310,25 @@ export default function GovernancePage() {
             <button
               key={g}
               className={activeGov === g ? "primary" : undefined}
-              onClick={() => setActiveGov(g)}
+              onClick={() => {
+                setActiveGov(g);
+                if (!openGov) {
+                  setError(
+                    "No open governed deal yet — click Open governed deal or Camera beat first.",
+                  );
+                }
+              }}
             >
               {g}
             </button>
           ))}
         </div>
+        {!openGov && (
+          <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
+            Open a governed deal first — then Sign as Gov1 appears under Live
+            threshold.
+          </p>
+        )}
       </div>
 
       {refuseMsg && <div className="flash-refuse">{refuseMsg}</div>}

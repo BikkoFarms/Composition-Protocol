@@ -105,14 +105,46 @@ export default function ReadinessPage() {
     setBusy(true);
     setMessage(null);
     try {
+      const detail = await api<{
+        status: string;
+        counterparties: string[];
+        accepted: string[];
+      }>(`/compositions/${selectedId}`);
+      if (
+        detail.status === "proposed" ||
+        detail.status === "partially_accepted"
+      ) {
+        for (const party of detail.counterparties) {
+          if (!detail.accepted.includes(party)) {
+            await api(`/compositions/${selectedId}/accept`, {
+              method: "POST",
+              body: JSON.stringify({ acceptor: party }),
+            });
+          }
+        }
+      }
+      try {
+        await api(`/compositions/${selectedId}/allocate-all`, {
+          method: "POST",
+        });
+      } catch {
+        /* settle auto-allocates when endpoint missing / already matched */
+      }
       await api(`/compositions/${selectedId}/settle`, {
         method: "POST",
         body: JSON.stringify({ caller: "Operator" }),
       });
-      setMessage({ text: "Atomic DvP settlement executed successfully!", type: "success" });
+      setMessage({
+        text: "Atomic DvP settlement executed successfully!",
+        type: "success",
+      });
       await fetchReadiness(selectedId);
+      await fetchCompositions();
     } catch (err) {
-      setMessage({ text: `Settlement rejected: ${(err as Error).message}`, type: "error" });
+      setMessage({
+        text: `Settlement rejected: ${(err as Error).message}`,
+        type: "error",
+      });
     } finally {
       setBusy(false);
     }
@@ -123,11 +155,41 @@ export default function ReadinessPage() {
     setBusy(true);
     setMessage(null);
     try {
+      // Allocations require a fully accepted agreement — accept remaining parties first.
+      const detail = await api<{
+        status: string;
+        counterparties: string[];
+        accepted: string[];
+      }>(`/compositions/${selectedId}`);
+      if (
+        detail.status === "proposed" ||
+        detail.status === "partially_accepted"
+      ) {
+        for (const party of detail.counterparties) {
+          if (!detail.accepted.includes(party)) {
+            await api(`/compositions/${selectedId}/accept`, {
+              method: "POST",
+              body: JSON.stringify({ acceptor: party }),
+            });
+          }
+        }
+      }
       await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
-      setMessage({ text: "All legs allocated and matched against agreed terms!", type: "success" });
+      setMessage({
+        text: "All legs allocated and matched against agreed terms!",
+        type: "success",
+      });
       await fetchReadiness(selectedId);
+      await fetchCompositions();
     } catch (err) {
-      setMessage({ text: `Allocation failed: ${(err as Error).message}`, type: "error" });
+      const msg = String((err as Error).message);
+      setMessage({
+        text:
+          msg.toLowerCase().includes("endpoint not found")
+            ? "Allocation failed: backend missing POST /compositions/:id/allocate-all — redeploy API (commit allocate-all), or use Allocation desk / Settle which auto-matches."
+            : `Allocation failed: ${msg}`,
+        type: "error",
+      });
     } finally {
       setBusy(false);
     }

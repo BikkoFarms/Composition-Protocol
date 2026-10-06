@@ -424,15 +424,11 @@ export class DemoStore {
     requireGovernance?: boolean;
     expiresAt?: string;
   }): Composition {
-    const collateral =
-      this.listTokens("Alice").find((t) => t.instrumentId === "CBTC") ??
-      this.mint("Alice", "CBTC", "2.0");
-    const cash =
-      this.listTokens("Bob").find((t) => t.instrumentId === "USDCx") ??
-      this.mint("Bob", "USDCx", "10000.0");
-    const ceth =
-      this.listTokens("Oracle").find((t) => t.instrumentId === "cETH") ??
-      this.mint("Oracle", "cETH", "1.5");
+    // Always mint a fresh inventory set so desks can propose repeatedly
+    // without colliding with assets already pledged on open tickets.
+    const collateral = this.mint("Alice", "CBTC", "2.0");
+    const cash = this.mint("Bob", "USDCx", "10000.0");
+    const ceth = this.mint("Oracle", "cETH", "1.5");
 
     return this.propose({
       proposer: "Alice",
@@ -873,7 +869,7 @@ export class DemoStore {
         `settlement rejected: protocol circuit breaker is active (${this.circuitBreaker.haltReason ?? "emergency halt"})`,
       );
     }
-    const c = this.require(compositionId);
+    let c = this.require(compositionId);
     if (c.settleBy && new Date(c.settleBy).getTime() < Date.now()) {
       throw new Error(
         `settlement rejected: settle-by deadline passed (${c.settleBy})`,
@@ -891,6 +887,15 @@ export class DemoStore {
       c.status !== "awaiting_governance"
     ) {
       throw new Error("composition not fully accepted");
+    }
+
+    // Desk convenience: when no allocations were posted yet (Exporter /
+    // BitSafe / Readiness clicked Settle), match all legs to agreed terms.
+    // Partial / withdrawn sets still fail the completeness gate below.
+    // Explicit /allocate (incl. mismatch rejects) still runs on /demo.
+    if (c.status !== "awaiting_governance" && c.allocations.length === 0) {
+      this.allocateAll(compositionId);
+      c = this.require(compositionId);
     }
 
     if (
