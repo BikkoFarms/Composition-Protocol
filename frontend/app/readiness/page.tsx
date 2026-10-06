@@ -1,17 +1,26 @@
 "use client";
 
+/**
+ * Trade readiness dashboard (PRD §8 · FR-11).
+ * One place to see who has signed, which legs are locked, and what to do next —
+ * including after settlement (every row keeps a status and an action).
+ */
+
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { formatAmount, friendlyError, roleName, useTradeTemplates } from "@/lib/trades";
 
-type LegReadiness = {
+type AllocatedLeg = {
   legId: string;
   instrumentId: string;
   amount: string;
   provider: string;
   receiver: string;
   matched: boolean;
+  allocationCid?: string;
+  settled?: boolean;
 };
 
 type OutstandingLeg = {
@@ -20,40 +29,61 @@ type OutstandingLeg = {
   receiver: string;
   instrumentId: string;
   amount: string;
-  deadline: string;
 };
 
-type PartyStatus = {
-  party: string;
-  accepted: boolean;
-  allocated?: boolean;
-};
+type PartyStatus = { party: string; accepted: boolean; allocated?: boolean };
 
 type ReadinessData = {
   compositionId: string;
+  tradeName?: string;
+  description?: string;
+  receiptCid?: string | null;
+  settledAt?: string;
+  governanceCid?: string | null;
+  requireGovernance?: boolean;
   status: string;
   isReady: boolean;
   totalLegs: number;
   allocatedLegCount: number;
-  allocatedLegs: LegReadiness[];
+  allocatedLegs: AllocatedLeg[];
   outstandingLegs: OutstandingLeg[];
-  parties: {
-    proposer: PartyStatus;
-    counterparties: PartyStatus[];
-  };
+  parties: { proposer: PartyStatus; counterparties: PartyStatus[] };
   outstandingParties: string[];
-  allocateBy?: string;
-  settleBy?: string;
-  isAllocateExpired?: boolean;
-  isSettleExpired?: boolean;
   canSettle: boolean;
 };
 
 type CompositionSummary = {
   id: string;
+  tradeName?: string;
   description: string;
   status: string;
+  counterparties: string[];
+  accepted: string[];
+  legs: (OutstandingLeg & { assetCid: string; reference: string; deadline: string })[];
 };
+
+type Message = { text: string; type: "success" | "error" | "info"; link?: { href: string; label: string } };
+
+const CLOSED = new Set(["cancelled", "expired", "rejected", "reverted"]);
+const PRE_AGREEMENT = new Set(["proposed", "partially_accepted"]);
+
+const STATUS_LABEL: Record<string, string> = {
+  proposed: "Awaiting signatures",
+  partially_accepted: "Partly signed",
+  accepted: "Signed · locking legs",
+  allocating: "Locking legs",
+  ready_to_settle: "Ready to settle",
+  awaiting_governance: "Awaiting BitSafe vote",
+  settled: "Settled",
+  reverted: "Reverted",
+  cancelled: "Cancelled",
+  expired: "Expired",
+  rejected: "Rejected",
+};
+
+function statusLabel(s: string) {
+  return STATUS_LABEL[s] ?? s.replaceAll("_", " ");
+}
 
 export default function ReadinessPage() {
   const [compositions, setCompositions] = useState<CompositionSummary[]>([]);
@@ -61,28 +91,38 @@ export default function ReadinessPage() {
   const [readiness, setReadiness] = useState<ReadinessData | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ text: string; type: "success" | "error" | "info" } | null>(null);
+  const [message, setMessage] = useState<Message | null>(null);
+  const { templates, defaultId } = useTradeTemplates();
+  const [newTemplateId, setNewTemplateId] = useState("");
 
   const fetchCompositions = useCallback(async () => {
     try {
       const res = await api<{ compositions: CompositionSummary[] }>("/compositions");
-      setCompositions(res.compositions);
-      if (res.compositions.length > 0 && !selectedId) {
-        setSelectedId(res.compositions[0].id);
-      }
-    } catch {
-      // ignore
+      const newestFirst = [...res.compositions].reverse();
+      setCompositions(newestFirst);
+      setSelectedId((cur) => {
+        if (cur) return cur;
+        const fromUrl =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("id")
+            : null;
+        if (fromUrl && newestFirst.some((c) => c.id === fromUrl)) return fromUrl;
+        return newestFirst[0]?.id ?? "";
+      });
+      if (newestFirst.length === 0) setLoading(false);
+    } catch (err) {
+      setMessage({ text: friendlyError((err as Error).message), type: "error" });
+      setLoading(false);
     }
-  }, [selectedId]);
+  }, []);
 
   const fetchReadiness = useCallback(async (id: string) => {
     if (!id) return;
     try {
-      setLoading(true);
       const data = await api<ReadinessData>(`/compositions/${id}/readiness`);
       setReadiness(data);
     } catch (err) {
-      setMessage({ text: `Failed to load readiness: ${(err as Error).message}`, type: "error" });
+      setMessage({ text: `Couldn't load this trade: ${friendlyError((err as Error).message)}`, type: "error" });
     } finally {
       setLoading(false);
     }
@@ -93,188 +133,191 @@ export default function ReadinessPage() {
   }, [fetchCompositions]);
 
   useEffect(() => {
-    if (selectedId) {
+    if (!selectedId) return;
+    fetchReadiness(selectedId);
+    const interval = setInterval(() => {
       fetchReadiness(selectedId);
-      const interval = setInterval(() => fetchReadiness(selectedId), 4000);
-      return () => clearInterval(interval);
-    }
-  }, [selectedId, fetchReadiness]);
+      fetchCompositions();
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [selectedId, fetchReadiness, fetchCompositions]);
 
-  async function handleSettle() {
+  async function refreshAll() {
+    await Promise.all([fetchReadiness(selectedId), fetchCompositions()]);
+  }
+
+  async function run(action: () => Promise<Message | void>) {
     if (!selectedId) return;
     setBusy(true);
     setMessage(null);
     try {
-      const detail = await api<{
-        status: string;
-        counterparties: string[];
-        accepted: string[];
-      }>(`/compositions/${selectedId}`);
-      if (
-        detail.status === "proposed" ||
-        detail.status === "partially_accepted"
-      ) {
-        for (const party of detail.counterparties) {
-          if (!detail.accepted.includes(party)) {
-            await api(`/compositions/${selectedId}/accept`, {
-              method: "POST",
-              body: JSON.stringify({ acceptor: party }),
-            });
-          }
+      const msg = await action();
+      if (msg) setMessage(msg);
+    } catch (err) {
+      setMessage({ text: friendlyError((err as Error).message), type: "error" });
+    } finally {
+      await refreshAll();
+      setBusy(false);
+    }
+  }
+
+  async function acceptRemaining() {
+    const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
+    if (PRE_AGREEMENT.has(detail.status)) {
+      for (const party of detail.counterparties) {
+        if (!detail.accepted.includes(party)) {
+          await api(`/compositions/${selectedId}/accept`, {
+            method: "POST",
+            body: JSON.stringify({ acceptor: party }),
+          });
         }
       }
-      try {
-        await api(`/compositions/${selectedId}/allocate-all`, {
-          method: "POST",
-        });
-      } catch {
-        /* settle auto-allocates when endpoint missing / already matched */
-      }
-      await api(`/compositions/${selectedId}/settle`, {
+    }
+  }
+
+  const handleAccept = (party: string) =>
+    run(async () => {
+      await api(`/compositions/${selectedId}/accept`, {
         method: "POST",
-        body: JSON.stringify({ caller: "Operator" }),
+        body: JSON.stringify({ acceptor: party }),
       });
-      setMessage({
-        text: "Atomic DvP settlement executed successfully!",
-        type: "success",
-      });
-      await fetchReadiness(selectedId);
-      await fetchCompositions();
-    } catch (err) {
-      setMessage({
-        text: `Settlement rejected: ${(err as Error).message}`,
-        type: "error",
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
+      return { text: `${roleName(party)} signed the trade.`, type: "success" };
+    });
 
-  async function handleAllocateAll() {
-    if (!selectedId) return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      // Allocations require a fully accepted agreement — accept remaining parties first.
-      const detail = await api<{
-        status: string;
-        counterparties: string[];
-        accepted: string[];
-      }>(`/compositions/${selectedId}`);
-      if (
-        detail.status === "proposed" ||
-        detail.status === "partially_accepted"
-      ) {
-        for (const party of detail.counterparties) {
-          if (!detail.accepted.includes(party)) {
-            await api(`/compositions/${selectedId}/accept`, {
-              method: "POST",
-              body: JSON.stringify({ acceptor: party }),
-            });
-          }
-        }
-      }
+  const handleAllocateAll = () =>
+    run(async () => {
+      await acceptRemaining();
       await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
-      setMessage({
-        text: "All legs allocated and matched against agreed terms!",
-        type: "success",
-      });
-      await fetchReadiness(selectedId);
-      await fetchCompositions();
-    } catch (err) {
-      const msg = String((err as Error).message);
-      setMessage({
-        text:
-          msg.toLowerCase().includes("endpoint not found")
-            ? "Allocation failed: backend missing POST /compositions/:id/allocate-all — redeploy API (commit allocate-all), or use Allocation desk / Settle which auto-matches."
-            : `Allocation failed: ${msg}`,
-        type: "error",
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
+      return { text: "All legs locked and matched against the agreed terms.", type: "success" };
+    });
 
-  async function handleWithdrawLeg(legId: string, caller: string) {
-    if (!selectedId) return;
-    setBusy(true);
-    setMessage(null);
-    try {
+  const handleLockLeg = (legId: string) =>
+    run(async () => {
+      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
+      const leg = detail.legs.find((l) => l.legId === legId);
+      if (!leg) throw new Error(`leg ${legId} not found`);
+      await api(`/compositions/${selectedId}/allocate`, {
+        method: "POST",
+        body: JSON.stringify(leg),
+      });
+      return {
+        text: `${roleName(leg.provider)} locked ${formatAmount(leg.amount)} ${leg.instrumentId}.`,
+        type: "success",
+      };
+    });
+
+  const handleSettle = () =>
+    run(async () => {
+      await acceptRemaining();
+      const result = await api<{ status: string; receiptCid?: string | null }>(
+        `/compositions/${selectedId}/settle`,
+        { method: "POST", body: JSON.stringify({ caller: "Operator" }) },
+      );
+      if (result.status === "awaiting_governance") {
+        return {
+          text: "This trade needs a BitSafe 2-of-3 vote before it can settle. Governors sign on the BitSafe desk.",
+          type: "info",
+          link: { href: "/governance", label: "Open BitSafe desk →" },
+        };
+      }
+      return {
+        text: "Settled. Every leg moved in one atomic transaction.",
+        type: "success",
+        link: { href: "/observer", label: "See auditor proof →" },
+      };
+    });
+
+  const handleWithdrawLeg = (legId: string, caller: string) =>
+    run(async () => {
       await api(`/compositions/${selectedId}/withdraw-leg`, {
         method: "POST",
         body: JSON.stringify({ legId, caller }),
       });
-      setMessage({ text: `Leg ${legId} withdrawn by ${caller}. Allocations unlocked.`, type: "info" });
-      await fetchReadiness(selectedId);
-    } catch (err) {
-      setMessage({ text: `Withdraw failed: ${(err as Error).message}`, type: "error" });
-    } finally {
-      setBusy(false);
-    }
-  }
+      return { text: `${roleName(caller)} withdrew the ${legId} leg. It's unlocked again.`, type: "info" };
+    });
 
-  async function handleSeedNewTrade() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const res = await api<{ id: string }>("/compositions/demo/trade-finance", { method: "POST" });
+  const handleSeedNewTrade = () =>
+    run(async () => {
+      const res = await api<{ id: string; tradeName?: string }>("/compositions/demo/trade-finance", {
+        method: "POST",
+        body: JSON.stringify({ templateId: newTemplateId || defaultId }),
+      });
       setSelectedId(res.id);
-      await fetchCompositions();
-      await fetchReadiness(res.id);
-      setMessage({ text: `New 3-party DvP proposal created: ${res.id}`, type: "success" });
-    } catch (err) {
-      setMessage({ text: `Seed failed: ${(err as Error).message}`, type: "error" });
-    } finally {
-      setBusy(false);
-    }
-  }
+      return {
+        text: `New ${res.tradeName ?? "trade"} proposed. Collect signatures, then lock legs.`,
+        type: "success",
+      };
+    });
+
+  const r = readiness;
+  const closed = r ? CLOSED.has(r.status) : false;
+  const settled = r?.status === "settled";
+  const governed = r?.status === "awaiting_governance";
+  const agreed = r ? !PRE_AGREEMENT.has(r.status) : false;
+
+  const bannerColor = settled
+    ? "#003d3d"
+    : closed
+      ? "#9b2c2c"
+      : r?.isReady
+        ? "#2a4e1c"
+        : "#e2a03f";
 
   return (
-    <div className="layout-stack" style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 16px" }}>
+    <div className="layout-stack" style={{ maxWidth: 1000, margin: "0 auto", padding: "32px 0" }}>
       <header className="page-header" style={{ marginBottom: 24 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
           <div>
             <span className="badge-chip" style={{ background: "var(--color-sage-glow)", color: "var(--color-deep-forest)" }}>
-              PRD §8 · FR-11 Status View
+              Trade readiness
             </span>
-            <h1 style={{ fontSize: 28, margin: "8px 0 4px", fontWeight: 600 }}>Trade Readiness Dashboard</h1>
+            <h1 style={{ fontSize: 28, margin: "8px 0 4px", fontWeight: 600 }}>Is this trade ready to settle?</h1>
             <p style={{ color: "var(--color-lichen-gray)", margin: 0, fontSize: 14 }}>
-              On-ledger readiness tracking across authorizations, CIP-56 allocations, and DvP settlement gates.
+              Who has signed, which legs are locked, and the next step for each one.
             </p>
           </div>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <select
+              aria-label="Trade to propose"
+              className="select"
+              value={newTemplateId || defaultId}
+              onChange={(e) => setNewTemplateId(e.target.value)}
+              style={{ width: "auto", padding: "10px 14px" }}
+            >
+              {templates.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
             <button className="btn" onClick={handleSeedNewTrade} disabled={busy}>
-              + Propose New Trade
+              + Propose new trade
             </button>
             <Link className="btn primary" href="/demo">
-              Allocation Desk →
+              Settlement desk →
             </Link>
           </div>
         </div>
       </header>
 
-      {/* Select active trade */}
       {compositions.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <label style={{ fontSize: 13, fontWeight: 500, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
-            Select Active Composition
+          <label htmlFor="trade-select" style={{ fontSize: 13, fontWeight: 500, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
+            Trade
           </label>
           <select
+            id="trade-select"
+            className="select"
             value={selectedId}
-            onChange={(e) => setSelectedId(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px 14px",
-              borderRadius: "var(--radius-inputs)",
-              border: "1px solid var(--color-mist)",
-              background: "white",
-              fontSize: 14,
-              fontFamily: "inherit",
+            onChange={(e) => {
+              setMessage(null);
+              setSelectedId(e.target.value);
             }}
+            style={{ width: "100%" }}
           >
             {compositions.map((c) => (
               <option key={c.id} value={c.id}>
-                [{c.status.toUpperCase()}] {c.id.slice(0, 10)}... — {c.description}
+                {c.tradeName ?? c.description} · {statusLabel(c.status)} · #{c.id.slice(0, 8)}
               </option>
             ))}
           </select>
@@ -282,177 +325,197 @@ export default function ReadinessPage() {
       )}
 
       {message && (
-        <div
-          style={{
-            padding: "12px 16px",
-            borderRadius: 8,
-            marginBottom: 20,
-            fontSize: 14,
-            background:
-              message.type === "success"
-                ? "var(--color-meadow)"
-                : message.type === "error"
-                ? "#fed7d7"
-                : "var(--color-mint-surface)",
-            color:
-              message.type === "success"
-                ? "var(--color-deep-forest)"
-                : message.type === "error"
-                ? "#9b2c2c"
-                : "var(--color-deep-teal)",
-          }}
-        >
-          {message.text}
+        <div className={`notice ${message.type === "error" ? "error" : message.type}`} role={message.type === "error" ? "alert" : "status"}>
+          <p>
+            {message.text}{" "}
+            {message.link && (
+              <Link href={message.link.href} style={{ fontWeight: 600 }}>
+                {message.link.label}
+              </Link>
+            )}
+          </p>
+          <button className="notice-close" aria-label="Dismiss" onClick={() => setMessage(null)}>
+            ×
+          </button>
         </div>
       )}
 
-      {loading && !readiness ? (
+      {loading && !r ? (
         <SkeletonBlock rows={5} />
-      ) : readiness ? (
-        <div className="layout-stack" style={{ gap: 24 }}>
-          {/* Readiness Summary Banner */}
-          <div
-            className="card"
-            style={{
-              padding: 24,
-              borderLeft: readiness.isReady
-                ? "6px solid #2a4e1c"
-                : readiness.status === "settled"
-                ? "6px solid #003d3d"
-                : "6px solid #e2a03f",
-            }}
-          >
+      ) : r ? (
+        <div className="layout-stack" style={{ display: "grid", gap: 24 }}>
+          {/* Summary */}
+          <div className="card" style={{ padding: 24, borderLeft: `6px solid ${bannerColor}` }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
               <div>
                 <span style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--color-mist)" }}>
-                  Settlement Readiness Status
+                  {r.tradeName ?? "Trade"}
                 </span>
                 <h2 style={{ fontSize: 22, margin: "4px 0", fontWeight: 600 }}>
-                  {readiness.status === "settled"
-                    ? "✓ Trade Settled Atomically"
-                    : readiness.isReady
-                    ? "✓ Ready to Settle (All Legs Matched)"
-                    : "⏳ Awaiting Allocations / Authorizations"}
+                  {settled
+                    ? "✓ Settled atomically"
+                    : closed
+                      ? `Trade ${statusLabel(r.status).toLowerCase()} — nothing moved`
+                      : governed
+                        ? "Waiting for BitSafe governors"
+                        : r.isReady
+                          ? "✓ Ready to settle"
+                          : !agreed
+                            ? "Waiting for signatures"
+                            : "Waiting for legs to be locked"}
                 </h2>
                 <p style={{ margin: 0, fontSize: 13, color: "var(--color-lichen-gray)" }}>
-                  Allocations Matched: {readiness.allocatedLegCount} of {readiness.totalLegs} legs · Status: <strong>{readiness.status}</strong>
+                  {settled
+                    ? `All ${r.totalLegs} legs delivered · receipt ${r.receiptCid?.slice(0, 18)}…`
+                    : closed
+                      ? "Every party keeps its original assets."
+                      : `${r.allocatedLegCount} of ${r.totalLegs} legs locked · ${statusLabel(r.status)}`}
                 </p>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
-                {!readiness.isReady && readiness.status !== "settled" && (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {!r.isReady && !settled && !closed && !governed && (
                   <button className="btn" onClick={handleAllocateAll} disabled={busy}>
-                    ⚡ Allocate All Legs
+                    {agreed ? "Lock all legs" : "Sign & lock all legs"}
                   </button>
                 )}
-                {readiness.canSettle && (
-                  <button className="btn primary" onClick={handleSettle} disabled={busy} style={{ background: "#2a4e1c", color: "white" }}>
-                    Execute DvP Settle →
+                {r.canSettle && !governed && (
+                  <button className="btn primary" onClick={handleSettle} disabled={busy}>
+                    Settle now →
                   </button>
+                )}
+                {governed && (
+                  <Link className="btn primary" href="/governance">
+                    Open BitSafe desk →
+                  </Link>
+                )}
+                {settled && (
+                  <Link className="btn primary" href="/observer">
+                    Auditor proof →
+                  </Link>
                 )}
               </div>
             </div>
-
-            {/* Deadlines Section */}
-            {(readiness.allocateBy || readiness.settleBy) && (
-              <div
-                style={{
-                  marginTop: 16,
-                  paddingTop: 12,
-                  borderTop: "1px solid #eee",
-                  display: "flex",
-                  gap: 24,
-                  fontSize: 12,
-                  color: "var(--color-slate)",
-                }}
-              >
-                <div>
-                  <strong>Allocate-By Deadline:</strong>{" "}
-                  {readiness.allocateBy ? new Date(readiness.allocateBy).toLocaleString() : "None"}{" "}
-                  {readiness.isAllocateExpired && <span style={{ color: "red" }}>(Expired)</span>}
-                </div>
-                <div>
-                  <strong>Settle-By Deadline:</strong>{" "}
-                  {readiness.settleBy ? new Date(readiness.settleBy).toLocaleString() : "None"}{" "}
-                  {readiness.isSettleExpired && <span style={{ color: "red" }}>(Expired)</span>}
-                </div>
-              </div>
-            )}
           </div>
 
-          {/* Section 1: Party Authorizations */}
+          {/* Signatures */}
           <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 16, margin: "0 0 16px", fontWeight: 600 }}>1. Three-Party Authorizations</h3>
+            <h3 style={{ fontSize: 16, margin: "0 0 16px", fontWeight: 600 }}>1. Signatures</h3>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
               <div style={{ padding: 12, background: "var(--color-mint-surface)", borderRadius: 8 }}>
                 <span style={{ fontSize: 11, color: "var(--color-lichen-gray)", textTransform: "uppercase" }}>Proposer</span>
-                <div style={{ fontSize: 15, fontWeight: 600, margin: "2px 0" }}>{readiness.parties.proposer.party}</div>
-                <span style={{ fontSize: 12, color: "green" }}>✓ Signed & Proposed</span>
+                <div style={{ fontSize: 15, fontWeight: 600, margin: "2px 0" }}>{roleName(r.parties.proposer.party)}</div>
+                <span className="chip ok">✓ Proposed</span>
               </div>
-              {readiness.parties.counterparties.map((cp) => (
+              {r.parties.counterparties.map((cp) => (
                 <div key={cp.party} style={{ padding: 12, background: "var(--color-parchment)", borderRadius: 8 }}>
                   <span style={{ fontSize: 11, color: "var(--color-lichen-gray)", textTransform: "uppercase" }}>Counterparty</span>
-                  <div style={{ fontSize: 15, fontWeight: 600, margin: "2px 0" }}>{cp.party}</div>
-                  <span style={{ fontSize: 12, color: cp.accepted ? "green" : "orange" }}>
-                    {cp.accepted ? "✓ Accepted" : "⏳ Awaiting Acceptance"}
-                  </span>
+                  <div style={{ fontSize: 15, fontWeight: 600, margin: "2px 0" }}>{roleName(cp.party)}</div>
+                  {cp.accepted ? (
+                    <span className="chip ok">✓ Signed</span>
+                  ) : closed ? (
+                    <span className="chip muted">Did not sign</span>
+                  ) : (
+                    <button className="primary sm" disabled={busy} onClick={() => handleAccept(cp.party)}>
+                      Sign as {cp.party}
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Section 2: CIP-56 Leg Allocations */}
+          {/* Legs */}
           <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ fontSize: 16, margin: "0 0 16px", fontWeight: 600 }}>2. CIP-56 Leg Allocations</h3>
-            <div className="table-responsive">
-              <table style={{ width: "100%", fontSize: 13, borderCollapse: "collapse" }}>
+            <h3 style={{ fontSize: 16, margin: "0 0 16px", fontWeight: 600 }}>2. Legs</h3>
+            <div className="table-responsive" style={{ overflowX: "auto" }}>
+              <table>
                 <thead>
-                  <tr style={{ borderBottom: "1px solid var(--color-mist)", textAlign: "left" }}>
-                    <th style={{ padding: "8px 12px" }}>Leg</th>
-                    <th style={{ padding: "8px 12px" }}>Instrument</th>
-                    <th style={{ padding: "8px 12px" }}>Amount</th>
-                    <th style={{ padding: "8px 12px" }}>Provider → Receiver</th>
-                    <th style={{ padding: "8px 12px" }}>Allocation Status</th>
-                    <th style={{ padding: "8px 12px" }}>Action</th>
+                  <tr>
+                    <th>Leg</th>
+                    <th>Asset</th>
+                    <th>From → To</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {readiness.allocatedLegs.map((leg) => (
-                    <tr key={leg.legId} style={{ borderBottom: "1px solid #f0f0f0" }}>
-                      <td style={{ padding: "10px 12px", fontWeight: 600 }}>{leg.legId}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.instrumentId}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.amount}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.provider} → {leg.receiver}</td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 8px", borderRadius: 12, background: "var(--color-meadow)", color: "var(--color-deep-forest)", fontSize: 11 }}>
-                          ✓ Matched on-chain
-                        </span>
+                  {r.allocatedLegs.map((leg) => (
+                    <tr key={leg.legId}>
+                      <td style={{ fontWeight: 600 }}>{leg.legId}</td>
+                      <td>
+                        {formatAmount(leg.amount)} {leg.instrumentId}
                       </td>
-                      <td style={{ padding: "10px 12px" }}>
-                        {readiness.status !== "settled" && (
+                      <td>
+                        {leg.provider} → {leg.receiver}
+                      </td>
+                      <td>
+                        {settled ? (
+                          <span className="chip done">✓ Settled</span>
+                        ) : closed ? (
+                          <span className="chip muted">Released</span>
+                        ) : (
+                          <span className="chip ok">✓ Locked &amp; matched</span>
+                        )}
+                      </td>
+                      <td>
+                        {settled ? (
+                          <div className="status-cell">
+                            <span style={{ fontSize: 12 }}>Delivered to {roleName(leg.receiver)}</span>
+                            <Link href="/observer" style={{ fontSize: 12, fontWeight: 600 }}>
+                              View receipt →
+                            </Link>
+                          </div>
+                        ) : closed ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            Returned to {roleName(leg.provider)}
+                          </span>
+                        ) : governed ? (
+                          <span className="muted" style={{ fontSize: 12 }}>Held for governor vote</span>
+                        ) : (
                           <button
-                            className="btn"
-                            style={{ fontSize: 11, padding: "4px 8px" }}
+                            className="sm"
                             onClick={() => handleWithdrawLeg(leg.legId, leg.provider)}
                             disabled={busy}
                           >
-                            Withdraw (FR-10)
+                            Withdraw
                           </button>
                         )}
                       </td>
                     </tr>
                   ))}
-                  {readiness.outstandingLegs.map((leg) => (
-                    <tr key={leg.legId} style={{ borderBottom: "1px solid #f0f0f0", opacity: 0.75 }}>
-                      <td style={{ padding: "10px 12px", fontWeight: 600 }}>{leg.legId}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.instrumentId}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.amount}</td>
-                      <td style={{ padding: "10px 12px" }}>{leg.provider} → {leg.receiver}</td>
-                      <td style={{ padding: "10px 12px" }}>
-                        <span style={{ padding: "2px 8px", borderRadius: 12, background: "var(--color-buttercream)", color: "#8a6d3b", fontSize: 11 }}>
-                          ⏳ Unallocated
-                        </span>
+                  {r.outstandingLegs.map((leg) => (
+                    <tr key={leg.legId}>
+                      <td style={{ fontWeight: 600 }}>{leg.legId}</td>
+                      <td>
+                        {formatAmount(leg.amount)} {leg.instrumentId}
                       </td>
-                      <td style={{ padding: "10px 12px" }}>—</td>
+                      <td>
+                        {leg.provider} → {leg.receiver}
+                      </td>
+                      <td>
+                        {closed ? (
+                          <span className="chip muted">Released</span>
+                        ) : (
+                          <span className="chip wait">Not locked</span>
+                        )}
+                      </td>
+                      <td>
+                        {closed ? (
+                          <span className="muted" style={{ fontSize: 12 }}>
+                            Returned to {roleName(leg.provider)}
+                          </span>
+                        ) : !agreed ? (
+                          <span className="muted" style={{ fontSize: 12 }}>Needs all signatures first</span>
+                        ) : (
+                          <button
+                            className="primary sm"
+                            onClick={() => handleLockLeg(leg.legId)}
+                            disabled={busy}
+                          >
+                            Lock as {leg.provider}
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -462,7 +525,8 @@ export default function ReadinessPage() {
         </div>
       ) : (
         <div className="card" style={{ padding: 40, textAlign: "center", color: "var(--color-lichen-gray)" }}>
-          No compositions active. Click <strong>+ Propose New Trade</strong> above to create one.
+          No trades yet. Click <strong>+ Propose new trade</strong> above, or start on the{" "}
+          <Link href="/demo">settlement desk</Link>.
         </div>
       )}
     </div>

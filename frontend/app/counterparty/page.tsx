@@ -8,9 +8,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { formatAmount, friendlyError } from "@/lib/trades";
 
 type Composition = {
   id: string;
+  tradeName?: string;
   status: string;
   description: string;
   accepted: string[];
@@ -70,7 +72,7 @@ export default function CounterpartyPage() {
       });
       await refresh();
     } catch (e) {
-      setError(String((e as Error).message));
+      setError(friendlyError(String((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -87,12 +89,12 @@ export default function CounterpartyPage() {
           reason:
             party === "Bob"
               ? "Margin terms rejected by lender"
-              : "cETH sponsor terms rejected by oracle",
+              : "Sponsor / inspection terms rejected by oracle",
         }),
       });
       await refresh();
     } catch (e) {
-      setError(String((e as Error).message));
+      setError(friendlyError(String((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -142,15 +144,11 @@ export default function CounterpartyPage() {
               <span className={`tag ${c.status === "accepted" ? "ok" : "warn"}`}>
                 {c.status.replaceAll("_", " ")}
               </span>
-              <span className="muted" style={{ fontSize: 14 }}>
-                {c.description}
+              <span style={{ fontSize: 14 }}>
+                <strong>{c.tradeName ?? "Trade"}</strong>
+                <span className="muted"> · {c.description}</span>
               </span>
             </div>
-            {c.expiresAt && (
-              <p className="mono muted" style={{ fontSize: 12 }}>
-                Expires {new Date(c.expiresAt).toLocaleString()}
-              </p>
-            )}
             {c.disclosedContracts && c.disclosedContracts.length > 0 && (
               <div className="asset-chips" style={{ marginBottom: 10 }}>
                 <span className="tag cyan">
@@ -174,7 +172,7 @@ export default function CounterpartyPage() {
                     <tr key={l.legId}>
                       <td>{l.legId}</td>
                       <td>{l.instrumentId}</td>
-                      <td>{l.amount}</td>
+                      <td>{formatAmount(l.amount)}</td>
                       <td>
                         {l.provider} → {l.receiver}
                       </td>
@@ -205,7 +203,7 @@ export default function CounterpartyPage() {
               )}
             {c.accepted.includes(party) && (
               <p style={{ color: "var(--color-deep-forest)", fontSize: 14 }}>
-                Signed. Waiting on the rest of the desk.
+                Signed. Waiting on the rest of the desk — then the exporter settles.
               </p>
             )}
           </div>

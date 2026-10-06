@@ -4,6 +4,7 @@
  * BitSafe extension: M-of-N governed settlement (R-GOV-1/2) + Emergency Circuit Breaker.
  */
 import { createHash, randomUUID } from "node:crypto";
+import { getTemplate, type TradeTemplate } from "./tradeTemplates.js";
 
 export type PartyId =
   | "Operator"
@@ -116,6 +117,10 @@ export type Composition = {
   legSummaries?: { legId: string; instrumentId: string; status: string }[];
   forceFail?: boolean;
   requireGovernance?: boolean;
+  /** Catalogue template this trade was created from (e.g. "cocoa"). */
+  templateId?: string;
+  /** Human-friendly trade name for pickers and dashboards. */
+  tradeName?: string;
 };
 
 export type Governance = {
@@ -157,6 +162,13 @@ export type Metrics = {
   successRate: number;
   revertRate: number;
   recentEvents: SettlementEvent[];
+};
+
+/** Synchronizer each provider settles its leg on (multi-domain demo). */
+const CANTON_DOMAINS: Partial<Record<PartyId, string>> = {
+  Alice: "canton-domain-rwa-01.eu",
+  Bob: "canton-domain-liquidity-02.us",
+  Oracle: "canton-domain-onrails-03.global",
 };
 
 const parties: PartyId[] = [
@@ -310,6 +322,9 @@ export class DemoStore {
     settleBy?: string;
     policyConfig?: PolicyConfig;
     disclosedContracts?: DisclosedContract[];
+    templateId?: string;
+    tradeName?: string;
+    referencePrices?: Record<string, number>;
   }): Composition {
     if (input.legs.length < 2) throw new Error("at least two legs required");
 
@@ -360,18 +375,22 @@ export class DemoStore {
       .update(JSON.stringify({ proposer: input.proposer, counterparties: input.counterparties, legs }))
       .digest("hex");
 
-    // Institutional collateral valuation (e.g. 1 CBTC = $65,000 reference valuation vs USDCx loan)
+    // Collateral cover: value of the proposer's delivered legs vs cash received.
+    // Defaults to the original CBTC ($65k) / USDCx reference when no prices given.
     let collateralRatio: string | undefined;
     let ltvPercent: number | undefined;
-    const cbtcLeg = legs.find((l) => l.instrumentId === "CBTC");
-    const usdcLeg = legs.find((l) => l.instrumentId === "USDCx");
-    if (cbtcLeg && usdcLeg) {
-      const cbtcVal = Number(cbtcLeg.amount) * 65000;
-      const loanVal = Number(usdcLeg.amount);
-      if (loanVal > 0) {
-        collateralRatio = `${Math.round((cbtcVal / loanVal) * 100)}%`;
-        ltvPercent = Number(((loanVal / cbtcVal) * 100).toFixed(1));
-      }
+    const prices = input.referencePrices ?? { CBTC: 65000, USDCx: 1 };
+    const priced = (l: LegSpec) =>
+      prices[l.instrumentId] !== undefined ? Number(l.amount) * prices[l.instrumentId] : 0;
+    const collateralVal = legs
+      .filter((l) => l.provider === input.proposer && l.instrumentId !== "USDCx")
+      .reduce((sum, l) => sum + priced(l), 0);
+    const loanVal = legs
+      .filter((l) => l.receiver === input.proposer && l.instrumentId === "USDCx")
+      .reduce((sum, l) => sum + Number(l.amount), 0);
+    if (collateralVal > 0 && loanVal > 0) {
+      collateralRatio = `${Math.round((collateralVal / loanVal) * 100)}%`;
+      ltvPercent = Number(((loanVal / collateralVal) * 100).toFixed(1));
     }
 
     const expiresAt =
@@ -406,6 +425,8 @@ export class DemoStore {
       disclosedContracts: input.disclosedContracts ?? [],
       forceFail: input.forceFail,
       requireGovernance: input.requireGovernance,
+      templateId: input.templateId,
+      tradeName: input.tradeName,
     };
     this.compositions.set(id, c);
     this.pushCommit(
@@ -418,81 +439,56 @@ export class DemoStore {
     return c;
   }
 
-  /** Seed 3-leg sponsor-asset DvP: CBTC + USDCx + cETH (BitSafe / onRails). */
+  /**
+   * Propose a catalogue trade (default: 3-leg cocoa DvP — CBTC + USDCx + cETH).
+   * Mints fresh inventory each time so desks can propose repeatedly without
+   * colliding with assets already pledged on open tickets.
+   */
   proposeTradeFinance(opts?: {
     forceFail?: boolean;
     requireGovernance?: boolean;
     expiresAt?: string;
+    templateId?: string;
   }): Composition {
-    // Always mint a fresh inventory set so desks can propose repeatedly
-    // without colliding with assets already pledged on open tickets.
-    const collateral = this.mint("Alice", "CBTC", "2.0");
-    const cash = this.mint("Bob", "USDCx", "10000.0");
-    const ceth = this.mint("Oracle", "cETH", "1.5");
+    const template: TradeTemplate = getTemplate(opts?.templateId);
+    const deadline = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const minted = template.legs.map((leg) => ({
+      leg,
+      token: this.mint(leg.provider, leg.instrumentId, leg.amount),
+    }));
 
     return this.propose({
       proposer: "Alice",
-      counterparties: ["Bob", "Oracle"],
-      description:
-        "African cocoa export — CBTC collateral + USDCx cash + cETH sponsor leg",
+      counterparties: template.counterparties,
+      description: template.description,
+      templateId: template.id,
+      tradeName: template.name,
+      referencePrices: template.referencePrices,
       forceFail: opts?.forceFail,
       requireGovernance: opts?.requireGovernance,
       expiresAt: opts?.expiresAt,
-      disclosedContracts: [
-        {
+      disclosedContracts: minted
+        .filter(({ leg }) => leg.provider !== "Bob")
+        .map(({ leg, token }) => ({
           templateId: "#Composition:MockToken",
-          contractId: collateral.contractId,
+          contractId: token.contractId,
           payload: {
-            owner: "Alice",
-            instrumentId: "CBTC",
-            amount: collateral.amount,
+            owner: leg.provider,
+            instrumentId: leg.instrumentId,
+            amount: token.amount,
           },
-        },
-        {
-          templateId: "#Composition:MockToken",
-          contractId: ceth.contractId,
-          payload: {
-            owner: "Oracle",
-            instrumentId: "cETH",
-            amount: ceth.amount,
-          },
-        },
-      ],
-      legs: [
-        {
-          legId: "collateral",
-          instrumentId: "CBTC",
-          amount: collateral.amount,
-          provider: "Alice",
-          receiver: "Bob",
-          assetCid: collateral.contractId,
-          reference: "tf-collateral",
-          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          cantonDomain: "canton-domain-rwa-01.eu",
-        },
-        {
-          legId: "cash",
-          instrumentId: "USDCx",
-          amount: cash.amount,
-          provider: "Bob",
-          receiver: "Alice",
-          assetCid: cash.contractId,
-          reference: "tf-cash",
-          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          cantonDomain: "canton-domain-liquidity-02.us",
-        },
-        {
-          legId: "sponsor",
-          instrumentId: "cETH",
-          amount: ceth.amount,
-          provider: "Oracle",
-          receiver: "Bob",
-          assetCid: ceth.contractId,
-          reference: "tf-sponsor",
-          deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-          cantonDomain: "canton-domain-onrails-03.global",
-        },
-      ],
+        })),
+      legs: minted.map(({ leg, token }) => ({
+        legId: leg.legId,
+        instrumentId: leg.instrumentId,
+        amount: token.amount,
+        provider: leg.provider,
+        receiver: leg.receiver,
+        assetCid: token.contractId,
+        reference: `${template.id}-${leg.legId}`,
+        deadline,
+        cantonDomain: CANTON_DOMAINS[leg.provider] ?? "canton-domain-global",
+      })),
     });
   }
 
@@ -1091,7 +1087,11 @@ export class DemoStore {
   }
 
   /** Pitch path: propose → accept all → allocate all → settle → money-shot payload. */
-  runFullDemo(opts?: { forceFail?: boolean; requireGovernance?: boolean }) {
+  runFullDemo(opts?: {
+    forceFail?: boolean;
+    requireGovernance?: boolean;
+    templateId?: string;
+  }) {
     const composition = this.proposeTradeFinance(opts);
     for (const p of composition.counterparties) {
       this.accept(composition.id, p);
@@ -1125,14 +1125,11 @@ export class DemoStore {
   }
 
   /** Burn metrics evidence: settle N happy-path compositions. */
-  runLoad(count: number) {
+  runLoad(count: number, templateId?: string) {
     const results = [];
     for (let i = 0; i < count; i++) {
-      // Fresh inventory each deal
-      this.mint("Alice", "CBTC", "2.0");
-      this.mint("Bob", "USDCx", "10000.0");
-      this.mint("Oracle", "cETH", "1.5");
-      results.push(this.runFullDemo());
+      // proposeTradeFinance mints fresh inventory for each deal
+      results.push(this.runFullDemo({ templateId }));
     }
     return { ran: count, metrics: this.metrics, last: results.at(-1) };
   }
@@ -1266,6 +1263,7 @@ export class DemoStore {
     const c = this.compositions.get(id);
     if (!c) throw new Error(`composition ${id} not found`);
 
+    const settled = c.status === "settled";
     const allocatedLegs = c.allocations.map((a) => ({
       legId: a.legId,
       instrumentId: a.instrumentId,
@@ -1273,6 +1271,9 @@ export class DemoStore {
       provider: a.provider,
       receiver: a.receiver,
       matched: a.matched === true,
+      allocationCid: a.allocationCid,
+      updateId: a.updateId,
+      settled,
     }));
 
     const allocatedLegIds = new Set(c.allocations.map((a) => a.legId));
@@ -1312,6 +1313,13 @@ export class DemoStore {
 
     return {
       compositionId: c.id,
+      tradeName: c.tradeName ?? "Custom trade",
+      templateId: c.templateId,
+      description: c.description,
+      receiptCid: c.receiptCid,
+      settledAt: c.settledAt,
+      governanceCid: c.governanceCid,
+      requireGovernance: Boolean(c.requireGovernance),
       status: c.status,
       isReady,
       totalLegs: c.legs.length,

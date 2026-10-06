@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it, beforeEach } from "node:test";
 import { DemoStore } from "./demoStore.js";
+import { TRADE_TEMPLATES } from "./tradeTemplates.js";
 
 describe("Settleflow demo gates", () => {
   let store: DemoStore;
@@ -685,7 +686,60 @@ describe("Settleflow demo gates", () => {
       /policy violation: leg l2 amount 5000.0 exceeds max transaction limit 1000/,
     );
   });
+
+  it("trade catalogue — every template proposes, allocates and settles atomically", () => {
+    for (const t of TRADE_TEMPLATES) {
+      const result = store.runFullDemo({ templateId: t.id });
+      assert.equal(result.error, null, `${t.id} errored: ${result.error}`);
+      assert.equal(result.composition.status, "settled", t.id);
+      assert.equal(result.composition.templateId, t.id);
+      assert.equal(result.composition.tradeName, t.name);
+      assert.equal(result.composition.legs.length, t.legs.length);
+      for (const leg of result.composition.legs) {
+        const tok = store.tokens.get(leg.assetCid);
+        assert.equal(tok?.owner, leg.receiver, `${t.id}/${leg.legId} not delivered`);
+      }
+      // Regulator still sees receipts only, never tokens
+      assert.equal(store.partyView("Regulator").visibleTokens.length, 0);
+    }
+  });
+
+  it("trade catalogue — unknown template is rejected with a helpful message", () => {
+    assert.throws(
+      () => store.proposeTradeFinance({ templateId: "unobtainium" }),
+      /unknown trade template "unobtainium" — choose one of: cocoa/,
+    );
+  });
+
+  it("trade catalogue — wrong amount still rejected on non-cocoa trades", () => {
+    const c = store.proposeTradeFinance({ templateId: "coffee" });
+    for (const p of c.counterparties) store.accept(c.id, p);
+    const cash = c.legs.find((l) => l.legId === "cash")!;
+    assert.throws(
+      () => store.allocate(c.id, { ...cash, amount: "1.0" }),
+      /allocation match failed: amount mismatch on leg cash/,
+    );
+    assert.equal(store.require(c.id).allocations.length, 0);
+  });
+
+  it("readiness — settled trade reports receipt and per-leg settled flag", () => {
+    const result = store.runFullDemo({ templateId: "gold" });
+    const r = store.getReadiness(result.composition.id);
+    assert.equal(r.status, "settled");
+    assert.equal(r.tradeName, "Gold doré purchase");
+    assert.ok(r.receiptCid);
+    assert.equal(r.allocatedLegs.length, 3);
+    assert.ok(r.allocatedLegs.every((l) => l.settled && l.allocationCid));
+    assert.equal(r.outstandingLegs.length, 0);
+    assert.equal(r.canSettle, false);
+  });
+
+  it("collateral cover — computed from template reference prices", () => {
+    const c = store.proposeTradeFinance({ templateId: "coffee" });
+    // 20 MT × $4,120 = $82,400 collateral vs $64,000 advance → 129%
+    assert.equal(c.collateralRatio, "129%");
+    const cocoa = store.proposeTradeFinance();
+    // 2 CBTC × $65,000 = $130,000 vs $10,000 → 1300% (unchanged behaviour)
+    assert.equal(cocoa.collateralRatio, "1300%");
+  });
 });
-
-
-

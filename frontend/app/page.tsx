@@ -11,17 +11,17 @@ export default function HomePage() {
           </span>
           <h1>Close the whole deal. Or nothing moves.</h1>
           <p className="lede">
-            A reusable Daml package for structured settlement on Canton. This
-            desk runs a concrete 3-party DvP: CBTC, USDCx, and cETH in one
-            atomic transaction. Each party sees only its own leg. Auditors get
-            a receipt, not the payloads.
+            A reusable Daml package for structured settlement on Canton. Pick a
+            trade (cocoa, coffee, cashew, gold, shea, sesame, cotton or an FX
+            swap) and every leg settles in one atomic transaction. Each party
+            sees only its own leg. Auditors get a receipt, not the payloads.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/demo">
-              Open allocation desk
+              Settle a trade
             </Link>
             <Link className="btn" href="/observer">
-              Observer money shot
+              Auditor view
             </Link>
           </div>
           <div className="stat-strip">
@@ -229,15 +229,17 @@ export default function HomePage() {
               workflows on Canton. Builders get propose/accept coordination,
               disclosed contracts, expiry/cancel paths, and atomic settlement
               completion without rewriting that plumbing for every use case.
-              The CBTC / USDCx / cETH desk is the working 3-party DvP specimen.
+              The settlement desk ships eight working trades, from the 3-party
+              cocoa DvP (CBTC / USDCx / cETH) to a 2-party naira FX swap.
             </p>
           </details>
           <details className="faq-item">
             <summary>Who is this for?</summary>
             <p>
               Trade-finance desks, RWA issuers, and Canton builders who need
-              atomic multi-asset settlement with selective disclosure. The cocoa
-              export flow is the working example for HackCanton Track 1.
+              atomic multi-asset settlement with selective disclosure. Cocoa,
+              coffee, cashew, gold, shea, sesame, cotton and FX trades are the
+              working examples for HackCanton Track 1.
             </p>
           </details>
           <details className="faq-item">
@@ -253,9 +255,10 @@ export default function HomePage() {
           <details className="faq-item">
             <summary>Where do I start?</summary>
             <p>
-              Open the settlement desk, run allocation matching, then open
-              the auditor money shot. For multi-sig, run the BitSafe camera beat
-              (refuse below threshold, then settle).
+              Open the settlement desk, pick a trade and follow the four steps
+              (or press &ldquo;Run it for me&rdquo;). Then open the auditor view.
+              For multi-sig, use the BitSafe desk: it refuses below threshold,
+              then settles.
             </p>
           </details>
         </div>
@@ -269,7 +272,7 @@ export default function HomePage() {
         </p>
         <div className="row">
           <Link className="btn primary" href="/demo">
-            Open allocation desk
+            Settle a trade
           </Link>
           <Link className="btn" href="/observer">
             Money shot

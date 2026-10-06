@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { demoStore, type PartyId } from "../demoStore.js";
+import { fallbackQuote } from "../oracleFallback.js";
 import { ledgerFromEnv, acquireOidcToken, SHARED_DEVNET_LEDGER_URL } from "../ledger.js";
 
 export const adminRouter = Router();
@@ -194,19 +195,10 @@ adminRouter.get(["/oracle/live", "/oracle/price"], async (req, res) => {
       res.json({ ok: true, source: "live-oracle-service", data });
     } else {
       // Fallback algorithmic live quote if separate process not spawned
-      const now = Date.now();
-      const price = (8240.5 + Math.sin(now / 10000) * 12.5).toFixed(2);
       res.json({
         ok: true,
         source: "internal-oracle-engine",
-        data: {
-          symbol,
-          price,
-          currency: "USD",
-          unit: "MT",
-          signature: "0x98f2ba7c65e8d91024bda71289cf8211029",
-          timestamp: new Date().toISOString(),
-        },
+        data: fallbackQuote(symbol),
       });
     }
   } catch (e) {

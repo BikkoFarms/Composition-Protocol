@@ -12,6 +12,7 @@
     "test:backend": "npm --prefix backend test",
     "test:e2e": "node scripts/test-e2e-live.mjs",
     "test:all": "npm test && npm run test:e2e",
-    "demo:scenario": "node scripts/run-demo-scenario.mjs"
+    "demo:scenario": "node scripts/run-demo-scenario.mjs",
+    "test:smoke": "node scripts/smoke-test.mjs"
   }
 }

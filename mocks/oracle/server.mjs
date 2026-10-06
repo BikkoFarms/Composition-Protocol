@@ -19,6 +19,11 @@ const MARKET_FEEDS = {
   COCOA: { price: 8240.50, unit: "MT", volatility: 0.004, lastUpdated: Date.now() },
   COFFEE: { price: 4120.00, unit: "MT", volatility: 0.005, lastUpdated: Date.now() },
   CASHEW: { price: 1850.25, unit: "MT", volatility: 0.003, lastUpdated: Date.now() },
+  GOLD: { price: 2400.00, unit: "OZ", volatility: 0.002, lastUpdated: Date.now() },
+  SHEA: { price: 2600.00, unit: "MT", volatility: 0.004, lastUpdated: Date.now() },
+  SESAME: { price: 1900.00, unit: "MT", volatility: 0.004, lastUpdated: Date.now() },
+  COTTON: { price: 1700.00, unit: "MT", volatility: 0.003, lastUpdated: Date.now() },
+  USDNGN: { price: 1550.00, unit: "NGN", volatility: 0.001, lastUpdated: Date.now() },
   CBTC: { price: 65420.00, unit: "BTC", volatility: 0.002, lastUpdated: Date.now() },
   USDCx: { price: 1.00, unit: "USD", volatility: 0.0001, lastUpdated: Date.now() },
 };
