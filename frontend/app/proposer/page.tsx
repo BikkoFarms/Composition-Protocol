@@ -74,7 +74,7 @@ export default function ProposerPage() {
     });
   }, [refresh]);
 
-  async function propose(opts?: { forceFail?: boolean }) {
+  async function propose(opts?: { forceFail?: boolean; expiresAt?: string }) {
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -84,13 +84,16 @@ export default function ProposerPage() {
         body: JSON.stringify({
           forceFail: opts?.forceFail ?? false,
           templateId: templateId || defaultId,
+          expiresAt: opts?.expiresAt,
         }),
       });
       await refresh();
       setSuccess(
         opts?.forceFail
           ? `Broken ${created.tradeName ?? "trade"} staged (#${created.id.slice(0, 8)}) — settling it will revert atomically and nothing will move.`
-          : `${created.tradeName ?? "Trade"} proposed (#${created.id.slice(0, 8)}). Counterparties sign on the Lender desk, then you can settle here.`,
+          : opts?.expiresAt
+            ? `Short-lived ${created.tradeName ?? "trade"} proposed (#${created.id.slice(0, 8)}). It expires in ~30 seconds — settle quickly or watch it expire.`
+            : `${created.tradeName ?? "Trade"} proposed (#${created.id.slice(0, 8)}). Counterparties sign on the Lender desk, then you can settle here.`,
       );
     } catch (e) {
       setError(friendlyError(String((e as Error).message)));
@@ -104,7 +107,21 @@ export default function ProposerPage() {
     setError(null);
     setSuccess(null);
     try {
-      // Match agreed terms, then settle (backend also auto-allocates if needed).
+      // Auto-accept any counterparties that haven't signed yet (matches readiness desk behaviour)
+      const detail = await api<{ status: string; counterparties: string[]; accepted: string[] }>(
+        `/compositions/${id}`,
+      );
+      if (detail.status === "proposed" || detail.status === "partially_accepted") {
+        for (const party of detail.counterparties) {
+          if (!detail.accepted.includes(party)) {
+            await api(`/compositions/${id}/accept`, {
+              method: "POST",
+              body: JSON.stringify({ acceptor: party }),
+            });
+          }
+        }
+      }
+      // Allocate + settle
       try {
         await api(`/compositions/${id}/allocate-all`, { method: "POST" });
       } catch {
@@ -123,6 +140,23 @@ export default function ProposerPage() {
     } catch (e) {
       setError(friendlyError(String((e as Error).message)));
       await refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function expire(id: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api(`/compositions/${id}/expire`, {
+        method: "POST",
+        body: JSON.stringify({ caller: "Alice", force: true }),
+      });
+      await refresh();
+      setSuccess("Ticket expired — allocations released, nothing moved.");
+    } catch (e) {
+      setError(friendlyError(String((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -174,7 +208,18 @@ export default function ProposerPage() {
           </select>
         </div>
         <button className="primary" disabled={busy} onClick={() => propose()}>
-          Propose trade
+          Initiate DvP proposal
+        </button>
+        <button
+          disabled={busy}
+          onClick={() =>
+            propose({
+              expiresAt: new Date(Date.now() + 30 * 1000).toISOString(),
+            })
+          }
+          title="Proposes a trade that expires in ~30 seconds to demo the expiry path"
+        >
+          Propose short-lived ticket
         </button>
         <button
           className="danger"
@@ -275,6 +320,11 @@ export default function ProposerPage() {
                   ? ` · ${c.accepted.join(", ")}`
                   : " · waiting on counterparties"}
               </p>
+              {c.expiresAt && !["settled", "cancelled", "expired", "rejected", "reverted"].includes(c.status) && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 0 }}>
+                  Expires: {new Date(c.expiresAt).toLocaleTimeString()} on {new Date(c.expiresAt).toLocaleDateString()}
+                </p>
+              )}
               {c.disclosedContracts && c.disclosedContracts.length > 0 && (
                 <div className="asset-chips">
                   {c.disclosedContracts.map((d) => (
@@ -290,7 +340,9 @@ export default function ProposerPage() {
                 </p>
               )}
               <div className="row" style={{ marginTop: 10, marginBottom: 0 }}>
-                {(c.status === "accepted" ||
+                {(c.status === "proposed" ||
+                  c.status === "partially_accepted" ||
+                  c.status === "accepted" ||
                   c.status === "ready_to_settle" ||
                   c.status === "allocating") && (
                   <button
@@ -298,15 +350,29 @@ export default function ProposerPage() {
                     disabled={busy}
                     onClick={() => settle(c.id)}
                   >
-                    {c.status === "accepted"
-                      ? "Allocate + settle"
-                      : "Settle now"}
+                    {c.status === "proposed" || c.status === "partially_accepted"
+                      ? "Accept all & settle"
+                      : c.status === "accepted"
+                        ? "Allocate + settle"
+                        : "Settle now"}
                   </button>
                 )}
                 {OPEN.has(c.status) && c.status !== "awaiting_governance" && (
-                  <button disabled={busy} onClick={() => cancel(c.id)}>
-                    Cancel trade
-                  </button>
+                  <>
+                    <button disabled={busy} onClick={() => cancel(c.id)}>
+                      Cancel trade
+                    </button>
+                    {c.expiresAt && (
+                      <button
+                        className="ghost"
+                        disabled={busy}
+                        onClick={() => expire(c.id)}
+                        title="Force-expire this ticket (simulates market moving before settlement)"
+                      >
+                        Expire ticket
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             </div>

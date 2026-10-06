@@ -74,25 +74,16 @@ export default function GovernancePage() {
     setSuccessMsg(null);
     setRefuseMsg(null);
     try {
-      const c = await api<Composition>("/compositions/demo/trade-finance", {
-        method: "POST",
-        body: JSON.stringify({ requireGovernance: true }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Bob" }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Oracle" }),
-      });
-      // Match all legs before opening the BitSafe gate (required on older backends).
-      try {
-        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
-      } catch {
-        /* settle() auto-allocates when allocate-all is unavailable */
-      }
-      await api(`/compositions/${c.id}/settle`, {
+      // open-desk: propose + accept all counterparties in one call
+      const desk = await api<{ composition: Composition }>(
+        "/compositions/demo/open-desk",
+        { method: "POST", body: JSON.stringify({ requireGovernance: true }) },
+      );
+      const cid = desk.composition.id;
+      // allocate all legs (open-desk leaves them unallocated)
+      await api(`/compositions/${cid}/allocate-all`, { method: "POST" });
+      // settle: backend auto-opens BitSafe gate and returns awaiting_governance
+      await api(`/compositions/${cid}/settle`, {
         method: "POST",
         body: JSON.stringify({}),
       });
@@ -119,14 +110,8 @@ export default function GovernancePage() {
         body: JSON.stringify({ governor: govName }),
       });
       await refresh();
-      setSuccessMsg(`${govName} signed · threshold still ${govName === "Gov1" ? "1/2" : "checking"}.`);
-      if (govName === "Gov1") {
-        setBeat(1);
-        setActiveGov("Gov1");
-      }
-      if (govName === "Gov2" || govName === "Gov3") {
-        setBeat(3);
-      }
+      setSuccessMsg(`${govName} signed. Check the threshold count above.`);
+      if (govName === "Gov2" || govName === "Gov3") setBeat(3);
     } catch (e) {
       setError(String((e as Error).message));
     } finally {
@@ -174,34 +159,25 @@ export default function GovernancePage() {
     setRefuseMsg(null);
     setBeat(0);
     try {
-      const c = await api<Composition>("/compositions/demo/trade-finance", {
-        method: "POST",
-        body: JSON.stringify({ requireGovernance: true }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Bob" }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Oracle" }),
-      });
-      try {
-        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
-      } catch {
-        /* settle() auto-allocates when allocate-all is unavailable */
-      }
-      const opened = await api<Composition>(`/compositions/${c.id}/settle`, {
+      // open-desk: propose + accept in one call
+      const desk = await api<{ composition: Composition }>(
+        "/compositions/demo/open-desk",
+        { method: "POST", body: JSON.stringify({ requireGovernance: true }) },
+      );
+      const cid = desk.composition.id;
+      await api(`/compositions/${cid}/allocate-all`, { method: "POST" });
+      const opened = await api<Composition>(`/compositions/${cid}/settle`, {
         method: "POST",
         body: JSON.stringify({}),
       });
-      const govId = opened.governanceCid!;
+      const govId = opened.governanceCid;
       if (!govId) {
         throw new Error(
           "governed deal did not open — missing governanceCid after settle",
         );
       }
       setBeat(1);
+      await refresh();
 
       await api(`/compositions/governance/${govId}/approve`, {
         method: "POST",
@@ -215,9 +191,8 @@ export default function GovernancePage() {
           body: "{}",
         });
       } catch (e) {
-        const msg = String((e as Error).message);
         setBeat(2);
-        setRefuseMsg(`R-GOV-1 ledger refusal: ${msg}`);
+        setRefuseMsg(`R-GOV-1 ledger refusal: ${String((e as Error).message)}`);
       }
 
       await api(`/compositions/governance/${govId}/approve`, {
@@ -286,7 +261,7 @@ export default function GovernancePage() {
 
       <div className="row">
         <button className="primary" disabled={busy} onClick={startGoverned}>
-          Open governed deal
+          {busy ? "Opening…" : "Open governed deal"}
         </button>
         <button disabled={busy} onClick={runCameraBeat}>
           {busy ? "Running beat…" : "Camera beat: refuse → settle"}
@@ -310,23 +285,17 @@ export default function GovernancePage() {
             <button
               key={g}
               className={activeGov === g ? "primary" : undefined}
-              onClick={() => {
-                setActiveGov(g);
-                if (!openGov) {
-                  setError(
-                    "No open governed deal yet — click Open governed deal or Camera beat first.",
-                  );
-                }
-              }}
+              onClick={() => setActiveGov(g)}
             >
               {g}
             </button>
           ))}
         </div>
         {!openGov && (
-          <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
-            Open a governed deal first — then Sign as Gov1 appears under Live
-            threshold.
+          <p className="muted" style={{ fontSize: 13, marginBottom: 0, marginTop: 8 }}>
+            No open governed deal yet — click <strong>Open governed deal</strong> or{" "}
+            <strong>Camera beat</strong> above. The sign controls appear once a
+            governed deal is open.
           </p>
         )}
       </div>
@@ -356,7 +325,7 @@ export default function GovernancePage() {
             })}
           </div>
           <div className="row" style={{ marginTop: 14, marginBottom: 0 }}>
-            {!openGov.approvals.includes(activeGov) && (
+            {!openGov.approvals.includes(activeGov) ? (
               <button
                 className="primary"
                 disabled={busy}
@@ -364,6 +333,10 @@ export default function GovernancePage() {
               >
                 Sign as {activeGov}
               </button>
+            ) : (
+              <span className="chip ok" style={{ padding: "6px 14px" }}>
+                {activeGov} already signed ✓
+              </span>
             )}
             {openGov.approvals.length < openGov.threshold && (
               <button
@@ -394,7 +367,8 @@ export default function GovernancePage() {
             <SkeletonBlock rows={5} />
           ) : govs.length === 0 ? (
             <p className="muted" style={{ fontSize: 14 }}>
-              No governed deals yet. Open one or run the camera beat.
+              No governed deals yet. Click <strong>Open governed deal</strong> above,
+              or use <strong>Camera beat</strong> for a fully automated demo.
             </p>
           ) : (
             govs.map((g) => {
@@ -411,21 +385,25 @@ export default function GovernancePage() {
                       className={`tag ${
                         g.status === "executed"
                           ? "ok"
-                          : isThresholdMet
-                            ? "ok"
-                            : "warn"
+                          : g.status === "rejected"
+                            ? "warn"
+                            : isThresholdMet
+                              ? "ok"
+                              : "warn"
                       }`}
                     >
                       {g.status === "executed"
-                        ? "Settled"
-                        : isThresholdMet
-                          ? "Ready to execute"
-                          : `${g.approvals.length}/${g.threshold} signed`}
+                        ? "Settled ✓"
+                        : g.status === "rejected"
+                          ? "Vetoed"
+                          : isThresholdMet
+                            ? "Ready to execute"
+                            : `${g.approvals.length}/${g.threshold} signed`}
                     </span>
                   </div>
                   <p className="mono muted" style={{ fontSize: 12, margin: 0 }}>
                     Threshold {g.threshold}-of-{g.governors.length} · Approvals:{" "}
-                    {g.approvals.join(", ") || "none"}
+                    {g.approvals.join(", ") || "none yet"}
                   </p>
                 </div>
               );

@@ -191,10 +191,11 @@ compositionsRouter.post("/:id/accept", (req, res) => {
  */
 compositionsRouter.post("/demo/open-desk", (req, res) => {
   try {
-    const body = (req.body ?? {}) as { forceFail?: boolean; templateId?: string };
+    const body = (req.body ?? {}) as { forceFail?: boolean; templateId?: string; requireGovernance?: boolean };
     const composition = demoStore.proposeTradeFinance({
       forceFail: body.forceFail,
       templateId: body.templateId,
+      requireGovernance: body.requireGovernance,
     });
     for (const p of composition.counterparties) {
       demoStore.accept(composition.id, p);

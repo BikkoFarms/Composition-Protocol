@@ -186,8 +186,16 @@ export default function ReadinessPage() {
 
   const handleAllocateAll = () =>
     run(async () => {
+      // Accept any outstanding counterparties before locking legs.
+      // allocate-all requires status accepted/allocating/ready_to_settle.
       await acceptRemaining();
-      await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
+      try {
+        await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
+      } catch (e) {
+        const msg = (e as Error).message;
+        // If still failing after accept, surface the real error
+        throw new Error(msg);
+      }
       return { text: "All legs locked and matched against the agreed terms.", type: "success" };
     });
 
@@ -209,6 +217,12 @@ export default function ReadinessPage() {
   const handleSettle = () =>
     run(async () => {
       await acceptRemaining();
+      // Allocate legs if not already done
+      try {
+        await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
+      } catch {
+        // Already allocated or error will surface from settle
+      }
       const result = await api<{ status: string; receiptCid?: string | null }>(
         `/compositions/${selectedId}/settle`,
         { method: "POST", body: JSON.stringify({ caller: "Operator" }) },
@@ -432,9 +446,10 @@ export default function ReadinessPage() {
                 <thead>
                   <tr>
                     <th>Leg</th>
-                    <th>Asset</th>
-                    <th>From → To</th>
-                    <th>Status</th>
+                    <th>Instrument</th>
+                    <th>Amount</th>
+                    <th>Provider → Receiver</th>
+                    <th>Allocation Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -442,15 +457,14 @@ export default function ReadinessPage() {
                   {r.allocatedLegs.map((leg) => (
                     <tr key={leg.legId}>
                       <td style={{ fontWeight: 600 }}>{leg.legId}</td>
-                      <td>
-                        {formatAmount(leg.amount)} {leg.instrumentId}
-                      </td>
+                      <td>{leg.instrumentId}</td>
+                      <td>{formatAmount(leg.amount)}</td>
                       <td>
                         {leg.provider} → {leg.receiver}
                       </td>
                       <td>
                         {settled ? (
-                          <span className="chip done">✓ Settled</span>
+                          <span className="chip done">✓ Settled atomically</span>
                         ) : closed ? (
                           <span className="chip muted">Released</span>
                         ) : (
@@ -486,9 +500,8 @@ export default function ReadinessPage() {
                   {r.outstandingLegs.map((leg) => (
                     <tr key={leg.legId}>
                       <td style={{ fontWeight: 600 }}>{leg.legId}</td>
-                      <td>
-                        {formatAmount(leg.amount)} {leg.instrumentId}
-                      </td>
+                      <td>{leg.instrumentId}</td>
+                      <td>{formatAmount(leg.amount)}</td>
                       <td>
                         {leg.provider} → {leg.receiver}
                       </td>
@@ -496,7 +509,7 @@ export default function ReadinessPage() {
                         {closed ? (
                           <span className="chip muted">Released</span>
                         ) : (
-                          <span className="chip wait">Not locked</span>
+                          <span className="chip wait">Unallocated</span>
                         )}
                       </td>
                       <td>
