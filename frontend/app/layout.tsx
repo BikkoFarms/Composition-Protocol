@@ -14,7 +14,7 @@ export const viewport: Viewport = {
 export const metadata = {
   title: "Settle Flow",
   description:
-    "Reusable Daml settlement-workflow package on Canton — 3-party DvP with CBTC, USDCx, and cETH, BitSafe governance, and ledger-enforced privacy.",
+    "Reusable Daml settlement-workflow package on Canton — multi-party DvP for commodity and FX trades, BitSafe governance, and ledger-enforced privacy.",
 };
 
 const links = [
@@ -32,9 +32,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton · Settle Flow · CBTC + USDCx + cETH
+          Live on Canton · Settle Flow · Cocoa, coffee, cashew, gold, shea,
+          sesame, cotton &amp; FX trades
           {" · "}
-          <Link href="/demo">Allocation matching desk →</Link>
+          <Link href="/demo">Settle a trade →</Link>
         </div>
         <div className="shell">
           <header className="top">
@@ -57,7 +58,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 Desk online
               </span>
               <Link className="btn primary" href="/demo">
-                Allocation desk
+                Settle a trade
               </Link>
             </div>
           </header>

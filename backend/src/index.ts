@@ -6,6 +6,7 @@ import { assetsRouter } from "./routes/assets.js";
 import { compositionsRouter } from "./routes/compositions.js";
 import { auditRouter } from "./routes/audit.js";
 import { adminRouter } from "./routes/admin.js";
+import { fallbackQuote } from "./oracleFallback.js";
 
 /**
  * Settleflow Backend API Gateway
@@ -61,6 +62,7 @@ app.get("/", (_req, res) => {
       allocate: "/compositions/:id/allocate",
       settle: "/compositions/:id/settle",
       openDesk: "/compositions/demo/open-desk",
+      templates: "/compositions/templates",
     },
     version: "1.0.0",
     timestamp: new Date().toISOString(),
@@ -114,13 +116,13 @@ app.use("/admin", adminRouter);
  * Direct commodity oracle gateway: forwards to live Oracle microservice with fallback.
  */
 app.get(["/oracle/price", "/price"], async (req, res) => {
+  const symbol = String(req.query.symbol ?? "COCOA").toUpperCase();
   try {
     let oracleUrl = process.env.ORACLE_URL ?? "https://settleflow-oracle.onrender.com";
     oracleUrl = oracleUrl.trim().replace(/\/+$/, "");
     if (!oracleUrl.startsWith("http://") && !oracleUrl.startsWith("https://")) {
       oracleUrl = oracleUrl.includes("localhost") ? `http://${oracleUrl}` : `https://${oracleUrl}`;
     }
-    const symbol = String(req.query.symbol ?? "COCOA").toUpperCase();
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
     const priceResp = await fetch(`${oracleUrl}/price?symbol=${encodeURIComponent(symbol)}`, {
@@ -133,16 +135,7 @@ app.get(["/oracle/price", "/price"], async (req, res) => {
       return;
     }
   } catch {}
-  const now = Date.now();
-  const price = (8240.5 + Math.sin(now / 10000) * 12.5).toFixed(2);
-  res.json({
-    symbol: "COCOA",
-    price,
-    currency: "USD",
-    unit: "MT",
-    signature: "0x98f2ba7c65e8d91024bda71289cf8211029",
-    timestamp: new Date().toISOString(),
-  });
+  res.json(fallbackQuote(symbol));
 });
 
 app.use((_req, res) => {

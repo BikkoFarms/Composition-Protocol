@@ -52,7 +52,16 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
       cache: "no-store", // Prevents Next.js / browser caching to guarantee live ACS state
     });
 
-    const data = await res.json();
+    const text = await res.text();
+    let data: { error?: string } & Record<string, unknown> = {};
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch {
+      // Non-JSON body (proxy error page, cold-start HTML) — surface a readable message
+      throw new Error(
+        `The API returned an unexpected response for ${path} (HTTP ${res.status}). It may still be starting up — retry in a moment.`,
+      );
+    }
     if (!res.ok) {
       // Unpack structured backend error (e.g. 409 Conflict with atomic revert details)
       throw new Error(data.error ?? `Request to ${path} failed with HTTP status ${res.status}`);

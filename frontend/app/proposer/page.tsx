@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Exporter desk — Alice proposes, cancels, expires, and settles DvP compositions.
- * Surfaces John's cancel / expire / disclosed-contract paths in the Lattice UI.
+ * Exporter desk — Alice picks a trade from the catalogue, proposes, cancels,
+ * and settles DvP compositions. Surfaces cancel and disclosed-contract paths.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { friendlyError, useTradeTemplates } from "@/lib/trades";
 
 type Token = {
   contractId: string;
@@ -24,6 +25,7 @@ type DisclosedContract = {
 
 type Composition = {
   id: string;
+  tradeName?: string;
   status: string;
   description: string;
   accepted: string[];
@@ -51,6 +53,9 @@ export default function ProposerPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  const { templates, defaultId } = useTradeTemplates();
+  const [templateId, setTemplateId] = useState("");
+  const selectedTemplate = templates.find((t) => t.id === (templateId || defaultId));
 
   const refresh = useCallback(async () => {
     const [t, c] = await Promise.all([
@@ -58,7 +63,7 @@ export default function ProposerPage() {
       api<{ compositions: Composition[] }>("/compositions"),
     ]);
     setTokens(t.tokens);
-    setComps(c.compositions);
+    setComps([...c.compositions].reverse());
     setLoading(false);
   }, []);
 
@@ -69,7 +74,7 @@ export default function ProposerPage() {
     });
   }, [refresh]);
 
-  async function propose(opts?: { forceFail?: boolean; shortLived?: boolean }) {
+  async function propose(opts?: { forceFail?: boolean }) {
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -78,21 +83,17 @@ export default function ProposerPage() {
         method: "POST",
         body: JSON.stringify({
           forceFail: opts?.forceFail ?? false,
-          expiresAt: opts?.shortLived
-            ? new Date(Date.now() + 8_000).toISOString()
-            : undefined,
+          templateId: templateId || defaultId,
         }),
       });
       await refresh();
       setSuccess(
         opts?.forceFail
-          ? `Broken ticket staged (${created.id.slice(0, 8)}) — settle will revert atomically.`
-          : opts?.shortLived
-            ? `Short-lived ticket staged (${created.id.slice(0, 8)}) — use expiry path before settle.`
-            : `Proposal staged (${created.id.slice(0, 8)}) — CBTC + USDCx + cETH. Lender/Oracle must accept, then Settle.`,
+          ? `Broken ${created.tradeName ?? "trade"} staged (#${created.id.slice(0, 8)}) — settling it will revert atomically and nothing will move.`
+          : `${created.tradeName ?? "Trade"} proposed (#${created.id.slice(0, 8)}). Counterparties sign on the Lender desk, then you can settle here.`,
       );
     } catch (e) {
-      setError(String((e as Error).message));
+      setError(friendlyError(String((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -120,7 +121,7 @@ export default function ProposerPage() {
       );
       await refresh();
     } catch (e) {
-      setError(String((e as Error).message));
+      setError(friendlyError(String((e as Error).message)));
       await refresh();
     } finally {
       setBusy(false);
@@ -137,23 +138,7 @@ export default function ProposerPage() {
       });
       await refresh();
     } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function expire(id: string) {
-    setBusy(true);
-    setError(null);
-    try {
-      await api(`/compositions/${id}/expire`, {
-        method: "POST",
-        body: JSON.stringify({ caller: "Operator", force: true }),
-      });
-      await refresh();
-    } catch (e) {
-      setError(String((e as Error).message));
+      setError(friendlyError(String((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -166,33 +151,63 @@ export default function ProposerPage() {
           Exporter desk
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">Initiate the DvP proposal</h1>
+        <h1 className="page-title">Propose a trade</h1>
         <p className="lede">
-          You are Alice. Stage the reusable 3-party settlement pattern: CBTC
-          collateral, USDCx cash, and cETH. Cancel or expire before settlement
-          if the market moves.
+          You are Alice, the exporter. Pick a trade and propose it. Once the
+          lender (and inspector, if the trade has one) sign, settle it here. You
+          can cancel any time before settlement.
         </p>
       </div>
-      <div className="row">
+      <div className="row" style={{ alignItems: "flex-end" }}>
+        <div className="field" style={{ marginBottom: 0, minWidth: 240 }}>
+          <label htmlFor="trade-type">Trade</label>
+          <select
+            id="trade-type"
+            value={templateId || defaultId}
+            onChange={(e) => setTemplateId(e.target.value)}
+          >
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} · {t.legs.map((l) => l.instrumentId).join(" + ")}
+              </option>
+            ))}
+          </select>
+        </div>
         <button className="primary" disabled={busy} onClick={() => propose()}>
-          Initiate proposal
-        </button>
-        <button disabled={busy} onClick={() => propose({ shortLived: true })}>
-          Propose short-lived ticket
+          Propose trade
         </button>
         <button
           className="danger"
           disabled={busy}
           onClick={() => propose({ forceFail: true })}
+          title="Stages a trade whose settlement fails, to show the atomic revert"
         >
-          Propose broken ticket
+          Propose broken trade
         </button>
       </div>
-      {error && <p className="err">{error}</p>}
-      {success && (
-        <p className="ok" style={{ color: "var(--color-deep-forest)" }}>
-          {success}
+      {selectedTemplate && (
+        <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
+          {selectedTemplate.summary}
         </p>
+      )}
+      {error && (
+        <div
+          className={`notice ${error.startsWith("Settlement reverted") ? "check" : "error"}`}
+          role="alert"
+        >
+          <p>{error}</p>
+          <button className="notice-close" aria-label="Dismiss" onClick={() => setError(null)}>
+            ×
+          </button>
+        </div>
+      )}
+      {success && (
+        <div className="notice success" role="status">
+          <p>{success}</p>
+          <button className="notice-close" aria-label="Dismiss" onClick={() => setSuccess(null)}>
+            ×
+          </button>
+        </div>
       )}
 
       <div className="grid grid-2">
@@ -222,11 +237,11 @@ export default function ProposerPage() {
           )}
         </div>
         <div className="card">
-          <h2>Your tickets</h2>
+          <h2>Your trades</h2>
           {loading && comps.length === 0 && <SkeletonBlock rows={4} />}
           {!loading && comps.length === 0 && (
             <p className="muted" style={{ fontSize: 14 }}>
-              No tickets yet. Initiate a proposal to start the workflow.
+              No trades yet. Propose one to start.
             </p>
           )}
           {comps.map((c) => (
@@ -248,7 +263,10 @@ export default function ProposerPage() {
                 </span>
                 <span className="mono muted">{c.id.slice(0, 8)}</span>
               </div>
-              <p className="muted" style={{ margin: "6px 0", fontSize: 14 }}>
+              <p style={{ margin: "6px 0 2px", fontSize: 15, fontWeight: 600 }}>
+                {c.tradeName ?? "Trade"}
+              </p>
+              <p className="muted" style={{ margin: "0 0 6px", fontSize: 13 }}>
                 {c.description}
               </p>
               <p className="muted" style={{ fontSize: 13 }}>
@@ -257,11 +275,6 @@ export default function ProposerPage() {
                   ? ` · ${c.accepted.join(", ")}`
                   : " · waiting on counterparties"}
               </p>
-              {c.expiresAt && OPEN.has(c.status) && (
-                <p className="mono muted" style={{ fontSize: 12, margin: "6px 0" }}>
-                  Expires {new Date(c.expiresAt).toLocaleString()}
-                </p>
-              )}
               {c.disclosedContracts && c.disclosedContracts.length > 0 && (
                 <div className="asset-chips">
                   {c.disclosedContracts.map((d) => (
@@ -290,20 +303,9 @@ export default function ProposerPage() {
                       : "Settle now"}
                   </button>
                 )}
-                {OPEN.has(c.status) &&
-                  c.status !== "accepted" &&
-                  c.status !== "ready_to_settle" && (
+                {OPEN.has(c.status) && c.status !== "awaiting_governance" && (
                   <button disabled={busy} onClick={() => cancel(c.id)}>
-                    Cancel proposal
-                  </button>
-                )}
-                {OPEN.has(c.status) && (
-                  <button
-                    className="danger"
-                    disabled={busy}
-                    onClick={() => expire(c.id)}
-                  >
-                    Run expiry path
+                    Cancel trade
                   </button>
                 )}
               </div>

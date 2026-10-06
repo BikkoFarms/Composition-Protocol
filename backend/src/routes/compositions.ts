@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { demoStore, type LegSpec, type PartyId } from "../demoStore.js";
+import { DEFAULT_TEMPLATE_ID, TRADE_TEMPLATES } from "../tradeTemplates.js";
 
 export const compositionsRouter = Router();
 
@@ -16,6 +17,14 @@ compositionsRouter.get("/", (_req, res) => {
 });
 
 /**
+ * GET /compositions/templates
+ * Trade catalogue for the desk pickers (cocoa, coffee, cashew, gold, …).
+ */
+compositionsRouter.get("/templates", (_req, res) => {
+  res.json({ defaultTemplateId: DEFAULT_TEMPLATE_ID, templates: TRADE_TEMPLATES });
+});
+
+/**
  * POST /compositions/demo/run-full
  * One-click orchestration (allocate-all + settle; secondary to /demo matching path):
  * 1. Proposes 3-leg trade-finance deal (CBTC collateral, USDCx cash, Oracle cETH).
@@ -28,6 +37,7 @@ compositionsRouter.post("/demo/run-full", (req, res) => {
     const body = (req.body ?? {}) as {
       forceFail?: boolean;
       requireGovernance?: boolean;
+      templateId?: string;
     };
     const result = demoStore.runFullDemo(body);
     const status = result.error ? 409 : 200;
@@ -44,12 +54,13 @@ compositionsRouter.post("/demo/run-full", (req, res) => {
  */
 compositionsRouter.post("/demo/load", (req, res) => {
   try {
-    const count = Number((req.body as { count?: number })?.count ?? 50);
+    const body = (req.body ?? {}) as { count?: number; templateId?: string };
+    const count = Number(body.count ?? 50);
     if (!Number.isFinite(count) || count < 1 || count > 500) {
       res.status(400).json({ error: "count must be between 1 and 500" });
       return;
     }
-    const result = demoStore.runLoad(count);
+    const result = demoStore.runLoad(count, body.templateId);
     res.json(result);
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
@@ -66,6 +77,7 @@ compositionsRouter.post("/demo/trade-finance", (req, res) => {
       forceFail?: boolean;
       requireGovernance?: boolean;
       expiresAt?: string;
+      templateId?: string;
     };
     const composition = demoStore.proposeTradeFinance(body);
     res.status(201).json(composition);
@@ -179,9 +191,10 @@ compositionsRouter.post("/:id/accept", (req, res) => {
  */
 compositionsRouter.post("/demo/open-desk", (req, res) => {
   try {
-    const body = (req.body ?? {}) as { forceFail?: boolean };
+    const body = (req.body ?? {}) as { forceFail?: boolean; templateId?: string };
     const composition = demoStore.proposeTradeFinance({
       forceFail: body.forceFail,
+      templateId: body.templateId,
     });
     for (const p of composition.counterparties) {
       demoStore.accept(composition.id, p);
@@ -190,7 +203,7 @@ compositionsRouter.post("/demo/open-desk", (req, res) => {
       composition: demoStore.require(composition.id),
       legs: demoStore.require(composition.id).legs,
       commits: demoStore.require(composition.id).commits,
-      next: "Allocate each leg — matching parties, amount, instrument, reference, deadline",
+      next: "Allocate each leg — matched on parties, amount, instrument, reference and asset",
     });
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
