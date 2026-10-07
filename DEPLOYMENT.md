@@ -390,3 +390,27 @@ module.exports = {
      -H "Content-Type: application/json" \
      -d '{"governor":"Gov1","reason":"Risk limit exceeded"}'
    ```
+
+---
+
+## 9. Canton Identity, Web3 Wallets & Developer Hub Tooling
+
+The dApp connects to the broader Canton ecosystem using official standards from [dev-hub.canton.foundation](https://dev-hub.canton.foundation/) and [docs.canton.network](https://docs.canton.network/):
+
+### 1. CIP-0103 dApp API & Wallet Connectors
+- **PartyLayer (CIP-103):** Official Canton browser wallet connection standard (`partylayer.xyz`). Allows web dApps to request signatures from local Canton wallets.
+- **Console Wallet (PixelPlex):** Institutional self-custody wallet using `@console-wallet/dapp-sdk`.
+- **Loop Wallet (5North):** High-throughput settlement wallet for commodity and FX trading desks.
+- **Splice Wallet Kernel:** Hyperledger Labs decentralized validator and Canton Coin (CC) gas management kernel.
+- **WalletConnect for Canton:** Standardized multi-chain custody relay for hardware devices and institutional MPC vaults.
+
+### 2. Multi-Party Co-signing vs. Fast Demo Mode
+- **Production Mode:** In live multi-party settlement, Exporter (`Alice`), Lender (`Bob`), and Oracle (`Oracle`) are separate entities. `Alice` creates the proposal on `/proposer`, `Bob` and `Oracle` independently review and click `Accept` on `/counterparty`, and only then is the trade eligible for allocation and atomic settlement.
+- **Demo Mode (`/demo`):** Provides an accelerated single-screen view (`/demo/open-desk`) to allow judges and evaluators to test 3-leg DvP and auditor verification without multi-tab co-signing.
+
+### 3. Explorer & Verification Endpoints
+- **CCView Explorer:** [https://ccview.io](https://ccview.io)
+- **Lighthouse Explorer:** [https://lighthouse.cantonloop.com](https://lighthouse.cantonloop.com)
+- **Canton Developer Hub:** [https://dev-hub.canton.foundation](https://dev-hub.canton.foundation)
+- **Official Documentation:** [https://docs.canton.network](https://docs.canton.network)
+

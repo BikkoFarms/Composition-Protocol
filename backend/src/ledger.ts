@@ -259,6 +259,58 @@ export class LedgerClient {
     }
     return res.json();
   }
+
+  async listParties(): Promise<{ party: string; displayName?: string; isLocal: boolean }[]> {
+    const h = await this.headers();
+    const res = await fetch(`${this.cfg.baseUrl}/v2/parties`, {
+      method: "GET",
+      headers: h,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`listParties failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as {
+      partyDetails?: { party: string; displayName?: string; isLocal: boolean }[];
+    };
+    return data.partyDetails ?? [];
+  }
+
+  async allocateParty(
+    partyIdHint: string,
+    displayName?: string,
+  ): Promise<{ party: string; displayName?: string; isLocal: boolean }> {
+    const h = await this.headers();
+    const res = await fetch(`${this.cfg.baseUrl}/v2/parties/allocate`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ partyIdHint, displayName }),
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`allocateParty failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as {
+      partyDetails: { party: string; displayName?: string; isLocal: boolean };
+    };
+    return data.partyDetails;
+  }
+
+  async listUsers(): Promise<{ id: string; primaryParty?: string }[]> {
+    const h = await this.headers();
+    const res = await fetch(`${this.cfg.baseUrl}/v2/users`, {
+      method: "GET",
+      headers: h,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`listUsers failed (${res.status}): ${text}`);
+    }
+    const data = (await res.json()) as {
+      users?: { id: string; primaryParty?: string }[];
+    };
+    return data.users ?? [];
+  }
 }
 
 export function ledgerFromEnv(): LedgerClient | null {

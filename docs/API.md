@@ -372,3 +372,80 @@ Triggers or resets an institutional emergency circuit breaker halt:
   "reason": "Oracle inspection outage"
 }
 ```
+
+---
+
+## 8. Canton Network, Identity & CIP-103 APIs
+
+### `GET /admin/canton/parties`
+Returns complete Canton party identity profiles, deterministic multihash Party IDs (`Party::1220<sha256>`), domain assignments, and Daml permissions (`CanActAs`, `CanReadAs`).
+
+#### Response
+```json
+{
+  "runtimeMode": "demo",
+  "ledgerUrl": "https://ledger-api-json.participant.hackcanton-01.devnet.naas.noders.services",
+  "totalParties": 8,
+  "parties": [
+    {
+      "party": "Alice",
+      "cantonPartyId": "Alice::1220d9e23c7b...",
+      "displayName": "Alice",
+      "role": "Exporter / Commodity Originator",
+      "domain": "canton-domain-rwa-01.eu",
+      "type": "Originator Desk",
+      "canActAs": true,
+      "canReadAs": true,
+      "isLiveSynchronized": true,
+      "tokensCount": 1,
+      "tokensSummary": "2.0 CBTC"
+    }
+  ]
+}
+```
+
+---
+
+### `POST /admin/canton/parties/allocate`
+Allocates a new Canton party either directly on the connected participant node via Canton Ledger API v2 `/v2/parties/allocate` or locally in the deterministic engine.
+
+#### Request Body
+```json
+{
+  "partyHint": "StandardChartered",
+  "displayName": "Standard Chartered Trade Desk"
+}
+```
+
+#### Response (`HTTP 201 Created`)
+```json
+{
+  "ok": true,
+  "party": "StandardChartered",
+  "cantonPartyId": "StandardChartered::12204a9e8b...",
+  "displayName": "Standard Chartered Trade Desk",
+  "domain": "canton-global-synchronizer.global"
+}
+```
+
+---
+
+### `GET /admin/canton/users`
+Returns participant user accounts mapped to primary parties and authentication providers (Keycloak OIDC direct-grants and CIP-103 PartyLayer).
+
+---
+
+### `POST /admin/ledger/ping`
+Measures real round-trip network latency from the backend service to the Canton JSON Ledger API v2 participant (`/v2/state/ledger-end`).
+
+#### Response
+```json
+{
+  "ok": true,
+  "targetUrl": "https://ledger-api-json.participant.hackcanton-01.devnet.naas.noders.services",
+  "latencyMs": 48,
+  "ledgerOffset": "000000000000000001",
+  "message": "Canton Participant node reachable and synchronized."
+}
+```
+
