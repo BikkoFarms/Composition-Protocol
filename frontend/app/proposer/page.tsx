@@ -6,9 +6,10 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
-import { friendlyError, useTradeTemplates } from "@/lib/trades";
+import { friendlyError, roleName, useTradeTemplates } from "@/lib/trades";
 
 type Token = {
   contractId: string;
@@ -107,18 +108,18 @@ export default function ProposerPage() {
     setError(null);
     setSuccess(null);
     try {
-      // Auto-accept any counterparties that haven't signed yet (matches readiness desk behaviour)
+      // Ensure all counterparties have co-signed before settling
       const detail = await api<{ status: string; counterparties: string[]; accepted: string[] }>(
         `/compositions/${id}`,
       );
       if (detail.status === "proposed" || detail.status === "partially_accepted") {
-        for (const party of detail.counterparties) {
-          if (!detail.accepted.includes(party)) {
-            await api(`/compositions/${id}/accept`, {
-              method: "POST",
-              body: JSON.stringify({ acceptor: party }),
-            });
-          }
+        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
+        if (unsigned.length > 0) {
+          setError(
+            `Trade cannot settle yet: ${unsigned.map(roleName).join(" and ")} must separately review and sign on the Lender desk (/counterparty) first.`,
+          );
+          setBusy(false);
+          return;
         }
       }
       // Allocate + settle
@@ -340,9 +341,16 @@ export default function ProposerPage() {
                 </p>
               )}
               <div className="row" style={{ marginTop: 10, marginBottom: 0 }}>
-                {(c.status === "proposed" ||
-                  c.status === "partially_accepted" ||
-                  c.status === "accepted" ||
+                {(c.status === "proposed" || c.status === "partially_accepted") && (
+                  <Link
+                    className="btn"
+                    href="/counterparty"
+                    title="Lender and Oracle must review and sign terms on the Lender desk"
+                  >
+                    Waiting for Lender &amp; Oracle to sign →
+                  </Link>
+                )}
+                {(c.status === "accepted" ||
                   c.status === "ready_to_settle" ||
                   c.status === "allocating") && (
                   <button
@@ -350,11 +358,7 @@ export default function ProposerPage() {
                     disabled={busy}
                     onClick={() => settle(c.id)}
                   >
-                    {c.status === "proposed" || c.status === "partially_accepted"
-                      ? "Accept all & settle"
-                      : c.status === "accepted"
-                        ? "Allocate + settle"
-                        : "Settle now"}
+                    {c.status === "accepted" ? "Allocate + settle" : "Settle now"}
                   </button>
                 )}
                 {OPEN.has(c.status) && c.status !== "awaiting_governance" && (

@@ -161,40 +161,32 @@ export default function ReadinessPage() {
     }
   }
 
-  async function acceptRemaining() {
-    const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
-    if (PRE_AGREEMENT.has(detail.status)) {
-      for (const party of detail.counterparties) {
-        if (!detail.accepted.includes(party)) {
-          await api(`/compositions/${selectedId}/accept`, {
-            method: "POST",
-            body: JSON.stringify({ acceptor: party }),
-          });
-        }
-      }
-    }
-  }
-
   const handleAccept = (party: string) =>
     run(async () => {
       await api(`/compositions/${selectedId}/accept`, {
         method: "POST",
         body: JSON.stringify({ acceptor: party }),
       });
-      return { text: `${roleName(party)} signed the trade.`, type: "success" };
+      return { text: `${roleName(party)} confirmed and signed the trade.`, type: "success" };
     });
 
   const handleAllocateAll = () =>
     run(async () => {
-      // Accept any outstanding counterparties before locking legs.
-      // allocate-all requires status accepted/allocating/ready_to_settle.
-      await acceptRemaining();
+      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
+      if (PRE_AGREEMENT.has(detail.status)) {
+        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
+        if (unsigned.length > 0) {
+          return {
+            text: `Cannot lock legs yet: ${unsigned.map(roleName).join(" and ")} must separately confirm the trade first. Use the "Sign as [Party]" buttons below or open the Lender desk.`,
+            type: "info",
+            link: { href: "/counterparty", label: "Open Lender desk →" },
+          };
+        }
+      }
       try {
         await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
       } catch (e) {
-        const msg = (e as Error).message;
-        // If still failing after accept, surface the real error
-        throw new Error(msg);
+        throw new Error((e as Error).message);
       }
       return { text: "All legs locked and matched against the agreed terms.", type: "success" };
     });
@@ -202,6 +194,16 @@ export default function ReadinessPage() {
   const handleLockLeg = (legId: string) =>
     run(async () => {
       const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
+      if (PRE_AGREEMENT.has(detail.status)) {
+        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
+        if (unsigned.length > 0) {
+          return {
+            text: `Cannot lock this leg yet: ${unsigned.map(roleName).join(" and ")} have not signed the terms.`,
+            type: "info",
+            link: { href: "/counterparty", label: "Open Lender desk →" },
+          };
+        }
+      }
       const leg = detail.legs.find((l) => l.legId === legId);
       if (!leg) throw new Error(`leg ${legId} not found`);
       await api(`/compositions/${selectedId}/allocate`, {
@@ -216,7 +218,17 @@ export default function ReadinessPage() {
 
   const handleSettle = () =>
     run(async () => {
-      await acceptRemaining();
+      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
+      if (PRE_AGREEMENT.has(detail.status)) {
+        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
+        if (unsigned.length > 0) {
+          return {
+            text: `Cannot settle: ${unsigned.map(roleName).join(" and ")} must separately review and confirm the trade before settlement.`,
+            type: "error",
+            link: { href: "/counterparty", label: "Open Lender desk →" },
+          };
+        }
+      }
       // Allocate legs if not already done
       try {
         await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
@@ -395,17 +407,27 @@ export default function ReadinessPage() {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {!r.isReady && !settled && !closed && !governed && (
                   <>
-                    <button className="btn" onClick={handleAllocateAll} disabled={busy}>
-                      {agreed ? "Lock all legs" : "Sign & lock all legs"}
+                    <button className="btn" onClick={handleAllocateAll} disabled={busy || !agreed}>
+                      {agreed ? "Lock all legs" : "Awaiting signatures"}
                     </button>
-                    <button
-                      className="btn primary"
-                      onClick={handleSettle}
-                      disabled={busy}
-                      title="Auto-sign remaining counterparties, lock all legs, and settle atomically in one click"
-                    >
-                      Settle all legs →
-                    </button>
+                    {agreed ? (
+                      <button
+                        className="btn primary"
+                        onClick={handleSettle}
+                        disabled={busy}
+                        title="Lock all legs and settle atomically in one transaction"
+                      >
+                        Settle all legs →
+                      </button>
+                    ) : (
+                      <Link
+                        className="btn primary"
+                        href="/counterparty"
+                        title="Lender and Oracle must review and confirm on the Lender desk"
+                      >
+                        Review on Lender desk →
+                      </Link>
+                    )}
                   </>
                 )}
                 {r.canSettle && !governed && (
