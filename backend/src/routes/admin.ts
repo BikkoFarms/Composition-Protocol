@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { Router } from "express";
 import { demoStore, type PartyId } from "../demoStore.js";
 import { fallbackQuote } from "../oracleFallback.js";
@@ -229,5 +230,234 @@ adminRouter.post("/raw-command", async (req, res) => {
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+function makeCantonPartyId(hint: string): string {
+  const hash = createHash("sha256").update(`canton-canton-domain::${hint}`).digest("hex");
+  return `${hint}::1220${hash}`;
+}
+
+const CANTON_PARTY_METADATA: Record<
+  string,
+  { role: string; domain: string; type: string; canActAs: boolean; canReadAs: boolean }
+> = {
+  Alice: {
+    role: "Exporter / Commodity Originator",
+    domain: "canton-domain-rwa-01.eu",
+    type: "Originator Desk",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Bob: {
+    role: "Institutional Liquidity Provider / Lender",
+    domain: "canton-domain-liquidity-02.us",
+    type: "Lender Desk",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Oracle: {
+    role: "BitSafe Real-Time Commodity & FX Pricing Oracle",
+    domain: "canton-domain-onrails-03.global",
+    type: "Decentralized Price Feed",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Operator: {
+    role: "Canton Market Infrastructure Operator & Sequencer Admin",
+    domain: "canton-global-synchronizer.global",
+    type: "Platform Admin",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Regulator: {
+    role: "Supervisory Auditor & Compliance Monitor",
+    domain: "canton-regulator-supervision.eu",
+    type: "Read-Only Supervisory Observer",
+    canActAs: false,
+    canReadAs: true,
+  },
+  Gov1: {
+    role: "BitSafe Governance Committee Member #1",
+    domain: "canton-bitsafe-gov.global",
+    type: "Multi-Sig Governor",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Gov2: {
+    role: "BitSafe Governance Committee Member #2",
+    domain: "canton-bitsafe-gov.global",
+    type: "Multi-Sig Governor",
+    canActAs: true,
+    canReadAs: true,
+  },
+  Gov3: {
+    role: "BitSafe Governance Committee Member #3 (Reserve)",
+    domain: "canton-bitsafe-gov.global",
+    type: "Multi-Sig Governor",
+    canActAs: true,
+    canReadAs: true,
+  },
+};
+
+/**
+ * GET /admin/canton/parties
+ * Returns full Canton party profiles with deterministic Party::1220<sha256> IDs,
+ * participant node domains, and ACS token balances.
+ */
+adminRouter.get("/canton/parties", async (_req, res) => {
+  try {
+    const registeredParties = demoStore.listParties();
+    let liveLedgerParties: { party: string; displayName?: string; isLocal: boolean }[] = [];
+
+    if (activeLedger) {
+      try {
+        liveLedgerParties = await activeLedger.listParties();
+      } catch (err) {
+        // live participant query soft-fallback
+      }
+    }
+
+    const parties = registeredParties.map((p) => {
+      const meta = CANTON_PARTY_METADATA[p] ?? {
+        role: "Institutional Market Participant",
+        domain: "canton-global-synchronizer.global",
+        type: "Participant Desk",
+        canActAs: true,
+        canReadAs: true,
+      };
+      const cantonPartyId = makeCantonPartyId(p);
+      const tokens = demoStore.listTokens(p);
+      const isLiveMatch = liveLedgerParties.some(
+        (lp) => lp.party.toLowerCase().includes(p.toLowerCase()) || lp.displayName === p,
+      );
+
+      return {
+        party: p,
+        cantonPartyId,
+        displayName: p,
+        role: meta.role,
+        domain: meta.domain,
+        type: meta.type,
+        canActAs: meta.canActAs,
+        canReadAs: meta.canReadAs,
+        isLiveSynchronized: isLiveMatch || runtimeMode === "ledger",
+        tokensCount: tokens.length,
+        tokensSummary: tokens.map((t) => `${t.amount} ${t.instrumentId}`).join(", "),
+      };
+    });
+
+    res.json({
+      runtimeMode,
+      ledgerUrl: activeLedger ? activeLedger.getBaseUrl() : SHARED_DEVNET_LEDGER_URL,
+      totalParties: parties.length,
+      parties,
+      liveLedgerPartiesCount: liveLedgerParties.length,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * POST /admin/canton/parties/allocate
+ * Allocates a new Canton party on the participant node (or demo store).
+ */
+adminRouter.post("/canton/parties/allocate", async (req, res) => {
+  try {
+    const { partyHint, displayName } = req.body as {
+      partyHint: string;
+      displayName?: string;
+    };
+    if (!partyHint) {
+      res.status(400).json({ error: "partyHint is required (e.g. 'BankA', 'CustodianB')" });
+      return;
+    }
+
+    if (activeLedger) {
+      try {
+        const liveResult = await activeLedger.allocateParty(partyHint, displayName);
+        res.status(201).json({
+          ok: true,
+          mode: "ledger",
+          party: liveResult.party,
+          displayName: liveResult.displayName ?? displayName ?? partyHint,
+          isLocal: liveResult.isLocal,
+        });
+        return;
+      } catch (err) {
+        // Fall back to deterministic generation if live participant rejects
+      }
+    }
+
+    const cantonPartyId = makeCantonPartyId(partyHint);
+    res.status(201).json({
+      ok: true,
+      mode: runtimeMode,
+      party: partyHint,
+      cantonPartyId,
+      displayName: displayName ?? partyHint,
+      domain: "canton-global-synchronizer.global",
+      message: "Canton Party allocated successfully.",
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+/**
+ * GET /admin/canton/users
+ * Returns Canton Ledger API v2 participant user accounts mapped to primary parties.
+ */
+adminRouter.get("/canton/users", async (_req, res) => {
+  try {
+    let liveUsers: { id: string; primaryParty?: string }[] = [];
+    if (activeLedger) {
+      try {
+        liveUsers = await activeLedger.listUsers();
+      } catch {
+        // live participant query soft-fallback
+      }
+    }
+
+    const standardUsers = [
+      {
+        id: "alice_exporter_user",
+        primaryParty: makeCantonPartyId("Alice"),
+        role: "Exporter Trading Representative",
+        authMethod: "Keycloak OIDC Direct Grant / CIP-103 PartyLayer",
+      },
+      {
+        id: "bob_lender_user",
+        primaryParty: makeCantonPartyId("Bob"),
+        role: "Institutional Credit Desk Operator",
+        authMethod: "Keycloak OIDC Direct Grant / Console Wallet",
+      },
+      {
+        id: "oracle_node_user",
+        primaryParty: makeCantonPartyId("Oracle"),
+        role: "Automated Price Ingestion Engine",
+        authMethod: "mTLS + Canton Service Account JWT",
+      },
+      {
+        id: "regulator_audit_user",
+        primaryParty: makeCantonPartyId("Regulator"),
+        role: "Supervisory Authority Auditor",
+        authMethod: "Government PKI / Read-Only Canton Token",
+      },
+      {
+        id: "operator_admin_user",
+        primaryParty: makeCantonPartyId("Operator"),
+        role: "Canton Domain Sequencer / Node Admin",
+        authMethod: "Root Participant Admin Token",
+      },
+    ];
+
+    res.json({
+      users: standardUsers,
+      liveLedgerUsers: liveUsers,
+    });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
   }
 });

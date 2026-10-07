@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { Viewport } from "next";
 import Link from "next/link";
 import { BrandMark } from "@/components/BrandMark";
+import { CantonWalletManager } from "@/components/CantonWalletManager";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -57,6 +58,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <span className="status-dot" />
                 Desk online
               </span>
+              <CantonWalletManager />
               <Link className="btn primary" href="/demo">
                 Settle a trade
               </Link>
