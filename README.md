@@ -110,6 +110,30 @@ The protocol is structured across four decoupled architectural tiers:
 - **Below-Threshold Rejection (`R-GOV-1`):** Settlement wrapped in `GovernedSettlement` strictly fails if attempted with fewer than $M$ approvals.
 - **Threshold Execution (`R-GOV-2`):** Once $M$ of $N$ designated governors approve, execution completes atomically and dispatches `SettlementReceipt`.
 
+### 3.4 Multi-Party Entity Co-Signing & Independent Confirmation Workflow
+In Settle Flow, **every participant is an autonomous cryptographic identity** on Canton:
+- **Exporter (`Alice`):** Originates the deal terms and proposes the composition.
+- **Lender (`Bob`):** Institutional credit provider who must independently review terms and collateral before committing cash.
+- **Oracle (`Oracle`):** Price & inspection authority who validates commodity grade and valuation.
+
+#### Two Operational Modalities:
+1. **Production Multi-Desk Flow (Real Multi-Party Governance):**
+   - **Step 1 (Propose):** Alice proposes on the Exporter Desk (`/proposer`). The deal enters `proposed` status.
+   - **Step 2 (Lender Review & Co-Sign):** Bob inspects the trade on the Lender Desk (`/counterparty`) and clicks **`[Accept as Bob]`** (or **`[Reject Trade]`**). Status updates to `partially_accepted`.
+   - **Step 3 (Oracle Attestation):** Oracle inspects the trade on `/counterparty` (or an automated bot daemon) and clicks **`[Accept as Oracle]`**.
+   - **Step 4 (Agreement Formation):** Only once **all** counterparties have signed does the Daml ledger form the legally binding `CompositionAgreement`.
+   - **Step 5 (Lock & Settle):** Parties lock their pledged assets (`LegAllocation`), and atomic settlement (`Settle`) is unlocked.
+2. **Accelerated Evaluation Shortcut (`/demo`):**
+   - The Settlement Desk (`/demo`) contains an automated evaluation runner (`/compositions/demo/open-desk`) built specifically for evaluators and hackathon judges to experience atomic allocation matching without having to switch browser sessions across 3 roles.
+
+### 3.5 Canton Web3 Wallet & Identity Management (CIP-103)
+Aligned with the official [Canton Developer Hub](https://dev-hub.canton.foundation/) and [Canton Documentation](https://docs.canton.network/):
+- **CIP-0103 dApp API Integration:** Connect using official browser extensions including **PartyLayer (CIP-103)**, **PixelPlex Console Wallet** (`@console-wallet/dapp-sdk`), **5North Loop Wallet**, **Splice Wallet Kernel**, or **WalletConnect**.
+- **Canton Multihash Party IDs:** Full support for deterministic Canton party identifiers (`hint::1220<sha256>`) with 1-click clipboard copy.
+- **Participant User Management:** Real-time party switcher in the top navigation allowing instant switching between Alice, Bob, Oracle, Operator, and Regulator.
+- **Live Node Telemetry:** Live round-trip millisecond latency ping against Canton Ledger API v2 participant nodes (`/v2/state/ledger-end`) and Keycloak OIDC direct-grant status.
+- **On-Chain KYC Credentials:** Integrated with **Five North ID SDK (5N ID)** for verifiable institutional compliance.
+
 ---
 
 ## 4. Repository Structure
