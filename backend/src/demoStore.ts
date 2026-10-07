@@ -520,6 +520,14 @@ export class DemoStore {
     c.accepted = [...c.accepted, acceptor];
     const allAccepted = c.counterparties.every((p) => c.accepted.includes(p));
     c.status = allAccepted ? "accepted" : "partially_accepted";
+    // Every signature is its own commit (mirrors ledgerWorkflow: AcceptProposal per party)
+    this.pushCommit(
+      c,
+      "AcceptProposal",
+      c.trackerCid ?? c.proposalCid,
+      ["Operator", acceptor],
+      `${acceptor} signed the trade terms`,
+    );
     if (allAccepted) {
       c.agreementCid = `agr-${c.id}`;
       this.pushCommit(
@@ -528,14 +536,6 @@ export class DemoStore {
         c.agreementCid,
         ["Operator"],
         "All counterparties accepted — agreement formed; allocations required before Settle",
-      );
-    } else {
-      this.pushCommit(
-        c,
-        "AcceptProposal",
-        c.trackerCid ?? c.proposalCid,
-        ["Operator", acceptor],
-        `${acceptor} recorded on AcceptanceTracker`,
       );
     }
     return c;
@@ -1134,9 +1134,14 @@ export class DemoStore {
     return { ran: count, metrics: this.metrics, last: results.at(-1) };
   }
 
-  partyView(party: PartyId) {
-    const tokens = this.listTokens(party);
+  partyView(party: PartyId, compositionId?: string) {
+    const scoped = compositionId ? this.require(compositionId) : null;
+    const scopedAssets = scoped ? new Set(scoped.legs.map((l) => l.assetCid)) : null;
+    const tokens = this.listTokens(party).filter(
+      (t) => !scopedAssets || scopedAssets.has(t.contractId),
+    );
     const compositions = [...this.compositions.values()].filter((c) => {
+      if (scoped && c.id !== scoped.id) return false;
       if (party === "Operator" || party === c.proposer) return true;
       if (c.counterparties.includes(party)) return true;
       if (party === "Regulator") return c.status === "settled";
@@ -1144,11 +1149,18 @@ export class DemoStore {
       return false;
     });
 
+    const order = [...this.compositions.keys()];
+    const newestFirst = (a: Composition, b: Composition) =>
+      (b.settledAt ?? "").localeCompare(a.settledAt ?? "") ||
+      order.indexOf(b.id) - order.indexOf(a.id);
     const receipts =
       party === "Regulator" || party === "Operator"
         ? compositions
             .filter((c) => c.status === "settled")
+            .sort(newestFirst)
             .map((c) => ({
+              compositionId: c.id,
+              tradeName: c.tradeName,
               receiptCid: c.receiptCid,
               description: c.description,
               settledAt: c.settledAt,
@@ -1168,7 +1180,10 @@ export class DemoStore {
                 c.status === "settled" &&
                 (c.proposer === party || c.counterparties.includes(party)),
             )
+            .sort(newestFirst)
             .map((c) => ({
+              compositionId: c.id,
+              tradeName: c.tradeName,
               receiptCid: c.receiptCid,
               description: c.description,
               settledAt: c.settledAt,
@@ -1225,6 +1240,7 @@ export class DemoStore {
     if (party === "Regulator") {
       return {
         id: c.id,
+        tradeName: c.tradeName,
         status: c.status,
         description: c.description,
         settledAt: c.settledAt,
@@ -1240,6 +1256,8 @@ export class DemoStore {
       agreementCid: c.agreementCid,
       receiptCid: c.receiptCid,
       governanceCid: c.governanceCid,
+      tradeName: c.tradeName,
+      commits: c.commits,
       proposer: c.proposer,
       counterparties: c.counterparties,
       accepted: c.accepted,

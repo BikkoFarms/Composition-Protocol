@@ -17,8 +17,8 @@ export default function HomePage() {
             sees only its own leg. Auditors get a receipt, not the payloads.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
-            <Link className="btn primary" href="/demo">
-              Settle a trade
+            <Link className="btn primary" href="/proposer">
+              Propose a trade
             </Link>
             <Link className="btn" href="/observer">
               Auditor view
@@ -131,8 +131,8 @@ export default function HomePage() {
             <div className="icon-circle">Ex</div>
             <h3 className="card-title">Exporter</h3>
             <p className="card-body">
-              Propose the composition: CBTC collateral, USDCx cash, cETH sponsor
-              leg. Track acceptances until settle unlocks.
+              Step 1. Pick a trade (cocoa, coffee, gold…) and propose it. Mark
+              high-value trades for BitSafe 2-of-3 approval.
             </p>
             <span className="link-arrow">Open exporter desk →</span>
           </Link>
@@ -140,8 +140,8 @@ export default function HomePage() {
             <div className="icon-circle">Ln</div>
             <h3 className="card-title">Lender &amp; oracle</h3>
             <p className="card-body">
-              Review legs that name you. Co-sign. AcceptanceTracker fills until
-              every required party is in.
+              Step 2. Review the legs that name you and sign, or reject. Once
+              every counterparty signs, the trade goes to settlement.
             </p>
             <span className="link-arrow">Open lender desk →</span>
           </Link>
@@ -149,8 +149,8 @@ export default function HomePage() {
             <div className="icon-circle">St</div>
             <h3 className="card-title">Settlement</h3>
             <p className="card-body">
-              Open allocation desk or force an atomic revert. Then jump to the
-              money shot and BitSafe beats.
+              Step 3. Each party locks its leg; wrong amounts are refused. Then
+              every leg settles in one transaction, or none do.
             </p>
             <span className="link-arrow">Open settlement desk →</span>
           </Link>
@@ -158,8 +158,8 @@ export default function HomePage() {
             <div className="icon-circle">Au</div>
             <h3 className="card-title">Auditor</h3>
             <p className="card-body">
-              Same ledger, different party. You hold SettlementReceipt. Your
-              token ACS stays empty. Proven, not filtered in the UI.
+              Step 4. Pick any settled trade: you hold its SettlementReceipt and
+              no leg contents. Proven by the ledger, not filtered in the UI.
             </p>
             <span className="link-arrow">Open auditor view →</span>
           </Link>
@@ -255,10 +255,10 @@ export default function HomePage() {
           <details className="faq-item">
             <summary>Where do I start?</summary>
             <p>
-              Open the settlement desk, pick a trade and follow the four steps
-              (or press &ldquo;Run it for me&rdquo;). Then open the auditor view.
-              For multi-sig, use the BitSafe desk: it refuses below threshold,
-              then settles.
+              Propose on the Exporter desk, sign on the Lender desk, then lock
+              and settle on the Settlement desk. Open the Auditor view for that
+              trade. For high-value trades, tick BitSafe when proposing: two of
+              three governors must approve before it settles.
             </p>
           </details>
         </div>
@@ -271,8 +271,8 @@ export default function HomePage() {
           privacy on the same ledger the judges will ask about.
         </p>
         <div className="row">
-          <Link className="btn primary" href="/demo">
-            Settle a trade
+          <Link className="btn primary" href="/proposer">
+            Propose a trade
           </Link>
           <Link className="btn" href="/observer">
             Money shot

@@ -12,6 +12,7 @@ import { formatAmount, friendlyError } from "@/lib/trades";
 
 type Composition = {
   id: string;
+  commits?: { choice: string; actAs: string[]; at: string }[];
   tradeName?: string;
   status: string;
   description: string;
@@ -35,6 +36,7 @@ const ACTIONABLE = new Set(["proposed", "partially_accepted"]);
 export default function CounterpartyPage() {
   const [party, setParty] = useState<(typeof ROLES)[number]>("Bob");
   const [comps, setComps] = useState<Composition[]>([]);
+  const [history, setHistory] = useState<Composition[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,14 +45,12 @@ export default function CounterpartyPage() {
     const view = await api<{ compositions: Composition[] }>(
       `/audit/view/${party}`,
     );
-    setComps(
-      view.compositions.filter(
-        (c) =>
-          !["settled", "cancelled", "expired", "rejected", "reverted"].includes(
-            c.status,
-          ),
-      ),
-    );
+    const closed = ["settled", "cancelled", "expired", "rejected", "reverted"];
+    const mine = [...view.compositions]
+      .reverse()
+      .filter((c) => c.counterparties.includes(party));
+    setComps(mine.filter((c) => !closed.includes(c.status)));
+    setHistory(mine.filter((c) => closed.includes(c.status)).slice(0, 10));
     setLoading(false);
   }, [party]);
 
@@ -202,26 +202,65 @@ export default function CounterpartyPage() {
                 </div>
               )}
             {c.accepted.includes(party) && (
-              <div style={{ marginTop: 8 }}>
-                <p style={{ color: "var(--color-deep-forest)", fontSize: 14, margin: "0 0 6px" }}>
-                  ✓ Signed as {party === "Bob" ? "Lender" : "Oracle"}.
-                  {c.accepted.length < c.counterparties.length
-                    ? " Switch tabs above to co-sign as Oracle, or proceed to Exporter desk."
-                    : " All counterparties signed — ready for settlement!"}
-                </p>
-                <div className="row" style={{ marginTop: 6, marginBottom: 0 }}>
-                  <Link className="btn sm primary" href="/proposer">
-                    Exporter desk (settle now) →
+              <p style={{ color: "var(--color-deep-forest)", fontSize: 14 }}>
+                ✓ You signed
+                {(() => {
+                  const sig = c.commits?.find(
+                    (x) => x.choice === "AcceptProposal" && x.actAs.includes(party),
+                  );
+                  return sig ? ` at ${new Date(sig.at).toLocaleTimeString()}` : "";
+                })()}
+                .{" "}
+                {c.accepted.length === c.counterparties.length ? (
+                  <Link href={`/demo?id=${c.id}`} style={{ fontWeight: 600 }}>
+                    Fully signed — now on the Settlement desk →
                   </Link>
-                  <Link className="btn sm" href={`/readiness?id=${c.id}`}>
-                    Readiness dashboard →
-                  </Link>
-                </div>
-              </div>
+                ) : (
+                  "Waiting for the other counterparty to sign."
+                )}
+              </p>
             )}
           </div>
         ))}
       </div>
+
+      {history.length > 0 && (
+        <div className="card" style={{ marginTop: 20 }}>
+          <h2>History for {party === "Bob" ? "Lender" : "Oracle"}</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Trade</th>
+                <th>Your signature</th>
+                <th>Outcome</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((c) => {
+                const sig = c.commits?.find(
+                  (x) => x.choice === "AcceptProposal" && x.actAs.includes(party),
+                );
+                return (
+                  <tr key={c.id}>
+                    <td>
+                      <strong>{c.tradeName ?? "Trade"}</strong>{" "}
+                      <span className="mono muted">#{c.id.slice(0, 8)}</span>
+                    </td>
+                    <td>{sig ? `✓ ${new Date(sig.at).toLocaleTimeString()}` : "—"}</td>
+                    <td>
+                      {c.status === "settled" ? (
+                        <Link href={`/observer?id=${c.id}`}>Settled · receipt →</Link>
+                      ) : (
+                        c.status
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

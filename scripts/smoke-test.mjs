@@ -141,6 +141,28 @@ await check("BitSafe: refuses below threshold, settles at 2-of-3", async () => {
   assert(done.status === "settled", "governed settle failed");
 });
 
+await check("role flow: no locking or settling until Lender AND Oracle sign", async () => {
+  const c = await ok("POST", "/compositions/demo/trade-finance", { templateId: "shea" });
+  await ok("POST", `/compositions/${c.id}/accept`, { acceptor: "Bob" });
+  const early = await call("POST", `/compositions/${c.id}/allocate`, c.legs[0]);
+  assert(early.status === 409, `locked before Oracle signed (HTTP ${early.status})`);
+  const earlySettle = await call("POST", `/compositions/${c.id}/settle`, {});
+  assert(earlySettle.status === 409, "settled before Oracle signed");
+  await ok("POST", `/compositions/${c.id}/accept`, { acceptor: "Oracle" });
+  const signed = await ok("GET", `/compositions/${c.id}`);
+  const sigs = signed.commits.filter((x) => x.choice === "AcceptProposal").map((x) => x.actAs[1]);
+  assert(sigs.join() === "Bob,Oracle", `signature commits: ${sigs.join()}`);
+  for (const leg of c.legs) await ok("POST", `/compositions/${c.id}/allocate`, leg);
+  const s = await ok("POST", `/compositions/${c.id}/settle`, { caller: "Operator" });
+  assert(s.status === "settled", "role-flow settle failed");
+
+  const shot = await ok("GET", `/audit/money-shot?compositionId=${c.id}`);
+  assert(shot.observer.settlementReceipts.length === 1, "auditor not scoped to one trade");
+  assert(shot.observer.settlementReceipts[0].compositionId === c.id, "auditor shows another trade's receipt");
+  assert(shot.observer.settlementReceipts[0].tradeName === "Shea butter export", "wrong trade name on receipt");
+  assert(shot.observer.visibleTokens.length === 0, "regulator sees tokens");
+});
+
 await check("oracle quotes non-cocoa symbols", async () => {
   const q = await ok("GET", "/oracle/price?symbol=COFFEE");
   assert(q.symbol === "COFFEE", `got ${q.symbol}`);

@@ -161,98 +161,6 @@ export default function ReadinessPage() {
     }
   }
 
-  const handleAccept = (party: string) =>
-    run(async () => {
-      await api(`/compositions/${selectedId}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: party }),
-      });
-      return { text: `${roleName(party)} confirmed and signed the trade.`, type: "success" };
-    });
-
-  const handleAllocateAll = () =>
-    run(async () => {
-      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
-      if (PRE_AGREEMENT.has(detail.status)) {
-        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
-        if (unsigned.length > 0) {
-          return {
-            text: `Cannot lock legs yet: ${unsigned.map(roleName).join(" and ")} must separately confirm the trade first. Use the "Sign as [Party]" buttons below or open the Lender desk.`,
-            type: "info",
-            link: { href: "/counterparty", label: "Open Lender desk →" },
-          };
-        }
-      }
-      try {
-        await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
-      } catch (e) {
-        throw new Error((e as Error).message);
-      }
-      return { text: "All legs locked and matched against the agreed terms.", type: "success" };
-    });
-
-  const handleLockLeg = (legId: string) =>
-    run(async () => {
-      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
-      if (PRE_AGREEMENT.has(detail.status)) {
-        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
-        if (unsigned.length > 0) {
-          return {
-            text: `Cannot lock this leg yet: ${unsigned.map(roleName).join(" and ")} have not signed the terms.`,
-            type: "info",
-            link: { href: "/counterparty", label: "Open Lender desk →" },
-          };
-        }
-      }
-      const leg = detail.legs.find((l) => l.legId === legId);
-      if (!leg) throw new Error(`leg ${legId} not found`);
-      await api(`/compositions/${selectedId}/allocate`, {
-        method: "POST",
-        body: JSON.stringify(leg),
-      });
-      return {
-        text: `${roleName(leg.provider)} locked ${formatAmount(leg.amount)} ${leg.instrumentId}.`,
-        type: "success",
-      };
-    });
-
-  const handleSettle = () =>
-    run(async () => {
-      const detail = await api<CompositionSummary>(`/compositions/${selectedId}`);
-      if (PRE_AGREEMENT.has(detail.status)) {
-        const unsigned = detail.counterparties.filter((p) => !detail.accepted.includes(p));
-        if (unsigned.length > 0) {
-          return {
-            text: `Cannot settle: ${unsigned.map(roleName).join(" and ")} must separately review and confirm the trade before settlement.`,
-            type: "error",
-            link: { href: "/counterparty", label: "Open Lender desk →" },
-          };
-        }
-      }
-      // Allocate legs if not already done
-      try {
-        await api(`/compositions/${selectedId}/allocate-all`, { method: "POST" });
-      } catch {
-        // Already allocated or error will surface from settle
-      }
-      const result = await api<{ status: string; receiptCid?: string | null }>(
-        `/compositions/${selectedId}/settle`,
-        { method: "POST", body: JSON.stringify({ caller: "Operator" }) },
-      );
-      if (result.status === "awaiting_governance") {
-        return {
-          text: "This trade needs a BitSafe 2-of-3 vote before it can settle. Governors sign on the BitSafe desk.",
-          type: "info",
-          link: { href: "/governance", label: "Open BitSafe desk →" },
-        };
-      }
-      return {
-        text: "Settled. Every leg moved in one atomic transaction.",
-        type: "success",
-        link: { href: "/observer", label: "See auditor proof →" },
-      };
-    });
-
   const handleWithdrawLeg = (legId: string, caller: string) =>
     run(async () => {
       await api(`/compositions/${selectedId}/withdraw-leg`, {
@@ -262,26 +170,18 @@ export default function ReadinessPage() {
       return { text: `${roleName(caller)} withdrew the ${legId} leg. It's unlocked again.`, type: "info" };
     });
 
-  const handleSeedNewTrade = async () => {
-    setBusy(true);
-    setMessage(null);
-    try {
+  const handleSeedNewTrade = () =>
+    run(async () => {
       const res = await api<{ id: string; tradeName?: string }>("/compositions/demo/trade-finance", {
         method: "POST",
         body: JSON.stringify({ templateId: newTemplateId || defaultId }),
       });
       setSelectedId(res.id);
-      await Promise.all([fetchReadiness(res.id), fetchCompositions()]);
-      setMessage({
-        text: `New ${res.tradeName ?? "trade"} proposed (#${res.id.slice(0, 8)}). Collect signatures, then lock legs and settle.`,
+      return {
+        text: `New ${res.tradeName ?? "trade"} proposed. Collect signatures, then lock legs.`,
         type: "success",
-      });
-    } catch (err) {
-      setMessage({ text: friendlyError((err as Error).message), type: "error" });
-    } finally {
-      setBusy(false);
-    }
-  };
+      };
+    });
 
   const r = readiness;
   const closed = r ? CLOSED.has(r.status) : false;
@@ -334,9 +234,10 @@ export default function ReadinessPage() {
         </div>
       </header>
 
+      {compositions.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <label htmlFor="trade-select" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
-            Active Composition
+          <label htmlFor="trade-select" style={{ fontSize: 13, fontWeight: 500, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
+            Trade
           </label>
           <select
             id="trade-select"
@@ -350,11 +251,12 @@ export default function ReadinessPage() {
           >
             {compositions.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.status === "settled" ? "✓ Settled · " : ""}{c.tradeName ?? c.description} · {statusLabel(c.status)} · #{c.id.slice(0, 8)}
+                {c.tradeName ?? c.description} · {statusLabel(c.status)} · #{c.id.slice(0, 8)}
               </option>
             ))}
           </select>
         </div>
+      )}
 
       {message && (
         <div className={`notice ${message.type === "error" ? "error" : message.type}`} role={message.type === "error" ? "alert" : "status"}>
@@ -405,43 +307,23 @@ export default function ReadinessPage() {
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {!r.isReady && !settled && !closed && !governed && (
-                  <>
-                    <button className="btn" onClick={handleAllocateAll} disabled={busy || !agreed}>
-                      {agreed ? "Lock all legs" : "Awaiting signatures"}
-                    </button>
-                    {agreed ? (
-                      <button
-                        className="btn primary"
-                        onClick={handleSettle}
-                        disabled={busy}
-                        title="Lock all legs and settle atomically in one transaction"
-                      >
-                        Settle all legs →
-                      </button>
-                    ) : (
-                      <Link
-                        className="btn primary"
-                        href="/counterparty"
-                        title="Lender and Oracle must review and confirm on the Lender desk"
-                      >
-                        Review on Lender desk →
-                      </Link>
-                    )}
-                  </>
+                {!agreed && !closed && (
+                  <Link className="btn" href="/counterparty">
+                    Sign on Lender desk →
+                  </Link>
                 )}
-                {r.canSettle && !governed && (
-                  <button className="btn primary" onClick={handleSettle} disabled={busy}>
-                    Settle now →
-                  </button>
+                {agreed && !settled && !closed && !governed && (
+                  <Link className="btn primary" href={`/demo?id=${r.compositionId}`}>
+                    {r.isReady ? "Settle on Settlement desk →" : "Lock legs on Settlement desk →"}
+                  </Link>
                 )}
                 {governed && (
-                  <Link className="btn primary" href="/governance">
+                  <Link className="btn primary" href={`/governance?id=${r.compositionId}`}>
                     Open BitSafe desk →
                   </Link>
                 )}
                 {settled && (
-                  <Link className="btn primary" href="/observer">
+                  <Link className="btn primary" href={`/observer?id=${r.compositionId}`}>
                     Auditor proof →
                   </Link>
                 )}
@@ -467,9 +349,9 @@ export default function ReadinessPage() {
                   ) : closed ? (
                     <span className="chip muted">Did not sign</span>
                   ) : (
-                    <button className="primary sm" disabled={busy} onClick={() => handleAccept(cp.party)}>
-                      Sign as {cp.party}
-                    </button>
+                    <Link className="btn sm" href="/counterparty">
+                      Awaiting · Lender desk →
+                    </Link>
                   )}
                 </div>
               ))}
@@ -484,10 +366,9 @@ export default function ReadinessPage() {
                 <thead>
                   <tr>
                     <th>Leg</th>
-                    <th>Instrument</th>
-                    <th>Amount</th>
-                    <th>Provider → Receiver</th>
-                    <th>Allocation Status</th>
+                    <th>Asset</th>
+                    <th>From → To</th>
+                    <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -495,14 +376,15 @@ export default function ReadinessPage() {
                   {r.allocatedLegs.map((leg) => (
                     <tr key={leg.legId}>
                       <td style={{ fontWeight: 600 }}>{leg.legId}</td>
-                      <td>{leg.instrumentId}</td>
-                      <td>{formatAmount(leg.amount)}</td>
+                      <td>
+                        {formatAmount(leg.amount)} {leg.instrumentId}
+                      </td>
                       <td>
                         {leg.provider} → {leg.receiver}
                       </td>
                       <td>
                         {settled ? (
-                          <span className="chip done">✓ Settled atomically</span>
+                          <span className="chip done">✓ Settled</span>
                         ) : closed ? (
                           <span className="chip muted">Released</span>
                         ) : (
@@ -513,7 +395,7 @@ export default function ReadinessPage() {
                         {settled ? (
                           <div className="status-cell">
                             <span style={{ fontSize: 12 }}>Delivered to {roleName(leg.receiver)}</span>
-                            <Link href="/observer" style={{ fontSize: 12, fontWeight: 600 }}>
+                            <Link href={`/observer?id=${r.compositionId}`} style={{ fontSize: 12, fontWeight: 600 }}>
                               View receipt →
                             </Link>
                           </div>
@@ -522,7 +404,9 @@ export default function ReadinessPage() {
                             Returned to {roleName(leg.provider)}
                           </span>
                         ) : governed ? (
-                          <span className="muted" style={{ fontSize: 12 }}>Held for governor vote</span>
+                          <Link href={`/governance?id=${r.compositionId}`} style={{ fontSize: 12 }}>
+                            Held for governor vote →
+                          </Link>
                         ) : (
                           <button
                             className="sm"
@@ -538,8 +422,9 @@ export default function ReadinessPage() {
                   {r.outstandingLegs.map((leg) => (
                     <tr key={leg.legId}>
                       <td style={{ fontWeight: 600 }}>{leg.legId}</td>
-                      <td>{leg.instrumentId}</td>
-                      <td>{formatAmount(leg.amount)}</td>
+                      <td>
+                        {formatAmount(leg.amount)} {leg.instrumentId}
+                      </td>
                       <td>
                         {leg.provider} → {leg.receiver}
                       </td>
@@ -547,7 +432,7 @@ export default function ReadinessPage() {
                         {closed ? (
                           <span className="chip muted">Released</span>
                         ) : (
-                          <span className="chip wait">Unallocated</span>
+                          <span className="chip wait">Not locked</span>
                         )}
                       </td>
                       <td>
@@ -556,25 +441,11 @@ export default function ReadinessPage() {
                             Returned to {roleName(leg.provider)}
                           </span>
                         ) : !agreed ? (
-                          <button
-                            className="primary sm"
-                            onClick={() => {
-                              handleAccept(leg.provider);
-                              setTimeout(() => handleLockLeg(leg.legId), 300);
-                            }}
-                            disabled={busy}
-                            title="Sign as provider and lock leg"
-                          >
-                            Sign &amp; Lock as {leg.provider}
-                          </button>
+                          <span className="muted" style={{ fontSize: 12 }}>Needs all signatures first</span>
                         ) : (
-                          <button
-                            className="primary sm"
-                            onClick={() => handleLockLeg(leg.legId)}
-                            disabled={busy}
-                          >
-                            Lock as {leg.provider}
-                          </button>
+                          <Link className="btn sm" href={`/demo?id=${r.compositionId}`}>
+                            Lock on Settlement desk →
+                          </Link>
                         )}
                       </td>
                     </tr>

@@ -7,10 +7,10 @@ import { BrandMark } from "./BrandMark";
 import { CantonWalletManager } from "./CantonWalletManager";
 
 const NAV_LINKS = [
-  { href: "/demo", label: "Settle", icon: "⚡", desc: "DvP & allocation matching" },
-  { href: "/readiness", label: "Readiness", icon: "📊", desc: "Leg signatures & locks" },
   { href: "/proposer", label: "Exporter", icon: "📦", desc: "Alice · Commodity originator" },
   { href: "/counterparty", label: "Lender", icon: "🏛️", desc: "Bob & Oracle · Review & co-sign" },
+  { href: "/demo", label: "Settle", icon: "⚡", desc: "Lock legs & settle signed trades" },
+  { href: "/readiness", label: "Readiness", icon: "📊", desc: "Leg signatures & locks" },
   { href: "/observer", label: "Auditor", icon: "🔍", desc: "Regulator · Zero-leak proof" },
   { href: "/governance", label: "BitSafe", icon: "🛡️", desc: "M-of-N threshold multi-sig" },
   { href: "/metrics", label: "Activity", icon: "📈", desc: "Ledger throughput & telemetry" },
@@ -92,8 +92,8 @@ export function Navbar() {
             <CantonWalletManager />
 
             {/* Settle Action CTA (Desktop/Tablet only) */}
-            <Link className="nav-cta-btn desktop-only" href="/demo">
-              Settle trade
+            <Link className="nav-cta-btn desktop-only" href="/proposer">
+              Propose a trade
             </Link>
 
             {/* Mobile Hamburger Toggle Button (< 1024px) */}

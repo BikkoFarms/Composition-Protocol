@@ -26,7 +26,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Live on Canton · Settle Flow · Cocoa, coffee, cashew, gold, shea,
           sesame, cotton &amp; FX trades
           {" · "}
-          <Link href="/demo">Settle a trade →</Link>
+          <Link href="/proposer">Propose a trade →</Link>
         </div>
         <div className="shell">
           <Navbar />

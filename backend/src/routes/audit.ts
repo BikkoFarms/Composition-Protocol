@@ -74,7 +74,11 @@ auditRouter.get("/metrics", (_req, res) => {
  * Participant Bob vs Regulator — receipt present, visibleTokens: [] for observer.
  * Uses live per-party ACS when LEDGER_MODE=ledger + LEDGER_PARTY_BOB/REGULATOR set.
  */
-auditRouter.get("/money-shot", async (_req, res) => {
+auditRouter.get("/money-shot", async (req, res) => {
+  const compositionId =
+    typeof req.query.compositionId === "string" && req.query.compositionId
+      ? req.query.compositionId
+      : undefined;
   const ledger = ledgerFromEnv();
   const parties = partiesFromEnv();
   if (ledger && parties) {
@@ -92,9 +96,17 @@ auditRouter.get("/money-shot", async (_req, res) => {
     }
   }
 
-  const participant = demoStore.partyView("Bob");
-  const observer = demoStore.partyView("Regulator");
+  let participant;
+  let observer;
+  try {
+    participant = demoStore.partyView("Bob", compositionId);
+    observer = demoStore.partyView("Regulator", compositionId);
+  } catch (e) {
+    res.status(404).json({ error: (e as Error).message });
+    return;
+  }
   res.json({
+    compositionId: compositionId ?? null,
     source: "demo",
     participant: {
       party: participant.party,
