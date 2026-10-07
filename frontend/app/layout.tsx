@@ -1,8 +1,8 @@
 import type { ReactNode } from "react";
 import type { Viewport } from "next";
 import Link from "next/link";
+import { Navbar } from "@/components/Navbar";
 import { BrandMark } from "@/components/BrandMark";
-import { CantonWalletManager } from "@/components/CantonWalletManager";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -18,16 +18,6 @@ export const metadata = {
     "Reusable Daml settlement-workflow package on Canton — multi-party DvP for commodity and FX trades, BitSafe governance, and ledger-enforced privacy.",
 };
 
-const links = [
-  { href: "/demo", label: "Settle" },
-  { href: "/readiness", label: "Readiness" },
-  { href: "/proposer", label: "Exporter" },
-  { href: "/counterparty", label: "Lender" },
-  { href: "/observer", label: "Auditor" },
-  { href: "/governance", label: "BitSafe" },
-  { href: "/metrics", label: "Activity" },
-];
-
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
@@ -39,31 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <Link href="/demo">Settle a trade →</Link>
         </div>
         <div className="shell">
-          <header className="top">
-            <Link href="/" className="brand">
-              <BrandMark size={30} />
-              <span className="brand-text">
-                <span className="brand-name">Settle Flow</span>
-              </span>
-            </Link>
-            <nav className="nav-scroll" aria-label="Primary">
-              {links.map((l) => (
-                <Link key={l.href} href={l.href}>
-                  {l.label}
-                </Link>
-              ))}
-            </nav>
-            <div className="top-actions">
-              <span className="live-badge">
-                <span className="status-dot" />
-                Desk online
-              </span>
-              <CantonWalletManager />
-              <Link className="btn primary" href="/demo">
-                Settle a trade
-              </Link>
-            </div>
-          </header>
+          <Navbar />
           <main>{children}</main>
         </div>
 
