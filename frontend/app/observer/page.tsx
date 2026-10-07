@@ -92,10 +92,10 @@ export default function ObserverPage() {
     <div>
       <div className="page-head">
         <span className="pill">
-          Money shot · R-PRIV-3
+          Auditor dashboard · Money shot · R-PRIV-3
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">Observer sees nothing</h1>
+        <h1 className="page-title">Auditor dashboard: Observer sees nothing</h1>
         <p className="lede">
           Same settlement. Same ledger. The regulator sees that it happened —
           and cannot see a single leg&apos;s contents. That is Canton's

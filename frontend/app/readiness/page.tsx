@@ -250,18 +250,26 @@ export default function ReadinessPage() {
       return { text: `${roleName(caller)} withdrew the ${legId} leg. It's unlocked again.`, type: "info" };
     });
 
-  const handleSeedNewTrade = () =>
-    run(async () => {
+  const handleSeedNewTrade = async () => {
+    setBusy(true);
+    setMessage(null);
+    try {
       const res = await api<{ id: string; tradeName?: string }>("/compositions/demo/trade-finance", {
         method: "POST",
         body: JSON.stringify({ templateId: newTemplateId || defaultId }),
       });
       setSelectedId(res.id);
-      return {
-        text: `New ${res.tradeName ?? "trade"} proposed. Collect signatures, then lock legs.`,
+      await Promise.all([fetchReadiness(res.id), fetchCompositions()]);
+      setMessage({
+        text: `New ${res.tradeName ?? "trade"} proposed (#${res.id.slice(0, 8)}). Collect signatures, then lock legs and settle.`,
         type: "success",
-      };
-    });
+      });
+    } catch (err) {
+      setMessage({ text: friendlyError((err as Error).message), type: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const r = readiness;
   const closed = r ? CLOSED.has(r.status) : false;
@@ -314,10 +322,9 @@ export default function ReadinessPage() {
         </div>
       </header>
 
-      {compositions.length > 0 && (
         <div className="card" style={{ padding: 16, marginBottom: 20 }}>
-          <label htmlFor="trade-select" style={{ fontSize: 13, fontWeight: 500, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
-            Trade
+          <label htmlFor="trade-select" style={{ fontSize: 13, fontWeight: 600, color: "var(--color-slate)", display: "block", marginBottom: 6 }}>
+            Active Composition
           </label>
           <select
             id="trade-select"
@@ -331,12 +338,11 @@ export default function ReadinessPage() {
           >
             {compositions.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.tradeName ?? c.description} · {statusLabel(c.status)} · #{c.id.slice(0, 8)}
+                {c.status === "settled" ? "✓ Settled · " : ""}{c.tradeName ?? c.description} · {statusLabel(c.status)} · #{c.id.slice(0, 8)}
               </option>
             ))}
           </select>
         </div>
-      )}
 
       {message && (
         <div className={`notice ${message.type === "error" ? "error" : message.type}`} role={message.type === "error" ? "alert" : "status"}>
@@ -388,9 +394,19 @@ export default function ReadinessPage() {
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {!r.isReady && !settled && !closed && !governed && (
-                  <button className="btn" onClick={handleAllocateAll} disabled={busy}>
-                    {agreed ? "Lock all legs" : "Sign & lock all legs"}
-                  </button>
+                  <>
+                    <button className="btn" onClick={handleAllocateAll} disabled={busy}>
+                      {agreed ? "Lock all legs" : "Sign & lock all legs"}
+                    </button>
+                    <button
+                      className="btn primary"
+                      onClick={handleSettle}
+                      disabled={busy}
+                      title="Auto-sign remaining counterparties, lock all legs, and settle atomically in one click"
+                    >
+                      Settle all legs →
+                    </button>
+                  </>
                 )}
                 {r.canSettle && !governed && (
                   <button className="btn primary" onClick={handleSettle} disabled={busy}>
@@ -518,7 +534,17 @@ export default function ReadinessPage() {
                             Returned to {roleName(leg.provider)}
                           </span>
                         ) : !agreed ? (
-                          <span className="muted" style={{ fontSize: 12 }}>Needs all signatures first</span>
+                          <button
+                            className="primary sm"
+                            onClick={() => {
+                              handleAccept(leg.provider);
+                              setTimeout(() => handleLockLeg(leg.legId), 300);
+                            }}
+                            disabled={busy}
+                            title="Sign as provider and lock leg"
+                          >
+                            Sign &amp; Lock as {leg.provider}
+                          </button>
                         ) : (
                           <button
                             className="primary sm"

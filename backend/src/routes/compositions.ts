@@ -338,8 +338,15 @@ compositionsRouter.post("/:id/expire", (req, res) => {
     const caller = (body.caller ?? "Operator") as PartyId;
     const existing = demoStore.compositions.get(req.params.id);
     const simulatedNow =
-      body.force && existing?.expiresAt
-        ? new Date(new Date(existing.expiresAt).getTime() + 1000)
+      body.force
+        ? new Date(
+            Math.max(
+              existing?.expiresAt ? new Date(existing.expiresAt).getTime() : 0,
+              existing?.allocateBy ? new Date(existing.allocateBy).getTime() : 0,
+              existing?.settleBy ? new Date(existing.settleBy).getTime() : 0,
+              Date.now(),
+            ) + 10000,
+          )
         : undefined;
     const c = demoStore.expire(req.params.id, caller, simulatedNow);
     res.json(c);

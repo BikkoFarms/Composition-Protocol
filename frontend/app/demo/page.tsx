@@ -261,6 +261,27 @@ export default function DemoPage() {
     }
   }
 
+  async function onLockAndSettle() {
+    if (!composition) return;
+    setBusy("settle");
+    setNotice(null);
+    try {
+      if (!allLocked) {
+        const lockedData = await api<{ composition: Composition }>(
+          `/compositions/${composition.id}/allocate-all`,
+          { method: "POST" },
+        );
+        await settle(lockedData.composition);
+      } else {
+        await settle(composition);
+      }
+    } catch (e) {
+      fail(e);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   /** Run the whole flow (incl. the wrong-amount check) for the selected trade. */
   async function onAutoRun() {
     setBusy("auto");
@@ -404,8 +425,8 @@ export default function DemoPage() {
                 <button className="primary" disabled={isBusy || !template} onClick={onCreate}>
                   {busy === "create" ? "Creating…" : "Create trade & collect signatures"}
                 </button>
-                <button disabled={isBusy || !template} onClick={onAutoRun}>
-                  {busy === "auto" ? "Running…" : "Run it for me"}
+                <button disabled={isBusy || !template} onClick={onAutoRun} title="Runs full allocation matching flow: Propose → Accept → Try wrong amount (refused) → Lock all legs → Settle atomically">
+                  {busy === "auto" ? "Running…" : "Run allocation matching demo"}
                 </button>
               </div>
             </>
@@ -480,8 +501,12 @@ export default function DemoPage() {
                 <>
                   <p className="flow-section-title">4 · Settle</p>
                   <div className="flow-cta">
-                    <button className="primary" disabled={isBusy || !allLocked} onClick={onSettle}>
-                      {busy === "settle" ? "Settling…" : composition.legs.length === 2 ? "Settle both legs at once" : `Settle all ${composition.legs.length} legs at once`}
+                    <button className="primary" disabled={isBusy} onClick={onLockAndSettle}>
+                      {busy === "settle"
+                        ? "Settling…"
+                        : allLocked
+                          ? (composition.legs.length === 2 ? "Settle both legs at once" : `Settle all ${composition.legs.length} legs at once`)
+                          : "Lock all legs & settle atomically"}
                     </button>
                     {!allLocked && (
                       <button disabled={isBusy} onClick={onLockAll}>
@@ -529,11 +554,11 @@ export default function DemoPage() {
                     <button className="primary" onClick={onReset}>
                       Settle another trade
                     </button>
+                    <Link className="btn primary" href="/observer">
+                      Prove money shot (Auditor) →
+                    </Link>
                     <Link className="btn" href={`/readiness?id=${composition.id}`}>
                       View in Readiness
-                    </Link>
-                    <Link className="btn" href="/observer">
-                      Auditor proof →
                     </Link>
                   </div>
                 </div>

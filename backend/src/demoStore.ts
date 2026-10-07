@@ -608,7 +608,7 @@ export class DemoStore {
         `allocation match failed: allocator must be provider on leg ${leg.legId}`,
       );
     }
-    if (input.amount !== leg.amount) {
+    if (Number(input.amount) !== Number(leg.amount)) {
       throw new Error(
         `allocation match failed: amount mismatch on leg ${leg.legId}`,
       );
@@ -654,7 +654,7 @@ export class DemoStore {
         `allocation match failed: live asset instrumentId mismatch on leg ${leg.legId}`,
       );
     }
-    if (tok.amount !== leg.amount) {
+    if (Number(tok.amount) !== Number(leg.amount)) {
       throw new Error(
         `allocation match failed: live asset amount mismatch on leg ${leg.legId}`,
       );

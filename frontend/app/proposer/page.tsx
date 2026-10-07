@@ -282,7 +282,7 @@ export default function ProposerPage() {
           )}
         </div>
         <div className="card">
-          <h2>Your trades</h2>
+          <h2>Your Tickets</h2>
           {loading && comps.length === 0 && <SkeletonBlock rows={4} />}
           {!loading && comps.length === 0 && (
             <p className="muted" style={{ fontSize: 14 }}>

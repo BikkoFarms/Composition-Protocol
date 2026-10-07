@@ -202,9 +202,22 @@ export default function CounterpartyPage() {
                 </div>
               )}
             {c.accepted.includes(party) && (
-              <p style={{ color: "var(--color-deep-forest)", fontSize: 14 }}>
-                Signed. Waiting on the rest of the desk — then the exporter settles.
-              </p>
+              <div style={{ marginTop: 8 }}>
+                <p style={{ color: "var(--color-deep-forest)", fontSize: 14, margin: "0 0 6px" }}>
+                  ✓ Signed as {party === "Bob" ? "Lender" : "Oracle"}.
+                  {c.accepted.length < c.counterparties.length
+                    ? " Switch tabs above to co-sign as Oracle, or proceed to Exporter desk."
+                    : " All counterparties signed — ready for settlement!"}
+                </p>
+                <div className="row" style={{ marginTop: 6, marginBottom: 0 }}>
+                  <Link className="btn sm primary" href="/proposer">
+                    Exporter desk (settle now) →
+                  </Link>
+                  <Link className="btn sm" href={`/readiness?id=${c.id}`}>
+                    Readiness dashboard →
+                  </Link>
+                </div>
+              </div>
             )}
           </div>
         ))}
