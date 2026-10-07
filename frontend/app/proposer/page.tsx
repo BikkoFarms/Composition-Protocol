@@ -1,11 +1,12 @@
 "use client";
 
 /**
- * Exporter desk — Alice picks a trade from the catalogue, proposes, cancels,
- * and settles DvP compositions. Surfaces cancel and disclosed-contract paths.
+ * Exporter desk — Alice picks a trade from the catalogue, proposes and cancels.
+ * Settlement happens on the Settlement desk after counterparties sign.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
 import { friendlyError, useTradeTemplates } from "@/lib/trades";
@@ -55,6 +56,7 @@ export default function ProposerPage() {
   const [loading, setLoading] = useState(true);
   const { templates, defaultId } = useTradeTemplates();
   const [templateId, setTemplateId] = useState("");
+  const [requireGovernance, setRequireGovernance] = useState(false);
   const selectedTemplate = templates.find((t) => t.id === (templateId || defaultId));
 
   const refresh = useCallback(async () => {
@@ -83,46 +85,18 @@ export default function ProposerPage() {
         method: "POST",
         body: JSON.stringify({
           forceFail: opts?.forceFail ?? false,
+          requireGovernance,
           templateId: templateId || defaultId,
         }),
       });
       await refresh();
       setSuccess(
         opts?.forceFail
-          ? `Broken ${created.tradeName ?? "trade"} staged (#${created.id.slice(0, 8)}) — settling it will revert atomically and nothing will move.`
-          : `${created.tradeName ?? "Trade"} proposed (#${created.id.slice(0, 8)}). Counterparties sign on the Lender desk, then you can settle here.`,
+          ? `Broken ${created.tradeName ?? "trade"} staged (#${created.id.slice(0, 8)}). Once signed, settling it on the Settlement desk reverts atomically and nothing moves.`
+          : `${created.tradeName ?? "Trade"} proposed (#${created.id.slice(0, 8)}). Next: the counterparties sign on the Lender desk, then it goes to the Settlement desk.`,
       );
     } catch (e) {
       setError(friendlyError(String((e as Error).message)));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function settle(id: string) {
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      // Match agreed terms, then settle (backend also auto-allocates if needed).
-      try {
-        await api(`/compositions/${id}/allocate-all`, { method: "POST" });
-      } catch {
-        // Older backends without allocate-all: settle() will auto-allocate.
-      }
-      const settled = await api<Composition>(`/compositions/${id}/settle`, {
-        method: "POST",
-        body: JSON.stringify({ withRegulator: true, caller: "Operator" }),
-      });
-      setSuccess(
-        settled.status === "awaiting_governance"
-          ? `Opened BitSafe gate — complete approvals on /governance.`
-          : `Settled · receipt ${settled.receiptCid ?? settled.id.slice(0, 8)}`,
-      );
-      await refresh();
-    } catch (e) {
-      setError(friendlyError(String((e as Error).message)));
-      await refresh();
     } finally {
       setBusy(false);
     }
@@ -153,9 +127,9 @@ export default function ProposerPage() {
         </span>
         <h1 className="page-title">Propose a trade</h1>
         <p className="lede">
-          You are Alice, the exporter. Pick a trade and propose it. Once the
-          lender (and inspector, if the trade has one) sign, settle it here. You
-          can cancel any time before settlement.
+          You are Alice, the exporter. Pick a trade and propose it. The lender
+          (and inspector, if the trade has one) sign it on the Lender desk, and
+          the Settlement desk settles it. You can cancel any time before then.
         </p>
       </div>
       <div className="row" style={{ alignItems: "flex-end" }}>
@@ -185,6 +159,14 @@ export default function ProposerPage() {
           Propose broken trade
         </button>
       </div>
+      <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 14, margin: "0 0 12px" }}>
+        <input
+          type="checkbox"
+          checked={requireGovernance}
+          onChange={(e) => setRequireGovernance(e.target.checked)}
+        />
+        Require BitSafe 2-of-3 approval before settlement (high-value trade)
+      </label>
       {selectedTemplate && (
         <p className="muted" style={{ fontSize: 14, marginTop: 0 }}>
           {selectedTemplate.summary}
@@ -290,18 +272,27 @@ export default function ProposerPage() {
                 </p>
               )}
               <div className="row" style={{ marginTop: 10, marginBottom: 0 }}>
+                {(c.status === "proposed" || c.status === "partially_accepted") && (
+                  <Link className="btn" href="/counterparty">
+                    Waiting for signatures · Lender desk →
+                  </Link>
+                )}
                 {(c.status === "accepted" ||
                   c.status === "ready_to_settle" ||
                   c.status === "allocating") && (
-                  <button
-                    className="primary"
-                    disabled={busy}
-                    onClick={() => settle(c.id)}
-                  >
-                    {c.status === "accepted"
-                      ? "Allocate + settle"
-                      : "Settle now"}
-                  </button>
+                  <Link className="btn primary" href={`/demo?id=${c.id}`}>
+                    Signed · open on Settlement desk →
+                  </Link>
+                )}
+                {c.status === "awaiting_governance" && (
+                  <Link className="btn primary" href={`/governance?id=${c.id}`}>
+                    With BitSafe governors →
+                  </Link>
+                )}
+                {c.status === "settled" && (
+                  <Link className="btn" href={`/observer?id=${c.id}`}>
+                    Settled · view receipt →
+                  </Link>
                 )}
                 {OPEN.has(c.status) && c.status !== "awaiting_governance" && (
                   <button disabled={busy} onClick={() => cancel(c.id)}>

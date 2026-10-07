@@ -742,4 +742,34 @@ describe("Settleflow demo gates", () => {
     // 2 CBTC × $65,000 = $130,000 vs $10,000 → 1300% (unchanged behaviour)
     assert.equal(cocoa.collateralRatio, "1300%");
   });
+
+  it("signatures — every counterparty acceptance is its own commit", () => {
+    const c = store.proposeTradeFinance({ templateId: "coffee" });
+    store.accept(c.id, "Bob");
+    store.accept(c.id, "Oracle");
+    const signed = store.require(c.id).commits.filter((x) => x.choice === "AcceptProposal");
+    assert.deepEqual(
+      signed.map((x) => x.actAs[1]),
+      ["Bob", "Oracle"],
+    );
+    assert.ok(store.require(c.id).commits.some((x) => x.choice === "FinalizeAgreement"));
+  });
+
+  it("auditor view — receipts newest first and scoped to one trade", () => {
+    const gold = store.runFullDemo({ templateId: "gold" }).composition;
+    const cotton = store.runFullDemo({ templateId: "cotton" }).composition;
+    const all = store.partyView("Regulator");
+    assert.equal(all.settlementReceipts[0].compositionId, cotton.id);
+    assert.equal(all.settlementReceipts[0].tradeName, "Cotton lint forward");
+
+    const scoped = store.partyView("Regulator", gold.id);
+    assert.equal(scoped.settlementReceipts.length, 1);
+    assert.equal(scoped.settlementReceipts[0].compositionId, gold.id);
+    assert.equal(scoped.visibleTokens.length, 0);
+
+    const lender = store.partyView("Bob", gold.id);
+    const goldAssets = new Set(gold.legs.map((l) => l.assetCid));
+    assert.ok(lender.visibleTokens.length > 0);
+    assert.ok(lender.visibleTokens.every((t) => goldAssets.has(t.contractId)));
+  });
 });

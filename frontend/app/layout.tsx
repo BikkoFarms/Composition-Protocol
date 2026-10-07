@@ -18,10 +18,10 @@ export const metadata = {
 };
 
 const links = [
-  { href: "/demo", label: "Settle" },
-  { href: "/readiness", label: "Readiness" },
   { href: "/proposer", label: "Exporter" },
   { href: "/counterparty", label: "Lender" },
+  { href: "/demo", label: "Settle" },
+  { href: "/readiness", label: "Readiness" },
   { href: "/observer", label: "Auditor" },
   { href: "/governance", label: "BitSafe" },
   { href: "/metrics", label: "Activity" },
@@ -35,7 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           Live on Canton · Settle Flow · Cocoa, coffee, cashew, gold, shea,
           sesame, cotton &amp; FX trades
           {" · "}
-          <Link href="/demo">Settle a trade →</Link>
+          <Link href="/proposer">Propose a trade →</Link>
         </div>
         <div className="shell">
           <header className="top">
@@ -57,8 +57,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <span className="status-dot" />
                 Desk online
               </span>
-              <Link className="btn primary" href="/demo">
-                Settle a trade
+              <Link className="btn primary" href="/proposer">
+                Propose a trade
               </Link>
             </div>
           </header>

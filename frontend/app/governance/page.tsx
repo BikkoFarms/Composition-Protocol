@@ -1,27 +1,31 @@
 "use client";
 
 /**
- * BitSafe desk — camera-ready refuse-below-threshold then settle beat (R-GOV-1/2).
+ * BitSafe desk — decentralized settlement execution (R-GOV-1/2).
+ *
+ * Without BitSafe, one Operator key presses "Settle". For trades the Exporter
+ * flags as high-value, the settlement agent is instead three independent
+ * governors: any 2 must approve before the atomic settle runs, fewer is refused
+ * on-ledger, and any one governor can veto.
+ *
+ * Trades reach this desk through the normal flow:
+ *   Exporter proposes (BitSafe required) → Lender/Oracle sign →
+ *   Settlement desk locks legs and presses Settle → governors vote here.
  */
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { SkeletonBlock } from "@/components/Skeleton";
+import { formatAmount, friendlyError, roleName } from "@/lib/trades";
 
 type Composition = {
   id: string;
+  tradeName?: string;
   status: string;
-  description: string;
   governanceCid: string | null;
   requireGovernance?: boolean;
-  legs?: {
-    legId: string;
-    instrumentId: string;
-    amount: string;
-    provider: string;
-    receiver: string;
-  }[];
+  legs: { legId: string; instrumentId: string; amount: string; provider: string; receiver: string }[];
 };
 
 type Governance = {
@@ -31,217 +35,128 @@ type Governance = {
   threshold: number;
   approvals: string[];
   status: "open" | "executed" | "rejected";
+  vetoReason?: string;
 };
 
-const GOVERNORS = ["Gov1", "Gov2", "Gov3"] as const;
+type Notice = { kind: "info" | "success" | "check" | "error"; title: string; text?: string; link?: { href: string; label: string } };
 
-type BeatStep = 0 | 1 | 2 | 3;
+const GOVERNORS = ["Gov1", "Gov2", "Gov3"] as const;
 
 export default function GovernancePage() {
   const [comps, setComps] = useState<Composition[]>([]);
   const [govs, setGovs] = useState<Governance[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [refuseMsg, setRefuseMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [selectedGovId, setSelectedGovId] = useState("");
   const [loading, setLoading] = useState(true);
-  const [activeGov, setActiveGov] =
-    useState<(typeof GOVERNORS)[number]>("Gov1");
-  const [beat, setBeat] = useState<BeatStep>(0);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const refresh = useCallback(async () => {
-    const data = await api<{
-      compositions: Composition[];
-      governances: Governance[];
-    }>("/compositions");
+    const data = await api<{ compositions: Composition[]; governances: Governance[] }>("/compositions");
     setComps(data.compositions);
-    setGovs(data.governances);
+    const newest = [...data.governances].reverse();
+    setGovs(newest);
+    setSelectedGovId((cur) => {
+      if (cur && newest.some((g) => g.id === cur)) return cur;
+      const fromUrl =
+        typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
+      const byTrade = fromUrl ? newest.find((g) => g.compositionId === fromUrl) : undefined;
+      return byTrade?.id ?? newest.find((g) => g.status === "open")?.id ?? newest[0]?.id ?? "";
+    });
     setLoading(false);
   }, []);
 
   useEffect(() => {
     refresh().catch((e) => {
-      setError(String(e.message ?? e));
+      setNotice({ kind: "error", title: "Can't load governed trades", text: friendlyError(String(e.message ?? e)) });
       setLoading(false);
     });
-    const timer = setInterval(() => refresh().catch(() => undefined), 4000);
-    return () => clearInterval(timer);
+    const t = setInterval(() => refresh().catch(() => undefined), 4000);
+    return () => clearInterval(t);
   }, [refresh]);
 
-  async function startGoverned() {
-    setBusy(true);
-    setError(null);
-    setSuccessMsg(null);
-    setRefuseMsg(null);
-    try {
-      const c = await api<Composition>("/compositions/demo/trade-finance", {
-        method: "POST",
-        body: JSON.stringify({ requireGovernance: true }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Bob" }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Oracle" }),
-      });
-      // Match all legs before opening the BitSafe gate (required on older backends).
-      try {
-        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
-      } catch {
-        /* settle() auto-allocates when allocate-all is unavailable */
-      }
-      await api(`/compositions/${c.id}/settle`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await refresh();
-      setBeat(1);
-      setActiveGov("Gov1");
-      setSuccessMsg(
-        "Opened BitSafe 2-of-3 governed deal. Named governors: Gov1, Gov2, Gov3. Threshold M=2. Sign as Gov1 next.",
-      );
-    } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const gov = govs.find((g) => g.id === selectedGovId);
+  const trade = gov ? comps.find((c) => c.id === gov.compositionId) : undefined;
+  const pendingAtDesk = comps.filter(
+    (c) => c.requireGovernance && !c.governanceCid && !["settled", "cancelled", "rejected", "reverted", "expired"].includes(c.status),
+  );
 
-  async function approve(id: string, govName: string) {
-    setBusy(true);
-    setError(null);
-    setSuccessMsg(null);
+  async function act(key: string, fn: () => Promise<Notice>) {
+    setBusy(key);
+    setNotice(null);
     try {
-      await api(`/compositions/governance/${id}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ governor: govName }),
-      });
-      await refresh();
-      setSuccessMsg(`${govName} signed · threshold still ${govName === "Gov1" ? "1/2" : "checking"}.`);
-      if (govName === "Gov1") {
-        setBeat(1);
-        setActiveGov("Gov1");
-      }
-      if (govName === "Gov2" || govName === "Gov3") {
-        setBeat(3);
-      }
-    } catch (e) {
-      setError(String((e as Error).message));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function execute(id: string, expectFail = false) {
-    setBusy(true);
-    setError(null);
-    setSuccessMsg(null);
-    setRefuseMsg(null);
-    try {
-      const result = await api<Composition>(
-        `/compositions/governance/${id}/execute`,
-        { method: "POST", body: "{}" },
-      );
-      await refresh();
-      setBeat(3);
-      setRefuseMsg(null);
-      setSuccessMsg(
-        `R-GOV-2: threshold met. Deal ${result.id.slice(0, 8)} settled atomically.`,
-      );
+      setNotice(await fn());
     } catch (e) {
       const msg = String((e as Error).message);
-      if (expectFail || msg.toLowerCase().includes("below threshold")) {
-        setBeat(2);
-        setRefuseMsg(`R-GOV-1 ledger refusal: ${msg}`);
-        setSuccessMsg(null);
-        setActiveGov("Gov2");
-      } else {
-        setError(msg);
-      }
-      await refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  /** Manual camera path: open → Gov1 sign → refuse → Gov2 sign → settle */
-  async function runCameraBeat() {
-    setBusy(true);
-    setError(null);
-    setSuccessMsg(null);
-    setRefuseMsg(null);
-    setBeat(0);
-    try {
-      const c = await api<Composition>("/compositions/demo/trade-finance", {
-        method: "POST",
-        body: JSON.stringify({ requireGovernance: true }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Bob" }),
-      });
-      await api(`/compositions/${c.id}/accept`, {
-        method: "POST",
-        body: JSON.stringify({ acceptor: "Oracle" }),
-      });
-      try {
-        await api(`/compositions/${c.id}/allocate-all`, { method: "POST" });
-      } catch {
-        /* settle() auto-allocates when allocate-all is unavailable */
-      }
-      const opened = await api<Composition>(`/compositions/${c.id}/settle`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      const govId = opened.governanceCid!;
-      if (!govId) {
-        throw new Error(
-          "governed deal did not open — missing governanceCid after settle",
-        );
-      }
-      setBeat(1);
-
-      await api(`/compositions/governance/${govId}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ governor: "Gov1" }),
-      });
-      await refresh();
-
-      try {
-        await api(`/compositions/governance/${govId}/execute`, {
-          method: "POST",
-          body: "{}",
-        });
-      } catch (e) {
-        const msg = String((e as Error).message);
-        setBeat(2);
-        setRefuseMsg(`R-GOV-1 ledger refusal: ${msg}`);
-      }
-
-      await api(`/compositions/governance/${govId}/approve`, {
-        method: "POST",
-        body: JSON.stringify({ governor: "Gov2" }),
-      });
-      await api(`/compositions/governance/${govId}/execute`, {
-        method: "POST",
-        body: "{}",
-      });
-
-      await refresh();
-      setBeat(3);
-      setSuccessMsg(
-        "R-GOV-2: refused at 1/2, settled at 2/2. BitSafe Decentralization criterion cleared.",
+      setNotice(
+        /below threshold/i.test(msg)
+          ? {
+              kind: "check",
+              title: "Refused — not enough approvals",
+              text: `The ledger rejected it: only ${msg.match(/(\d+)\/(\d+)/)?.[1] ?? "too few"} of ${msg.match(/(\d+)\/(\d+)/)?.[2] ?? "the required"} approvals. This is the protection BitSafe adds: one governor (or one compromised key) can't move the money alone. Nothing moved.`,
+            }
+          : { kind: "error", title: "Something went wrong", text: friendlyError(msg) },
       );
-    } catch (e) {
-      setError(String((e as Error).message));
     } finally {
-      setBusy(false);
+      await refresh();
+      setBusy(null);
     }
   }
 
-  const openGov = govs.find((g) => g.status === "open");
+  const approve = (g: Governance, governor: string) =>
+    act(`approve-${governor}`, async () => {
+      const res = await api<Governance>(`/compositions/governance/${g.id}/approve`, {
+        method: "POST",
+        body: JSON.stringify({ governor }),
+      });
+      const met = res.approvals.length >= res.threshold;
+      return {
+        kind: met ? "success" : "info",
+        title: `${governor} approved (${res.approvals.length} of ${res.threshold})`,
+        text: met ? "Threshold met. Execute to settle every leg atomically." : "One more approval is needed before this trade can settle.",
+      };
+    });
+
+  const execute = (g: Governance) =>
+    act("execute", async () => {
+      const res = await api<Composition>(`/compositions/governance/${g.id}/execute`, { method: "POST", body: "{}" });
+      return {
+        kind: "success",
+        title: "Settled by 2-of-3 governors",
+        text: `All ${res.legs.length} legs moved in one transaction.`,
+      };
+    });
+
+  const veto = (g: Governance, governor: string) =>
+    act(`veto-${governor}`, async () => {
+      await api(`/compositions/governance/${g.id}/veto`, {
+        method: "POST",
+        body: JSON.stringify({ governor, reason: `Vetoed by ${governor} on the BitSafe desk` }),
+      });
+      return {
+        kind: "check",
+        title: `${governor} vetoed the trade`,
+        text: "The settlement was stopped. Nothing moved; every party keeps its assets.",
+      };
+    });
+
+  const noticeEl = notice && (
+        <div className={`notice ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>
+          <div>
+            <p className="notice-title">{notice.title}</p>
+            {notice.text && <p>{notice.text}</p>}
+            {notice.link && (
+              <p style={{ marginTop: 6 }}>
+                <Link href={notice.link.href} style={{ fontWeight: 600 }}>
+                  {notice.link.label}
+                </Link>
+              </p>
+            )}
+          </div>
+          <button className="notice-close" aria-label="Dismiss" onClick={() => setNotice(null)}>
+            ×
+          </button>
+        </div>
+      );
 
   return (
     <div>
@@ -250,228 +165,202 @@ export default function GovernancePage() {
           BitSafe · 2-of-3
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">Governed settlement refuses below threshold</h1>
+        <h1 className="page-title">No single key can settle a high-value trade</h1>
         <p className="lede">
-          Named governors Gov1, Gov2, Gov3. Threshold M=2. Attempt settle with
-          too few approvals — the ledger refuses. Reach the threshold — it
-          settles. One build, BitSafe + Track 1 payoff.
+          Normally one operator presses Settle. For trades the Exporter marks as
+          high-value, settlement needs 2 of 3 independent governors instead.
+          One approval is refused on-ledger, and any governor can veto.
         </p>
       </div>
 
-      <div className="bitsafe-rail" aria-label="BitSafe demo beat">
-        <div
-          className={`bitsafe-step ${beat >= 1 ? "done" : ""} ${beat === 0 ? "active" : ""}`}
-        >
-          <span className="n">1</span>
-          <strong>Open + first signature</strong>
-          <p>Open governed DvP. Sign as Gov1 (1 of 2).</p>
+      <div className="grid grid-2" style={{ marginBottom: 20 }}>
+        <div className="card card-mint">
+          <h2>What BitSafe adds to the flow</h2>
+          <ul className="proof-list">
+            <li>
+              <strong>No single point of failure.</strong> A mistaken or compromised operator
+              can&apos;t push money out alone. (Citibank wired $894M by mistake in 2020 as a
+              single loan agent.)
+            </li>
+            <li>
+              <strong>Enforced, not advisory.</strong> Execution below the threshold is
+              rejected by the ledger (R-GOV-1). At the threshold it settles atomically (R-GOV-2).
+            </li>
+            <li>
+              <strong>Veto.</strong> Any named governor can stop a deal before it settles.
+            </li>
+          </ul>
         </div>
-        <div
-          className={`bitsafe-step ${
-            beat === 2 ? "fail" : beat > 2 ? "done" : beat === 1 ? "active" : ""
-          }`}
-        >
-          <span className="n">2</span>
-          <strong>Execute early → refuse</strong>
-          <p>Ledger rejects below threshold (R-GOV-1).</p>
-        </div>
-        <div
-          className={`bitsafe-step ${beat === 3 ? "done" : beat === 2 ? "active" : ""}`}
-        >
-          <span className="n">3</span>
-          <strong>Second signature → settle</strong>
-          <p>Gov2 signs. At threshold, atomic settle (R-GOV-2).</p>
+        <div className="card card-lime">
+          <h2>How a trade gets here</h2>
+          <ol className="proof-list" style={{ listStyle: "decimal", paddingLeft: 20 }}>
+            <li>
+              <Link href="/proposer">Exporter</Link> proposes with &ldquo;Require BitSafe 2-of-3&rdquo; ticked.
+            </li>
+            <li>
+              Lender and Inspector sign on the <Link href="/counterparty">Lender desk</Link>.
+            </li>
+            <li>
+              The <Link href="/demo">Settlement desk</Link> locks legs and presses &ldquo;Send to BitSafe governors&rdquo;.
+            </li>
+            <li>Governors approve here. At 2 of 3, Execute settles every leg at once.</li>
+          </ol>
         </div>
       </div>
 
-      <div className="row">
-        <button className="primary" disabled={busy} onClick={startGoverned}>
-          Open governed deal
-        </button>
-        <button disabled={busy} onClick={runCameraBeat}>
-          {busy ? "Running beat…" : "Camera beat: refuse → settle"}
-        </button>
-        <Link className="btn" href="/observer">
-          Money shot
-        </Link>
-        <Link className="btn" href="/demo">
-          Ungoverned desk
-        </Link>
-      </div>
-
-      <div className="card card-mint" style={{ marginBottom: 20 }}>
-        <h2>Acting as governor</h2>
-        <p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-          Manual path: sign as Gov1 → Try execute early → switch to Gov2 →
-          Execute settlement.
-        </p>
-        <div className="row" style={{ marginBottom: 0 }}>
-          {GOVERNORS.map((g) => (
-            <button
-              key={g}
-              className={activeGov === g ? "primary" : undefined}
-              onClick={() => {
-                setActiveGov(g);
-                if (!openGov) {
-                  setError(
-                    "No open governed deal yet — click Open governed deal or Camera beat first.",
-                  );
-                }
-              }}
-            >
-              {g}
-            </button>
-          ))}
+      {(!gov || loading) && noticeEl}
+      {loading ? (
+        <SkeletonBlock rows={5} />
+      ) : govs.length === 0 ? (
+        <div className="card" style={{ padding: 28 }}>
+          <p style={{ marginTop: 0, fontWeight: 600 }}>No trades are waiting for governors.</p>
+          {pendingAtDesk.length > 0 ? (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {pendingAtDesk.length} BitSafe trade{pendingAtDesk.length === 1 ? " is" : "s are"} still being
+              signed or locked. <Link href="/demo">Settlement desk →</Link>
+            </p>
+          ) : (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              Start one on the <Link href="/proposer">Exporter desk</Link> with &ldquo;Require BitSafe
+              2-of-3 approval&rdquo; ticked.
+            </p>
+          )}
         </div>
-        {!openGov && (
-          <p className="muted" style={{ fontSize: 13, marginBottom: 0 }}>
-            Open a governed deal first — then Sign as Gov1 appears under Live
-            threshold.
-          </p>
-        )}
-      </div>
+      ) : (
+        <div className="desk-layout">
+          <div className="card desk-panel">
+            {gov && (
+              <>
+                <div className="deal-card-head" style={{ marginBottom: 4 }}>
+                  <p className="card-title" style={{ fontSize: 20, margin: 0 }}>
+                    {trade?.tradeName ?? "Trade"}
+                  </p>
+                  <span
+                    className={`chip ${gov.status === "executed" ? "done" : gov.status === "rejected" ? "muted" : "wait"}`}
+                  >
+                    {gov.status === "executed"
+                      ? "Settled"
+                      : gov.status === "rejected"
+                        ? "Vetoed"
+                        : `${gov.approvals.length} of ${gov.threshold} approvals`}
+                  </span>
+                </div>
+                <p className="mono muted" style={{ fontSize: 12, marginTop: 0 }}>
+                  #{gov.compositionId.slice(0, 8)} · {gov.threshold}-of-{gov.governors.length} governors
+                </p>
 
-      {refuseMsg && <div className="flash-refuse">{refuseMsg}</div>}
-      {successMsg && <div className="flash-ok">{successMsg}</div>}
-      {error && <p className="err">{error}</p>}
+                {trade && (
+                  <ul className="ticket-legs compact" style={{ marginBottom: 16 }}>
+                    {trade.legs.map((l) => (
+                      <li key={l.legId}>
+                        <span>
+                          {roleName(l.provider)} → {roleName(l.receiver)}
+                        </span>
+                        <strong>
+                          {formatAmount(l.amount)} {l.instrumentId}
+                        </strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
-      {openGov && openGov.status === "open" && (
-        <div className="card card-butter" style={{ marginBottom: 20 }}>
-          <h2>Live threshold</h2>
-          <p className="card-title" style={{ fontSize: 20 }}>
-            {openGov.approvals.length}/{openGov.threshold} of{" "}
-            {openGov.governors.length} governors
-          </p>
-          <div className="asset-chips">
-            {openGov.governors.map((govName) => {
-              const approved = openGov.approvals.includes(govName);
-              return (
-                <span
-                  key={govName}
-                  className={`tag ${approved ? "ok" : "empty"}`}
-                >
-                  {approved ? `${govName} signed` : `${govName} pending`}
-                </span>
-              );
-            })}
+                <p className="flow-section-title">Governors</p>
+                <ul className="leg-list">
+                  {GOVERNORS.map((g) => {
+                    const approved = gov.approvals.includes(g);
+                    return (
+                      <li key={g} className={`leg-row ${approved ? "locked" : ""}`}>
+                        <div className="leg-main">
+                          <strong>{g}</strong>
+                          <span className="leg-sub">Independent operator</span>
+                        </div>
+                        <div className="leg-actions">
+                          {approved ? (
+                            <span className="chip ok">Approved ✓</span>
+                          ) : gov.status === "open" ? (
+                            <>
+                              <button className="ghost sm" disabled={busy !== null} onClick={() => veto(gov, g)}>
+                                Veto
+                              </button>
+                              <button className="primary sm" disabled={busy !== null} onClick={() => approve(gov, g)}>
+                                {busy === `approve-${g}` ? "Approving…" : `Approve as ${g}`}
+                              </button>
+                            </>
+                          ) : (
+                            <span className="chip muted">Did not vote</span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {noticeEl}
+
+                {gov.status === "open" && (
+                  <div className="flow-cta">
+                    <button
+                      className={gov.approvals.length >= gov.threshold ? "primary" : ""}
+                      disabled={busy !== null}
+                      onClick={() => execute(gov)}
+                    >
+                      {busy === "execute"
+                        ? "Executing…"
+                        : gov.approvals.length >= gov.threshold
+                          ? "Execute settlement"
+                          : `Try to execute with ${gov.approvals.length} of ${gov.threshold}`}
+                    </button>
+                    {gov.approvals.length < gov.threshold && (
+                      <span className="muted" style={{ fontSize: 13 }}>
+                        Trying early shows the ledger refusing it.
+                      </span>
+                    )}
+                  </div>
+                )}
+                {gov.status === "executed" && (
+                  <Link className="btn primary" href={`/observer?id=${gov.compositionId}`}>
+                    Auditor proof →
+                  </Link>
+                )}
+                {gov.status === "rejected" && gov.vetoReason && (
+                  <p className="muted" style={{ marginBottom: 0 }}>{gov.vetoReason}. Nothing moved.</p>
+                )}
+              </>
+            )}
           </div>
-          <div className="row" style={{ marginTop: 14, marginBottom: 0 }}>
-            {!openGov.approvals.includes(activeGov) && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => approve(openGov.id, activeGov)}
-              >
-                Sign as {activeGov}
-              </button>
-            )}
-            {openGov.approvals.length < openGov.threshold && (
-              <button
-                className="danger"
-                disabled={busy}
-                onClick={() => execute(openGov.id, true)}
-              >
-                Try execute early
-              </button>
-            )}
-            {openGov.approvals.length >= openGov.threshold && (
-              <button
-                className="primary"
-                disabled={busy}
-                onClick={() => execute(openGov.id, false)}
-              >
-                Execute settlement
-              </button>
-            )}
+
+          <div className="stack-sm desk-side">
+            <div className="card card-lavender">
+              <h2>Governed trades</h2>
+              <div style={{ display: "grid", gap: 6 }}>
+                {govs.map((g) => {
+                  const c = comps.find((x) => x.id === g.compositionId);
+                  return (
+                    <button
+                      key={g.id}
+                      className={`trade-card ${g.id === selectedGovId ? "selected" : ""}`}
+                      onClick={() => {
+                        setSelectedGovId(g.id);
+                        setNotice(null);
+                      }}
+                    >
+                      <span className="trade-name">{c?.tradeName ?? "Trade"}</span>
+                      <span className="trade-region">
+                        #{g.compositionId.slice(0, 8)} ·{" "}
+                        {g.status === "executed"
+                          ? "settled"
+                          : g.status === "rejected"
+                            ? "vetoed"
+                            : `${g.approvals.length}/${g.threshold} approvals`}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </div>
         </div>
       )}
-
-      <div className="grid grid-2">
-        <div className="card card-lavender">
-          <h2>Open governed deals</h2>
-          {loading && govs.length === 0 ? (
-            <SkeletonBlock rows={5} />
-          ) : govs.length === 0 ? (
-            <p className="muted" style={{ fontSize: 14 }}>
-              No governed deals yet. Open one or run the camera beat.
-            </p>
-          ) : (
-            govs.map((g) => {
-              const comp = comps.find((c) => c.id === g.compositionId);
-              const isThresholdMet = g.approvals.length >= g.threshold;
-
-              return (
-                <div key={g.id} className="deal-card">
-                  <div className="deal-card-head">
-                    <strong>
-                      {comp?.description || g.compositionId.slice(0, 8)}
-                    </strong>
-                    <span
-                      className={`tag ${
-                        g.status === "executed"
-                          ? "ok"
-                          : isThresholdMet
-                            ? "ok"
-                            : "warn"
-                      }`}
-                    >
-                      {g.status === "executed"
-                        ? "Settled"
-                        : isThresholdMet
-                          ? "Ready to execute"
-                          : `${g.approvals.length}/${g.threshold} signed`}
-                    </span>
-                  </div>
-                  <p className="mono muted" style={{ fontSize: 12, margin: 0 }}>
-                    Threshold {g.threshold}-of-{g.governors.length} · Approvals:{" "}
-                    {g.approvals.join(", ") || "none"}
-                  </p>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        <div className="card card-lime">
-          <h2>Composition book</h2>
-          {loading && comps.length === 0 ? (
-            <SkeletonBlock rows={4} />
-          ) : comps.length === 0 ? (
-            <p className="muted" style={{ fontSize: 14 }}>
-              No compositions recorded yet.
-            </p>
-          ) : (
-            comps.slice(0, 12).map((c) => (
-              <div key={c.id} className="book-row">
-                <div className="deal-card-head">
-                  <span style={{ fontWeight: 500, fontSize: 14 }}>
-                    {c.description}
-                  </span>
-                  <span
-                    className={`tag ${
-                      c.status === "settled"
-                        ? "ok"
-                        : c.status === "awaiting_governance"
-                          ? "warn"
-                          : "ok"
-                    }`}
-                  >
-                    {c.status.replaceAll("_", " ")}
-                  </span>
-                </div>
-                <p className="mono muted" style={{ fontSize: 12, margin: 0 }}>
-                  {c.id.slice(0, 12)}…
-                  {c.requireGovernance ? " · BitSafe gate" : ""}
-                  {c.legs
-                    ? ` · ${c.legs.map((l) => l.instrumentId).join(" + ")}`
-                    : ""}
-                </p>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
     </div>
   );
 }
