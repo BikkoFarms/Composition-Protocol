@@ -1,20 +1,20 @@
-# How Settleflow Differs from Existing Options on Canton
+# How SettleFlow Differs from Existing Options on Canton
 
 HackCanton Season 3 edition. Claims below are checked against public CIP-0056 / Splice Token Standard docs, Daml Finance settlement docs, and OpenZeppelin Canton settlement pages (as of review). Re-verify before Grand Final Q&A if standards move.
 
 ## Positioning
 
-Settleflow does **not** compete with the token standard or with asset registries. It builds on **CIP-0056 allocations** and owns the **trade-level coordination** that the standard leaves open for apps to hand-write.
+SettleFlow does **not** compete with the token standard or with asset registries. It builds on **CIP-56 allocations** and owns the **trade-level coordination** that the standard leaves open for apps to hand-write.
 
-Atomic multi-leg settlement is already a Canton / CIP-0056 / Daml Finance capability. Settleflow’s product claim is: **one reusable trade object that collects parties, matches allocations, tracks readiness, gates execute/cancel, and cleans up failure** — so builders stop rewriting that layer per app.
+Atomic multi-leg settlement is already a Canton / CIP-56 / Daml Finance capability. SettleFlow’s product claim is: **one reusable trade object that collects parties, matches allocations, tracks readiness, gates execute/cancel, and cleans up failure** — so builders stop rewriting that layer per app.
 
 ## Comparison
 
-| | **Daml Finance Batch / Instruction** | **CIP-0056 alone** | **Settleflow** |
+| | **Daml Finance Batch / Instruction** | **CIP-56 alone** | **SettleFlow** |
 |---|---|---|---|
-| **What it does** | Atomic multi-party settlement over Daml Finance holdings | Per-leg allocation requests; allocations with an executor; execute / withdraw / cancel | Coordinates the **whole trade** on top of CIP-0056-shaped assets |
-| **Asset model** | Daml Finance holdings and instruments | Token standard interfaces (`Allocation`, `AllocationRequest`, …) | CIP-0056-shaped assets today (`ComposableAsset` / `MockToken`); Daml Finance legs via adapters later |
-| **Gap** | Non–Daml Finance assets need reshaping; not what many wallets/registries integrate with | **No trade-level logic** — apps must observe allocations, decide readiness, and submit the settle tx | Needs CIP-0056-compliant assets or wrappers; atomicity itself is not the differentiator |
+| **What it does** | Atomic multi-party settlement over Daml Finance holdings | Per-leg allocation requests; allocations with an executor; execute / withdraw / cancel | Coordinates the **whole trade** on top of CIP-56-modelled assets |
+| **Asset model** | Daml Finance holdings and instruments | Token standard interfaces (`Allocation`, `AllocationRequest`, …) | Specimen mocks modelled on CIP-56 (`ComposableAsset` / `MockToken`); Daml Finance legs via adapters later |
+| **Gap** | Non–Daml Finance assets need reshaping; not what many wallets/registries integrate with | **No trade-level logic** — apps must observe allocations, decide readiness, and submit the settle tx | Needs CIP-56-compliant assets or wrappers; atomicity itself is not the differentiator |
 
 ### Other settlement work (complementary stance)
 

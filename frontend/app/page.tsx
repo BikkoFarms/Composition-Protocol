@@ -6,15 +6,16 @@ export default function HomePage() {
       <section className="hero hero-product">
         <div>
           <span className="pill">
-            Settle Flow
+            SettleFlow
             <span className="pill-arrow">→</span>
           </span>
           <h1>Close the whole deal. Or nothing moves.</h1>
           <p className="lede">
             A reusable Daml package for structured settlement on Canton. Pick a
             trade (cocoa, coffee, cashew, gold, shea, sesame, cotton or an FX
-            swap) and every leg settles in one atomic transaction. Each party
-            sees only its own leg. Auditors get a receipt, not the payloads.
+            swap) and every leg settles in one atomic transaction. Counterparties
+            co-sign agreed legs, holdings transfer with sub-transaction privacy,
+            and auditors get a zero-leak receipt with payloads blinded.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/proposer">
@@ -30,8 +31,8 @@ export default function HomePage() {
               <p className="stat-value">All or none</p>
             </div>
             <div>
-              <p className="stat-label">Privacy</p>
-              <p className="stat-value">Per-leg ACS</p>
+              <p className="stat-label">Audit Privacy</p>
+              <p className="stat-value">Zero-leak ACS</p>
             </div>
             <div>
               <p className="stat-label">Governance</p>
@@ -223,9 +224,9 @@ export default function HomePage() {
         </div>
         <div className="faq-list">
           <details className="faq-item" open>
-            <summary>What is Settle Flow?</summary>
+            <summary>What is SettleFlow?</summary>
             <p>
-              Settle Flow is a reusable Daml package for structured settlement
+              SettleFlow is a reusable Daml package for structured settlement
               workflows on Canton. Builders get propose/accept coordination,
               disclosed contracts, expiry/cancel paths, and atomic settlement
               completion without rewriting that plumbing for every use case.

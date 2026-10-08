@@ -341,12 +341,20 @@ describe("Settleflow demo gates", () => {
     const c1 = store.proposeTradeFinance();
     const cancelled = store.cancel(c1.id, "Alice");
     assert.equal(cancelled.status, "cancelled");
+    assert.throws(
+      () => store.accept(c1.id, "Bob"),
+      /cannot accept: proposal is already cancelled/,
+    );
 
     // 2. Timeout expiry path
     const c2 = store.proposeTradeFinance();
     c2.expiresAt = new Date(Date.now() - 1000).toISOString();
     const expired = store.expire(c2.id, "Operator", new Date());
     assert.equal(expired.status, "expired");
+    assert.throws(
+      () => store.accept(c2.id, "Bob"),
+      /cannot accept: proposal is already expired/,
+    );
   });
 
   it("SRS §12: testWorkflowSettlement — confirms settlement completes end to end", () => {

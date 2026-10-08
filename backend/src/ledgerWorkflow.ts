@@ -324,3 +324,134 @@ export async function runLedgerE2E(ledger: LedgerClient, parties: PartyMap) {
     },
   };
 }
+
+/**
+ * Executes an end-to-end governed DvP settlement on Canton JSON Ledger API v2.
+ * Enforces BitSafe M-of-N threshold co-signing before atomic settlement executes.
+ */
+export async function runGovernedLiveWorkflow(
+  ledger: LedgerClient,
+  parties: PartyMap,
+  governors: { gov1: string; gov2: string; gov3: string },
+  threshold = 2,
+) {
+  const { operator, alice, bob, oracle, regulator } = parties;
+  const farDeadline = "2099-01-01T00:00:00Z";
+
+  // 1. Mint leg assets
+  const [m1, m2, m3] = await Promise.all([
+    ledger.create([operator], "MockToken", "MockToken", {
+      owner: alice,
+      issuer: operator,
+      instrumentId: "CBTC",
+      amount: "2.0",
+    }),
+    ledger.create([operator], "MockToken", "MockToken", {
+      owner: bob,
+      issuer: operator,
+      instrumentId: "USDCx",
+      amount: "10000.0",
+    }),
+    ledger.create([operator], "MockToken", "MockToken", {
+      owner: oracle,
+      issuer: operator,
+      instrumentId: "cETH",
+      amount: "1.0",
+    }),
+  ]);
+  const cbtc = extractContractIds(m1.result).at(-1)!;
+  const usdc = extractContractIds(m2.result).at(-1)!;
+  const ceth = extractContractIds(m3.result).at(-1)!;
+
+  // 2. Propose & Accept & Finalize
+  const factoryRes = await ledger.create(
+    [operator],
+    "Composition",
+    "ComposableWorkflow",
+    { operator },
+  );
+  const factoryCid = extractContractIds(factoryRes.result).at(-1)!;
+
+  const legs = [
+    { legId: "l1", instrumentId: "CBTC", amount: "2.0", provider: alice, receiver: bob, assetCid: cbtc, reference: "gov-cbtc", deadline: farDeadline },
+    { legId: "l2", instrumentId: "USDCx", amount: "10000.0", provider: bob, receiver: alice, assetCid: usdc, reference: "gov-usdc", deadline: farDeadline },
+    { legId: "l3", instrumentId: "cETH", amount: "1.0", provider: oracle, receiver: bob, assetCid: ceth, reference: "gov-ceth", deadline: farDeadline },
+  ];
+
+  const proposeRes = await ledger.exercise([operator, alice], "Composition", "ComposableWorkflow", factoryCid, "Propose", {
+    proposer: alice,
+    counterparties: [bob, oracle],
+    legs,
+    description: "DevNet Governed 3-party DvP",
+    expiresAt: farDeadline,
+  });
+  const proposalCid = extractContractIds(proposeRes).at(-1)!;
+
+  const accept1 = await ledger.exercise([operator, bob], "Composition", "WorkflowProposal", proposalCid, "AcceptProposal", { acceptor: bob, trackerCid: null });
+  const tracker1 = extractContractIds(accept1).at(-1)!;
+
+  const accept2 = await ledger.exercise([operator, oracle], "Composition", "WorkflowProposal", proposalCid, "AcceptProposal", { acceptor: oracle, trackerCid: tracker1 });
+  const tracker2 = extractContractIds(accept2).at(-1)!;
+
+  const finalizeRes = await ledger.exercise([operator], "Composition", "AcceptanceTracker", tracker2, "FinalizeAgreement", {});
+  const agreementCid = extractContractIds(finalizeRes).at(-1)!;
+
+  // 3. Allocate legs
+  const allocCids: string[] = [];
+  for (const leg of legs) {
+    const a = await ledger.exercise([operator, leg.provider], "Composition", "WorkflowAgreement", agreementCid, "AllocateLeg", {
+      allocator: leg.provider,
+      legId: leg.legId,
+      instrumentId: leg.instrumentId,
+      amount: leg.amount,
+      provider: leg.provider,
+      receiver: leg.receiver,
+      assetCid: leg.assetCid,
+      reference: leg.reference,
+      deadline: leg.deadline,
+    });
+    allocCids.push(extractContractIds(a).at(-1)!);
+  }
+
+  // 4. Open BitSafe Governed Settlement wrapper
+  const govFactoryRes = await ledger.create([operator], "Governance", "GovernanceFactory", { operator });
+  const govFactoryCid = extractContractIds(govFactoryRes.result).at(-1)!;
+
+  const openGovRes = await ledger.exercise([operator], "Governance", "GovernanceFactory", govFactoryCid, "OpenGovernedSettlement", {
+    agreementCid,
+    governors: [governors.gov1, governors.gov2, governors.gov3],
+    threshold,
+    regulator,
+  });
+  let govCid = extractContractIds(openGovRes).at(-1)!;
+
+  // 5. Governor 1 co-signs
+  const app1 = await ledger.exercise([operator, governors.gov1], "Governance", "GovernedSettlement", govCid, "ApproveGoverned", {
+    governor: governors.gov1,
+  });
+  govCid = extractContractIds(app1).at(-1)!;
+
+  // 6. Governor 2 co-signs (meets threshold 2 of 3)
+  const app2 = await ledger.exercise([operator, governors.gov2], "Governance", "GovernedSettlement", govCid, "ApproveGoverned", {
+    governor: governors.gov2,
+  });
+  govCid = extractContractIds(app2).at(-1)!;
+
+  // 7. Execute governed settlement with all parties
+  const settleRes = await ledger.exercise([operator, alice, bob, oracle], "Governance", "GovernedSettlement", govCid, "ExecuteGoverned", {
+    allocationCids: allocCids,
+  });
+  const receiptCid = extractContractIds(settleRes).at(-1)!;
+  const updateId = extractUpdateId(settleRes);
+
+  return {
+    ok: true,
+    publicLedger: ledger.getBaseUrl(),
+    updateId,
+    governance: {
+      threshold,
+      governorsApproved: [governors.gov1, governors.gov2],
+      receiptCid,
+    },
+  };
+}

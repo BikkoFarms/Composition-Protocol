@@ -549,10 +549,16 @@ export function CantonWalletManager() {
                     <div className="canton-node-card-header">
                       <div>
                         <h3>Canton Ledger API v2 Participant</h3>
-                        <p>Direct HTTP/JSON &amp; gRPC synchronization layer for Settle Flow</p>
+                        <p>Direct HTTP/JSON &amp; gRPC synchronization layer for SettleFlow</p>
                       </div>
                       <span className={`canton-mode-pill ${runtimeMode}`}>
-                        {runtimeMode === "ledger" ? "Live Ledger Mode" : "High-Fidelity Engine"}
+                        {runtimeMode === "ledger" ? "Live Ledger Mode" : "Hosted In-Memory Simulation"}
+                      </span>
+                    </div>
+
+                    <div className="canton-notice">
+                      <span>
+                        <strong>Hosted Environment Status:</strong> The hosted demo runs in high-fidelity in-memory engine mode (<code>/health</code> reports <code>mode: &quot;demo&quot;</code>) to guarantee instant evaluation without external DevNet sequencer outages. Connecting to an active Canton participant is fully supported by configuring <code>LEDGER_API_URL</code> and <code>LEDGER_API_TOKEN</code> in the backend environment.
                       </span>
                     </div>
 

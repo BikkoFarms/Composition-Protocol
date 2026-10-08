@@ -1,12 +1,12 @@
-# Contributing to Settleflow
+# Contributing to SettleFlow
 
-Welcome to **Settleflow**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
+Welcome to **SettleFlow**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
 
 ---
 
 ## 1. Quick Onboarding & Architecture Map
 
-Settleflow is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
+SettleFlow is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
 
 ```
 Composition-Protocol/
@@ -16,7 +16,7 @@ Composition-Protocol/
 │   │   ├── index.ts        # Server entry & router mounting
 │   │   ├── ledger.ts       # Canton Ledger API v2 & Keycloak OIDC client
 │   │   ├── demoStore.ts    # High-fidelity ACS simulation & state machine
-│   │   ├── demoStore.test.ts # 20 automated test suites
+│   │   ├── demoStore.test.ts # 39 automated test suites
 │   │   └── routes/         # Assets, Compositions, Governance, Audit, Admin
 ├── frontend/               # Next.js 15 App Router web application (:3000)
 │   ├── app/
@@ -46,8 +46,8 @@ Composition-Protocol/
 | **Daml Smart Contracts** | Complete | [Composition.daml](daml/daml/Composition.daml), [Governance.daml](daml/daml/Governance.daml), [ComposableAsset.daml](daml/daml/ComposableAsset.daml), [MockToken.daml](daml/daml/MockToken.daml) |
 | **Single-Tx Atomicity (`R-ATOM-1/2`)** | Complete | Verified: All transfer legs execute in 1 transaction; failed legs abort with zero half-states (`testAtomicSwap`, `testAtomicRevert`). |
 | **Canton Sub-Transaction Privacy (`R-PRIV-1/2/3`)** | Complete | Verified: Regulator Active Contract Set contains `visibleTokens: []` and only `SettlementReceipt` (`testAuditorCannotSeeLegs`). |
-| **BitSafe M-of-N Governance (`R-GOV-1/2`)** | Complete | Verified: 2-of-3 committee rejects below threshold and executes once threshold is met (`testGovernedBelowThreshold`, `testGovernedAtThreshold`). |
-| **Institutional Safety (Veto & Circuit Breaker)** | Complete | Verified: `EmergencyVeto` choice allows governors to abort deals; `ProtocolCircuitBreaker` pauses settlements during halts. |
+| **BitSafe M-of-N Governance (`R-GOV-1/2`)** | Complete | Verified: 2-of-3 committee rejects below threshold; unforgeable `GovernorApproval` contracts signed by named governors gate execution (`testGovernedBelowThreshold`, `testGovernedAtThreshold`). |
+| **Institutional Safety (Veto & Circuit Breaker)** | Complete | Verified: `EmergencyVeto` choice archives `WorkflowAgreement` on ledger to block settlement; `ProtocolCircuitBreaker` pauses settlements when `isHalted` is true (`testEmergencyVeto`, `testCircuitBreaker`, `demoStore.test.ts`). |
 | **Cryptographic Deal Digests & LTV Engine** | Complete | Verified: 64-char SHA-256 deal hash computed for every deal; automated LTV and 1300% collateral coverage calculation. |
 | **Canton JSON Ledger API v2 Client** | Complete | [backend/src/ledger.ts](backend/src/ledger.ts) handles `/v2/commands/submit-and-wait`, active-contracts queries, and Keycloak OIDC caching. |
 | **Mission Control Admin Console** | Complete | [frontend/app/admin/page.tsx](frontend/app/admin/page.tsx) with live latency ping, mode toggles, treasury minting, and state resets. |

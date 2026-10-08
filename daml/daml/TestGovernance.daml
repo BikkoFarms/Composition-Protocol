@@ -191,6 +191,7 @@ testGovernedCancelAtThreshold = do
   pure ()
 
 -- | Institutional Safety: Emergency Veto by authorized governor
+-- Veto archives the underlying agreement so it cannot be settled.
 testEmergencyVeto : Script ()
 testEmergencyVeto = do
   (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
@@ -208,6 +209,8 @@ testEmergencyVeto = do
     exerciseCmd govCid EmergencyVeto with
       governor = g1
       reason = "Malicious counterparty detected"
+  -- Verify agreement is archived and no longer live on ledger
+  None <- queryContractId operator agreementCid
   pure ()
 
 -- | Institutional Safety: Circuit Breaker emergency halt and resume
@@ -225,6 +228,8 @@ testCircuitBreaker = do
     exerciseCmd cbCid TriggerEmergencyHalt with
       governor = g1
       reason = "Oracle anomaly"
+  Some halted <- queryContractId operator cbHaltedCid
+  assertMsg "circuit breaker must be active" halted.isHalted
   cbResumedCid <- submitMulti [operator, g1] [] do
     exerciseCmd cbHaltedCid ResumeProtocol with
       governor = g1
