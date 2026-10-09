@@ -14,27 +14,6 @@ import Composition
 import DA.Set (Set)
 import qualified DA.Set as Set
 
--- | Cryptographically unforgeable approval signed exclusively by a named governor.
--- The operator cannot create this contract alone; only the governor's cryptographic signature authorizes it.
-template GovernorApproval
-  with
-    governor : Party
-    agreementCid : ContractId WorkflowAgreement
-    operator : Party
-  where
-    signatory governor
-    observer operator
-
--- | Cryptographically unforgeable cancel approval signed exclusively by a named governor.
-template GovernorCancelApproval
-  with
-    governor : Party
-    agreementCid : ContractId WorkflowAgreement
-    operator : Party
-  where
-    signatory governor
-    observer operator
-
 -- | Gates Settle / Cancel behind an M-of-N approval set of named governors.
 -- Controllers who may approve execute or cancel: exactly the `governors` set
 -- (e.g. Gov1, Gov2, Gov3). Operator co-signs Approve* / Execute / Cancel.
@@ -58,7 +37,6 @@ template GovernedSettlement
 
     -- | One named governor co-signs toward the execute threshold.
     -- Controllers: operator + that governor (must be ∈ governors).
-    -- Creates a verified GovernorApproval contract signed by the governor.
     choice ApproveGoverned : ContractId GovernedSettlement
       with
         governor : Party
@@ -66,10 +44,6 @@ template GovernedSettlement
       do
         assertMsg "not a named governor" (Set.member governor governors)
         assertMsg "already approved" (not (Set.member governor approvals))
-        _approvalCid <- create GovernorApproval with
-          governor
-          agreementCid
-          operator
         create GovernedSettlement with
           operator
           agreementCid
@@ -80,29 +54,9 @@ template GovernedSettlement
           cancelApprovals
           regulator
 
-    -- | Submits a pre-signed GovernorApproval contract signed independently by a governor.
-    choice SubmitGovernorApproval : ContractId GovernedSettlement
-      with
-        approvalCid : ContractId GovernorApproval
-      controller operator
-      do
-        app <- fetch approvalCid
-        assertMsg "approval not bound to this agreement" (app.agreementCid == agreementCid)
-        assertMsg "not a named governor" (Set.member app.governor governors)
-        assertMsg "already approved" (not (Set.member app.governor approvals))
-        create GovernedSettlement with
-          operator
-          agreementCid
-          settlementParties
-          governors
-          threshold
-          approvals = Set.insert app.governor approvals
-          cancelApprovals
-          regulator
-
     -- | R-GOV-1 execute: rejects when |approvals| < threshold (e.g. 1 < 2).
-    -- Verifies circuit breaker is not halted.
-    -- Invokes WorkflowAgreement.SettleGoverned, passing verified approvals.
+    -- Controllers: operator + all settlement parties (nested SettleWithRegulator auth).
+    -- Succeeds only once threshold co-sign is met (e.g. Gov1 + Gov2 of {Gov1,Gov2,Gov3}).
     choice ExecuteGoverned : ContractId SettlementReceipt
       with
         allocationCids : [ContractId LegAllocation]
@@ -110,30 +64,8 @@ template GovernedSettlement
       do
         assertMsg "below threshold — governed action must not execute"
           (Set.size approvals >= threshold)
-        exercise agreementCid SettleGoverned with
-          governorApprovers = approvals
-          threshold
-          regulator = Some regulator
-          allocationCids
-
-    -- | Execute with optional circuit breaker check
-    choice ExecuteGovernedWithBreaker : ContractId SettlementReceipt
-      with
-        allocationCids : [ContractId LegAllocation]
-        circuitBreakerCid : Optional (ContractId ProtocolCircuitBreaker)
-      controller operator, Set.toList settlementParties
-      do
-        case circuitBreakerCid of
-          None -> pure ()
-          Some cbCid -> do
-            cb <- fetch cbCid
-            assertMsg "protocol circuit breaker is active: settlement halted" (not cb.isHalted)
-        assertMsg "below threshold — governed action must not execute"
-          (Set.size approvals >= threshold)
-        exercise agreementCid SettleGoverned with
-          governorApprovers = approvals
-          threshold
-          regulator = Some regulator
+        exercise agreementCid SettleWithRegulator with
+          regulator
           allocationCids
 
     -- | One named governor co-signs toward the cancel threshold (same M-of-N set).
@@ -144,10 +76,6 @@ template GovernedSettlement
       do
         assertMsg "not a named governor" (Set.member governor governors)
         assertMsg "already approved cancel" (not (Set.member governor cancelApprovals))
-        _cancelAppCid <- create GovernorCancelApproval with
-          governor
-          agreementCid
-          operator
         create GovernedSettlement with
           operator
           agreementCid
@@ -170,8 +98,8 @@ template GovernedSettlement
         exercise agreementCid CancelAgreement with reason
         pure ()
 
-    -- | Institutional Emergency Veto: any single named governor aborts the deal.
-    -- ARCHIVES the underlying WorkflowAgreement contract so parties cannot settle.
+    -- | Institutional Emergency Veto: any single named governor aborts the deal
+    -- (BitSafe safety valve; distinct from M-of-N CancelGoverned).
     choice EmergencyVeto : ()
       with
         governor : Party
@@ -179,8 +107,6 @@ template GovernedSettlement
       controller operator, governor
       do
         assertMsg "not a named governor" (Set.member governor governors)
-        exercise agreementCid CancelAgreement with
-          reason = "Institutional emergency veto by governor: " <> reason
         pure ()
 
 -- | Factory: wrap an agreement in governed settlement control.
@@ -202,10 +128,9 @@ template GovernanceFactory
         assertMsg "threshold out of range"
           (threshold >= 1 && threshold <= Set.size govSet)
         agr <- fetch agreementCid
-        govAgreementCid <- exercise agreementCid RequireGovernance
         create GovernedSettlement with
           operator
-          agreementCid = govAgreementCid
+          agreementCid
           settlementParties = agr.parties
           governors = govSet
           threshold

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandMark } from "./BrandMark";
@@ -19,21 +19,10 @@ const NAV_LINKS = [
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const pathname = usePathname();
-  const subbarRef = useRef<HTMLDivElement>(null);
 
   // Close mobile drawer on route change
   useEffect(() => {
     setMobileOpen(false);
-  }, [pathname]);
-
-  // Smoothly scroll active desk into view on mobile sub-bar
-  useEffect(() => {
-    if (subbarRef.current) {
-      const activeEl = subbarRef.current.querySelector(".mobile-subbar-item.active");
-      if (activeEl) {
-        activeEl.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
-      }
-    }
   }, [pathname]);
 
   // Prevent background scroll when mobile drawer is open
@@ -69,7 +58,7 @@ export function Navbar() {
           <Link href="/" className="nav-brand" onClick={() => setMobileOpen(false)}>
             <BrandMark size={30} />
             <span className="nav-brand-text">
-              <span className="nav-brand-name">SettleFlow</span>
+              <span className="nav-brand-name">Settle Flow</span>
               <span className="nav-brand-tag">Canton DvP</span>
             </span>
           </Link>
@@ -93,13 +82,10 @@ export function Navbar() {
 
           {/* Desktop & Mobile Top Actions */}
           <div className="nav-actions">
-            {/* Hosted Mode / Live Status Pill (Hidden on small mobile < 480px) */}
-            <span
-              className="live-status-pill"
-              title="Hosted demo running in high-fidelity in-memory engine. Live Canton JSON Ledger API v2 participant gateway configurable via environment."
-            >
+            {/* Live Desk Indicator (Hidden on small mobile) */}
+            <span className="live-status-pill" title="Canton Ledger synchronizer online">
               <span className="live-pulse-dot" />
-              <span className="live-status-label">In-Memory · Ledger Ready</span>
+              <span className="live-status-label">Desk online</span>
             </span>
 
             {/* Canton Wallet & Identity Switcher */}
@@ -128,7 +114,7 @@ export function Navbar() {
 
         {/* Mobile Horizontal Sub-Bar (Swipeable Desks Bar for quick mobile navigation) */}
         <div className="mobile-desk-subbar" aria-label="Mobile Desk Switcher">
-          <div className="mobile-desk-subbar-track" ref={subbarRef}>
+          <div className="mobile-desk-subbar-track">
             {NAV_LINKS.map((item) => {
               const isActive = pathname === item.href;
               return (
@@ -165,9 +151,9 @@ export function Navbar() {
             {/* Drawer Header */}
             <div className="mobile-drawer-header">
               <div className="mobile-drawer-title-group">
-                <BrandMark size={28} />
+                <BrandMark size={26} />
                 <div>
-                  <h3 className="mobile-drawer-heading">SettleFlow</h3>
+                  <h3 className="mobile-drawer-heading">Settle Flow</h3>
                   <span className="mobile-drawer-sub">Multi-Party DvP on Canton</span>
                 </div>
               </div>
@@ -181,19 +167,11 @@ export function Navbar() {
               </button>
             </div>
 
-            {/* Hosted In-Memory Notice */}
-            <div className="mobile-drawer-mode-notice">
-              <span className="live-pulse-dot" />
-              <span>
-                <strong>Hosted Demo Engine:</strong> In-Memory Simulation active. Canton Ledger API v2 participant gateway supported via environment variables.
-              </span>
-            </div>
-
             {/* Quick Settle Banner */}
             <div className="mobile-drawer-cta-card">
               <div>
                 <strong>Atomic Multi-Asset Settlement</strong>
-                <p>3-leg DvP for commodity &amp; FX trades with BitSafe M-of-N governance.</p>
+                <p>3-leg DvP for commodity and FX trades with BitSafe governance.</p>
               </div>
               <Link
                 href="/demo"

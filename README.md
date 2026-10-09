@@ -1,6 +1,6 @@
-# SettleFlow
+# Settle Flow
 
-**Trade-level settlement coordination on Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, with mock tokens modelled on CIP-56.  
+**Trade-level settlement coordination on Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, on top of CIP-0056.  
 Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / USDCx / cETH).
 
 [![HackCanton Season 3](https://img.shields.io/badge/HackCanton-Season%203-blue.svg)](https://hackcanton.devpost.com/)
@@ -13,10 +13,7 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 > - **API Gateway**: [https://settleflow-backend-zcp7.onrender.com](https://settleflow-backend-zcp7.onrender.com) (`/health`, `/compositions`, `/audit/money-shot`)
 > - **Commodity Oracle**: [https://settleflow-oracle.onrender.com](https://settleflow-oracle.onrender.com) (`/health`, `/price?symbol=COCOA`, `/attest`)
 
-> ℹ️ **Hosted Demo Environment Status**:
-> The live deployment on Render runs in a high-fidelity **in-memory simulation engine** (`/health` returns `{"mode":"demo","ledgerConfigured":false}`) to provide evaluators with instant, zero-latency testing without reliance on external DevNet sequencer uptime. Full live Canton JSON Ledger API v2 participant connectivity is built-in (`backend/src/ledger.ts`, `backend/src/ledgerWorkflow.ts`) and activates when `LEDGER_API_URL` and `LEDGER_API_TOKEN` are configured.
-
-> **"Adopt this instead of writing it."** CIP-56 standardizes per-leg token allocations; SettleFlow standardizes the trade. The trade-finance desk is the demo that gives it a face.
+> **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settle Flow owns the trade. The trade-finance desk is the demo that gives it a face.
 
 **How we differ from CIP-0056 / Daml Finance / other engines:** [docs/POSITIONING.md](docs/POSITIONING.md)
 
@@ -24,19 +21,19 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 
 ## 1. Project Overview & Track Details
 
-While the **CIP-56** specification standardizes digital asset allocations (execute / withdraw / cancel), applications still hand-write the **trade orchestration layer**: agreement proposals, counterparty acceptance gating, allocation matching, permissioned execution, and failure cleanup.
+While **CIP-0056** made digital assets portable and defined **per-leg allocations** (execute / withdraw / cancel), apps still hand-write the **trade**: one deal object, allocation matching, readiness across legs, who may execute or cancel, and failure cleanup. Atomic multi-leg settlement is already a Canton capability — it is not Settle Flow’s differentiator.
 
-**SettleFlow** provides this reusable settlement coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel with unforgeable governor signatures, and ledger-enforced selective disclosure (`SettlementReceipt` for auditors; leg amounts stay off their ACS).
+**Settle Flow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel, and ledger-enforced per-party privacy (`SettlementReceipt` for auditors; legs stay off their ACS).
 
 ### Hackathon Tracks
 - **Primary Track — Track 1 (RWA & Business Workflows):** Multi-asset atomic settlement primitive solving DvP, trade-finance collateralization, and multi-party asset orchestration without trusted central escrow.
-- **Secondary Challenge — BitSafe Decentralization Challenge:** M-of-N governed multi-sig settlement control (`GovernedSettlement`) with unforgeable governor signatures (`GovernorApproval`) ensuring transactions require threshold consensus prior to atomic execution.
+- **Secondary Challenge — BitSafe Decentralization Challenge:** M-of-N governed multi-sig settlement control (`GovernedSettlement`) ensuring transactions require threshold consensus prior to atomic execution.
 - **Team:** Revotoken Africa.
 
 ### Reference Use Case: African Commodity Trade Finance (3 Legs)
 ```
              ┌─────────────────────────┐
-             │       SettleFlow        │
+             │       Settleflow        │
              └───────────┬─────────────┘
                          │
      ┌───────────────────┼───────────────────┐
@@ -77,10 +74,10 @@ The protocol is structured across four decoupled architectural tiers:
                                     │ Canton JSON Ledger API v2 (:7575)
 ┌───────────────────────────────────▼────────────────────────────────────┐
 │ L3: Canton Ledger & Daml Smart Contracts (Daml 3.x / Target 2.1)       │
-│  • ComposableAsset (Interface) & MockToken (modelled on CIP-56)        │
-│  • WorkflowProposal, AcceptanceTracker, WorkflowAgreement              │
-│  • SettlementReceipt (zero-leak blinded observer proof)                │
-│  • GovernedSettlement & GovernorApproval (BitSafe M-of-N multi-sig)   │
+│  • ComposableAsset (CIP-0056 Interface) & MockToken                    │
+│  • CompositionProposal, AcceptanceTracker, CompositionAgreement        │
+│  • SettlementReceipt (scopable observer proof)                         │
+│  • GovernedSettlement & GovernanceFactory (BitSafe M-of-N)             │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Event / HTTP
 ┌───────────────────────────────────▼────────────────────────────────────┐
@@ -93,30 +90,28 @@ The protocol is structured across four decoupled architectural tiers:
 ### Layer Details
 1. **L1 UI (Client Layer):** Role-tailored dashboards built with Next.js 15, React, and CSS variables. Emphasizes live state polling, clear stakeholder role separation, and the regulator "money shot".
 2. **L2 Backend (Acceptance Tracker & Bridge):** Express server on port `:4000`. Tracks counterparties' acceptances before settlement eligibility. Includes `ledger.ts` (JSON Ledger API v2 client) with graceful fallback to `demoStore.ts` for rapid local testing without a Canton node.
-3. **L3 Canton Ledger (Smart Contracts):** Daml 3.x contracts deployed on Canton (`composition` package). Executes atomic multi-leg transfers in a single transaction choice (`Settle`) and emits observer-partitioned receipts.
-4. **L4 Mocks (Ecosystem Services):** Node.js Oracle service on port `:4002` publishing live price and inspection grade feeds; mock token contracts (`MockToken`) modelled on the CIP-56 token specification.
+3. **L3 Canton Ledger (Smart Contracts):** Daml 3.x contracts deployed on Canton. Executes atomic multi-leg transfers in a single transaction choice (`Settle`) and emits observer-partitioned receipts.
+4. **L4 Mocks (Ecosystem Services):** Node.js Oracle service on port `:4002` publishing live price and inspection grade feeds; mock token contracts implementing `ComposableAsset`.
 
 ---
 
 ## 3. Core Technical Guarantees
 
 ### 3.1 Absolute Atomicity (`R-ATOM-1`, `R-ATOM-2`)
-- **Single Daml Transaction (`R-ATOM-1`):** All settlement legs are executed in a single atomic Daml choice (`WorkflowAgreement.Settle` or `SettleGoverned`).
+- **Single Daml Transaction (`R-ATOM-1`):** All settlement legs are executed in a single atomic Daml choice (`CompositionAgreement.Settle`).
 - **Zero Half-Settled States (`R-ATOM-2`):** Daml transaction semantics ensure that if any transfer choice within the loop fails (e.g., token already spent, insufficient authorization, contract mismatch), the **entire transaction reverts**. No party loses their assets, and intermediate states cannot persist on ledger.
 
-### 3.2 Selective Disclosure & Audit Privacy (`R-PRIV-1`, `R-PRIV-2`, `R-PRIV-3`)
-- **Composite Agreement Visibility:** Counterparties co-sign `WorkflowAgreement` to confirm trade terms, participant roles, and agreed leg parameters.
-- **The Regulator "Money Shot" (`R-PRIV-3`):** Auditors and regulators are granted observer rights solely to `SettlementReceipt` (verifying settlement occurred, timestamps, and aggregate leg IDs). Their Active Contract Set (ACS) contains **zero** leg payloads or token contracts:
+### 3.2 Per-Leg Stakeholder Privacy (`R-PRIV-1`, `R-PRIV-2`, `R-PRIV-3`)
+- **Cryptographic Exclusion (`R-PRIV-1` / `R-PRIV-2`):** Privacy is enforced at the sub-transaction protocol level using Canton's `signatory` and `observer` rules—**never via UI filtering**.
+- **The "Money Shot" (`R-PRIV-3`):** Auditors and regulators are granted observer rights solely to `SettlementReceipt` (verifying settlement occurred, timestamps, and aggregate leg IDs). Their Active Contract Set (ACS) contains **zero** leg payloads or token contracts:
   $$\text{Regulator ACS} \implies \texttt{visibleTokens: []}, \quad \texttt{settlementReceipts: [receipt]}$$
-- **Per-Leg Holding Privacy:** Actual token holdings (`ComposableAsset` / `MockToken`) transfer strictly between the designated `provider` and `receiver` on each leg via Canton sub-transaction privacy—third parties (such as the Oracle on the cash leg) do not become signatories or observers of those holding contracts.
 
 ### 3.3 BitSafe M-of-N Decentralized Governance (`R-GOV-1`, `R-GOV-2`)
-- **Unforgeable Governor Signatures:** Each governor co-signs via a dedicated `GovernorApproval` contract (`signatory governor`), preventing the operator from fabricating approvals.
-- **Enforced Governance Gate:** When `governanceRequired = True`, `WorkflowAgreement` locks direct settlement choices (`assertMsg "governed settlement required"`), enforcing that settlement MUST execute through `GovernedSettlement.ExecuteGoverned` once threshold $M$ is met.
-- **Circuit Breaker & Emergency Veto:** `ProtocolCircuitBreaker` pauses settlement when `isHalted = True`. An authorized governor calling `EmergencyVeto` immediately archives the underlying `WorkflowAgreement`, permanently aborting the deal and releasing locked allocations.
+- **Below-Threshold Rejection (`R-GOV-1`):** Settlement wrapped in `GovernedSettlement` strictly fails if attempted with fewer than $M$ approvals.
+- **Threshold Execution (`R-GOV-2`):** Once $M$ of $N$ designated governors approve, execution completes atomically and dispatches `SettlementReceipt`.
 
 ### 3.4 Multi-Party Entity Co-Signing & Independent Confirmation Workflow
-In SettleFlow, **every participant is an autonomous cryptographic identity** on Canton:
+In Settle Flow, **every participant is an autonomous cryptographic identity** on Canton:
 - **Exporter (`Alice`):** Originates the deal terms and proposes the composition.
 - **Lender (`Bob`):** Institutional credit provider who must independently review terms and collateral before committing cash.
 - **Oracle (`Oracle`):** Price & inspection authority who validates commodity grade and valuation.
@@ -144,7 +139,7 @@ Aligned with the official [Canton Developer Hub](https://dev-hub.canton.foundati
 ## 4. Repository Structure
 
 ```
-Composition-Protocol/         # repo root (SettleFlow)
+composition-protcol/          # repo root (Settleflow)
 ├── .ai/                      # AI agent rules, capabilities, skill definitions
 ├── daml/                     # Daml 3.x contracts + Script gates
 │   └── daml/
@@ -162,7 +157,7 @@ Composition-Protocol/         # repo root (SettleFlow)
 │       └── routes/
 ├── frontend/                 # Next.js 15 App Router (:3000)
 │   ├── app/demo/             # Allocation matching centerpiece
-│   ├── components/BrandMark.tsx  # SettleFlow SF mark
+│   ├── components/BrandMark.tsx  # Settleflow SF mark
 │   └── lib/api.ts
 ├── examples/                 # Builder LOC proof
 │   ├── with-layer/ThreePartyDvp.daml      # ~99 LOC

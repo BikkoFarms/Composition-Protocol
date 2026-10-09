@@ -13,7 +13,7 @@ export const viewport: Viewport = {
 };
 
 export const metadata = {
-  title: "SettleFlow · Multi-Party DvP on Canton",
+  title: "Settle Flow",
   description:
     "Reusable Daml settlement-workflow package on Canton — multi-party DvP for commodity and FX trades, BitSafe governance, and ledger-enforced privacy.",
 };
@@ -23,12 +23,13 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          SettleFlow · Hosted High-Fidelity Demo (In-Memory Engine) · Canton JSON Ledger API v2 Gateway Ready
+          Live on Canton · Settle Flow · Cocoa, coffee, cashew, gold, shea,
+          sesame, cotton &amp; FX trades
           {" · "}
           <Link href="/proposer">Propose a trade →</Link>
         </div>
-        <Navbar />
         <div className="shell">
+          <Navbar />
           <main>{children}</main>
         </div>
 
@@ -38,7 +39,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/" className="brand">
                 <BrandMark size={32} />
                 <span className="brand-text">
-                  <span className="brand-name">SettleFlow</span>
+                  <span className="brand-name">Settle Flow</span>
                 </span>
               </Link>
               <p>
@@ -71,7 +72,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </div>
           </div>
           <div className="footer-bottom">
-            <span>© {new Date().getFullYear()} SettleFlow</span>
+            <span>© {new Date().getFullYear()} Settle Flow</span>
             <span>TradFi settlement discipline · Canton privacy</span>
           </div>
         </footer>

@@ -87,8 +87,6 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  width: 100%;
-  overflow-x: hidden;
   background: var(--color-parchment);
   color: var(--color-forest-ink);
   font-family: var(--font-matter);
@@ -1921,8 +1919,7 @@ details.activity li {
 }
 
 /* Modal Overlay */
-.canton-modal-overlay,
-.canton-modal-backdrop {
+.canton-modal-overlay {
   position: fixed;
   inset: 0;
   z-index: 9999;
@@ -2715,7 +2712,6 @@ details.activity li {
   position: sticky;
   top: 0;
   z-index: 100;
-  width: 100%;
   background: color-mix(in srgb, var(--color-parchment) 94%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -2725,9 +2721,6 @@ details.activity li {
 }
 
 .site-header-inner {
-  max-width: var(--page-max-width);
-  margin: 0 auto;
-  padding: 0 var(--spacing-20);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2923,11 +2916,9 @@ details.activity li {
 }
 
 .mobile-desk-subbar-track {
-  max-width: var(--page-max-width);
-  margin: 0 auto;
   display: flex;
   gap: 6px;
-  padding: 0 var(--spacing-20);
+  padding: 0 4px;
 }
 
 .mobile-subbar-item {
@@ -3038,19 +3029,6 @@ details.activity li {
   padding: 4px 8px;
   border-radius: 6px;
   line-height: 1;
-}
-
-.mobile-drawer-mode-notice {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-  border-radius: 10px;
-  padding: 10px 12px;
-  font-size: 11px;
-  color: #166534;
-  line-height: 1.4;
 }
 
 .mobile-drawer-cta-card {
@@ -3228,10 +3206,6 @@ details.activity li {
   }
   .site-header-inner {
     height: 56px !important;
-    padding: 0 12px !important;
-  }
-  .mobile-desk-subbar-track {
-    padding: 0 12px !important;
   }
   .nav-brand-name {
     font-size: 15px;
@@ -3288,23 +3262,6 @@ details.activity li {
   }
   .canton-allocate-form {
     flex-direction: column !important;
-  }
-}
-
-/* Compact Phones (< 480px) */
-@media (max-width: 480px) {
-  .live-status-pill {
-    display: none !important;
-  }
-  .site-header-inner {
-    padding: 0 10px !important;
-    gap: 8px !important;
-  }
-  .mobile-desk-subbar-track {
-    padding: 0 10px !important;
-  }
-  .nav-actions {
-    gap: 6px !important;
   }
 }
 

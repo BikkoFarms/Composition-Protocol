@@ -513,19 +513,6 @@ export class DemoStore {
 
   accept(compositionId: string, acceptor: PartyId): Composition {
     const c = this.require(compositionId);
-    if (
-      c.status === "cancelled" ||
-      c.status === "rejected" ||
-      c.status === "expired" ||
-      c.status === "settled" ||
-      c.status === "reverted"
-    ) {
-      throw new Error(`cannot accept: proposal is already ${c.status}`);
-    }
-    if (c.expiresAt && new Date(c.expiresAt).getTime() < Date.now()) {
-      c.status = "expired";
-      throw new Error("cannot accept: proposal has expired");
-    }
     if (!c.counterparties.includes(acceptor)) {
       throw new Error(`${acceptor} is not a counterparty`);
     }
@@ -1086,7 +1073,6 @@ export class DemoStore {
     gov.vetoReason = reason;
     const c = this.require(gov.compositionId);
     c.status = "reverted";
-    c.allocations = []; // release locked allocations
     this._rawMetrics.governanceRejections += 1;
     this._rawMetrics.compositionsReverted += 1;
     this.recordEvent({

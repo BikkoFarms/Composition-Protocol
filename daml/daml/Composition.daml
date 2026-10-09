@@ -135,8 +135,6 @@ template WorkflowProposal
       controller operator, acceptor
       do
         assertMsg "acceptor must be a counterparty" (elem acceptor counterparties)
-        now <- getTime
-        assertMsg "proposal has expired" (now < expiresAt)
         case trackerCid of
           None ->
             create AcceptanceTracker with
@@ -181,23 +179,17 @@ template AcceptanceTracker
           description
 
     -- | Only when every required party has accepted may the agreement be formed.
-    -- Validates that the underlying proposal is still active and has not expired/been cancelled.
     choice FinalizeAgreement : ContractId WorkflowAgreement
       controller operator
       do
         assertMsg "not all counterparties have accepted"
           (Set.isSubsetOf required accepted)
-        proposal <- fetch proposalCid
-        now <- getTime
-        assertMsg "underlying proposal has expired" (now < proposal.expiresAt)
-        archive proposalCid
         create WorkflowAgreement with
           operator
           parties = Set.insert proposer required
           legs
           description
           acceptedBy = accepted
-          governanceRequired = False
 
 -- | Match one posted LegAllocation against one agreed LegSpec.
 -- ANY failed assert aborts the enclosing Settle transaction (no partial commit).
@@ -298,23 +290,12 @@ template WorkflowAgreement
     legs : [LegSpec]
     description : Text
     acceptedBy : Set Party
-    governanceRequired : Bool
   where
     signatory operator
     observer Set.toList parties
     ensure length legs >= 2
 
-    -- | Explicitly enables BitSafe governance control on this agreement.
-    -- Once called, direct Settle choices are locked and settlement must run via GovernedSettlement.
-    choice RequireGovernance : ContractId WorkflowAgreement
-      controller operator
-      do
-        create this with governanceRequired = True
-
     -- | Provider posts a pledge that Settle will match field-by-field.
-    -- Note on asset locking: LegAllocation binds assetCid with wall-clock deadline,
-    -- instrument, and amount verification. If a provider transfers the holding away
-    -- prior to settlement, matchAllocationToLeg fails and reverts cleanly (R-ATOM-2).
     nonconsuming choice AllocateLeg : ContractId LegAllocation
       with
         allocator : Party
@@ -349,8 +330,6 @@ template WorkflowAgreement
         allocationCids : [ContractId LegAllocation]
       controller operator, Set.toList parties
       do
-        assertMsg "governed settlement required: must execute via GovernedSettlement"
-          (not governanceRequired)
         now <- getTime
         matched <- fetchAllocationsByLeg legs allocationCids
         -- R-ALLOC: every allocation must match agreed terms before any Transfer.
@@ -382,8 +361,6 @@ template WorkflowAgreement
         allocationCids : [ContractId LegAllocation]
       controller operator, Set.toList parties
       do
-        assertMsg "governed settlement required: must execute via GovernedSettlement"
-          (not governanceRequired)
         now <- getTime
         matched <- fetchAllocationsByLeg legs allocationCids
         forA_ matched $ \(leg, _allocCid, alloc) -> do
@@ -406,41 +383,6 @@ template WorkflowAgreement
           description
           legSummaries = summaries
           regulators = Set.fromList [regulator]
-
-    -- | Governed settlement execution choice, verified and called exclusively by GovernedSettlement
-    choice SettleGoverned : ContractId SettlementReceipt
-      with
-        governorApprovers : Set Party
-        threshold : Int
-        regulator : Optional Party
-        allocationCids : [ContractId LegAllocation]
-      controller operator, Set.toList parties
-      do
-        assertMsg "governance threshold not met" (Set.size governorApprovers >= threshold)
-        now <- getTime
-        matched <- fetchAllocationsByLeg legs allocationCids
-        forA_ matched $ \(leg, _allocCid, alloc) -> do
-          assertMsg
-            ("allocation match failed: allocation not bound to this agreement on leg " <>
-              leg.legId)
-            (alloc.agreementCid == self)
-          matchAllocationToLeg now leg alloc
-        forA_ matched $ \(leg, allocCid, _alloc) -> do
-          archive allocCid
-          exercise leg.assetCid Transfer with newOwner = leg.receiver
-        let summaries = map (\l -> LegSummary with
-              legId = l.legId
-              instrumentId = l.instrumentId
-              status = LegSettled) legs
-        create SettlementReceipt with
-          operator
-          participants = parties
-          settledAt = now
-          description
-          legSummaries = summaries
-          regulators = case regulator of
-            None -> Set.empty
-            Some reg -> Set.fromList [reg]
 
     choice CancelAgreement : ()
       with
