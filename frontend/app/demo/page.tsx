@@ -101,11 +101,21 @@ export default function SettlementDeskPage() {
       setTrades(newestFirst);
       setGovernances(data.governances);
       setSelectedId((cur) => {
-        if (cur) return cur;
+        if (cur && newestFirst.some((c) => c.id === cur)) return cur;
         const fromUrl =
           typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("id") : null;
         if (fromUrl && newestFirst.some((c) => c.id === fromUrl)) return fromUrl;
-        return newestFirst.find((c) => SETTLEABLE.has(c.status))?.id ?? "";
+        const fromStorage =
+          typeof window !== "undefined" ? sessionStorage.getItem("settleflow_selected_trade_id") : null;
+        if (fromStorage && newestFirst.some((c) => c.id === fromStorage)) return fromStorage;
+        // Priority 1: Trades ready to settle in the active queue
+        const ready = newestFirst.find((c) => SETTLEABLE.has(c.status))?.id;
+        if (ready) return ready;
+        // Priority 2: Governed trades awaiting 2-of-3 votes
+        const governed = newestFirst.find((c) => c.status === "awaiting_governance")?.id;
+        if (governed) return governed;
+        // Priority 3: Fall back to most recent trade (even if settled) so the screen never clears on refresh
+        return newestFirst[0]?.id ?? "";
       });
     } catch (e) {
       setNotice({ kind: "error", title: "Can't load trades", text: friendlyError(String((e as Error).message)) });
@@ -134,6 +144,16 @@ export default function SettlementDeskPage() {
   function select(id: string) {
     setSelectedId(id);
     setNotice(null);
+    if (typeof window !== "undefined") {
+      try {
+        sessionStorage.setItem("settleflow_selected_trade_id", id);
+        const url = new URL(window.location.href);
+        url.searchParams.set("id", id);
+        window.history.replaceState({}, "", url.toString());
+      } catch {
+        // ignore
+      }
+    }
   }
 
   async function act(key: string, fn: () => Promise<Notice | null>) {
@@ -200,6 +220,16 @@ export default function SettlementDeskPage() {
         method: "POST",
         body: JSON.stringify({ withRegulator: true, caller: "Operator" }),
       });
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem("settleflow_selected_trade_id", res.id);
+          const url = new URL(window.location.href);
+          url.searchParams.set("id", res.id);
+          window.history.replaceState({}, "", url.toString());
+        } catch {
+          // ignore
+        }
+      }
       // Governed trades: the "Waiting for BitSafe governors" panel explains the next step
       if (res.status === "awaiting_governance") return null;
       return {
@@ -250,10 +280,10 @@ export default function SettlementDeskPage() {
             <div>
               {noticeEl}
               <p className="flow-section-title">No trade selected</p>
-              {loaded && queue.length === 0 ? (
+              {loaded && trades.length === 0 ? (
                 <>
                   <p style={{ fontSize: 15, marginTop: 0 }}>
-                    No signed trades are waiting for settlement.
+                    No trades on the ledger yet.
                   </p>
                   <ol className="proof-list" style={{ listStyle: "decimal", paddingLeft: 20 }}>
                     <li>
@@ -266,7 +296,30 @@ export default function SettlementDeskPage() {
                   </ol>
                 </>
               ) : (
-                <p className="muted">Pick a signed trade from the queue.</p>
+                <div>
+                  <p className="muted" style={{ marginBottom: 12 }}>
+                    {queue.length > 0
+                      ? "Pick a signed trade from the queue to lock and settle."
+                      : "All current trades are settled or awaiting signatures."}
+                  </p>
+                  {recent.length > 0 && (
+                    <div>
+                      <p style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>Recently settled trades:</p>
+                      <div style={{ display: "grid", gap: 6 }}>
+                        {recent.map((c) => (
+                          <button
+                            key={c.id}
+                            className="trade-card"
+                            onClick={() => select(c.id)}
+                          >
+                            <span className="trade-name">{c.tradeName ?? "Trade"}</span>
+                            <span className="trade-region">#{c.id.slice(0, 8)} · settled ✓</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : (

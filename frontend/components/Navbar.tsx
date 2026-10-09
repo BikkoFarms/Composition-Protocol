@@ -83,9 +83,9 @@ export function Navbar() {
           {/* Desktop & Mobile Top Actions */}
           <div className="nav-actions">
             {/* Live Desk Indicator (Hidden on small mobile) */}
-            <span className="live-status-pill" title="Canton Ledger synchronizer online">
+            <span className="live-status-pill" title="High-fidelity in-memory ledger simulation active">
               <span className="live-pulse-dot" />
-              <span className="live-status-label">Desk online</span>
+              <span className="live-status-label">Memory ledger only</span>
             </span>
 
             {/* Canton Wallet & Identity Switcher */}
