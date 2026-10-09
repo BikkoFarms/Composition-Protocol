@@ -772,4 +772,13 @@ describe("Settleflow demo gates", () => {
     assert.ok(lender.visibleTokens.length > 0);
     assert.ok(lender.visibleTokens.every((t) => goldAssets.has(t.contractId)));
   });
+
+  it("cancelled proposal cannot be accepted into an agreement (mirrors FinalizeAgreement)", () => {
+    const c = store.proposeTradeFinance({ templateId: "coffee" });
+    store.accept(c.id, "Bob");
+    store.cancel(c.id, "Alice");
+    assert.throws(() => store.accept(c.id, "Oracle"), /cannot accept: proposal is cancelled/);
+    assert.equal(store.require(c.id).status, "cancelled");
+    assert.equal(store.require(c.id).agreementCid, null);
+  });
 });

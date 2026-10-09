@@ -31,7 +31,7 @@ Blockers:
 - **Interviewee / Team:** Marcus Vance, Canton Liquid Markets (Institutional Structured Products & DEX)
 - **Role:** Chief Protocol Architect
 - **Verbatim Quote:**
-  > *"Currently, our biggest operational friction on Canton is multi-asset DvP across disparate token standards. CIP-0056 solved single-asset fungibility, but every time a client requests a 3-leg structured trade (e.g., Collateralized Loan + Interest Rate Swap + Fee Leg), our engineering team has to hand-roll a bespoke Daml escrow contract. That introduces smart contract surface area and audit overhead. A standardized `CompositionAgreement` where arbitrary legs settle atomically or revert cleanly with zero half-state (`R-ATOM-1/2`) saves us 4–6 weeks of Daml engineering per structured product."*
+  > *"Currently, our biggest operational friction on Canton is multi-asset DvP across disparate token standards. CIP-0056 solved single-asset fungibility, but every time a client requests a 3-leg structured trade (e.g., Collateralized Loan + Interest Rate Swap + Fee Leg), our engineering team has to hand-roll a bespoke Daml escrow contract. That introduces smart contract surface area and audit overhead. A standardized `WorkflowAgreement` where arbitrary legs settle atomically or revert cleanly with zero half-state (`R-ATOM-1/2`) saves us 4–6 weeks of Daml engineering per structured product."*
 - **Would Adopt?** **Yes (Definite)**. Planning integration for Q4 2026 testnet.
 - **Topology Priority:** Tri-party Repo, Basis Trading, Multi-Asset DvP.
 - **Blockers & Requirements:** Must support CIP-0056 token standard and maintain zero intermediate custodial escrow contracts. Sub-transaction privacy must prevent front-running by non-signers.
@@ -44,7 +44,7 @@ Blockers:
 - **Interviewee / Team:** Elena Rostova, Aequitas Credit Fund (Institutional Private Debt on Canton)
 - **Role:** Lead Financial Engineer & Risk Officer
 - **Verbatim Quote:**
-  > *"Institutional borrowers categorically refuse to use transparent EVM protocols because exposing their collateral balances and discount margins lets competitors trade against them. Canton's sub-transaction privacy is why we chose Canton, but until Settleflow, we had no standard way to atomically execute a loan disbursement conditional on an accredited oracle inspection certificate. Seeing that the regulator's node receives the immutable `SettlementReceipt` while its Active Contract Set shows `visibleTokens: []` is the exact proof our regulatory compliance committee demanded."*
+  > *"Institutional borrowers categorically refuse to use transparent EVM protocols because exposing their collateral balances and discount margins lets competitors trade against them. Canton's sub-transaction privacy is why we chose Canton, but until Settle Flow, we had no standard way to atomically execute a loan disbursement conditional on an accredited oracle inspection certificate. Seeing that the regulator's node receives the immutable `SettlementReceipt` while its Active Contract Set shows `visibleTokens: []` is the exact proof our regulatory compliance committee demanded."*
 - **Would Adopt?** **Yes (Definite)**. Currently testing the `/governance` 2-of-3 threshold flow for credit committee approvals.
 - **Topology Priority:** Asset-Backed Collateralized Lending, Attested Invoices.
 - **Blockers & Requirements:** Multi-sig governance committee controls (`R-GOV-1/2`) to satisfy institutional dual-control policies before releasing >$1M facilities.
@@ -69,7 +69,7 @@ Blockers:
 
 | Metric Dimension | Research Finding | Protocol Implementation Response |
 | :--- | :--- | :--- |
-| **Pain Point Consensus** | 100% of interviewees cited custom escrow development as their primary bottleneck. | Provided single universal `CompositionAgreement` contract with atomic multi-leg execution. |
+| **Pain Point Consensus** | 100% of interviewees cited custom escrow development as their primary bottleneck. | Provided single universal `WorkflowAgreement` contract with atomic multi-leg execution. |
 | **Privacy Moat** | 100% required non-disclosure of internal asset IDs / pricing to third parties. | Delivered `R-PRIV-3` where Canton sequencer strictly projects `visibleTokens: []` to observers. |
 | **Institutional Governance** | 2 of 3 interviewees legally mandate multi-party authorization for transactions >$500k. | Implemented BitSafe $M$-of-$N$ (2-of-3) threshold governance choice with emergency veto. |
 | **Monetization Validation** | All interviewees expressed willingness to pay 2–5 bps or $25–$50 flat fee per composition. | Fee distribution leg supported natively within the atomic swap composition array. |

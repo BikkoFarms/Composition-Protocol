@@ -1,12 +1,12 @@
-# Contributing to Settleflow
+# Contributing to Settle Flow
 
-Welcome to **Settleflow**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
+Welcome to **Settle Flow**! This guide is for any engineer, architect, or contributor joining the repository. It outlines our architectural philosophy, what has been built, what remains on the roadmap, potential risks, and the rules of engagement.
 
 ---
 
 ## 1. Quick Onboarding & Architecture Map
 
-Settleflow is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
+Settle Flow is an atomic, private, multi-asset settlement primitive built on Canton for **HackCanton Season 3** (Track 1: RWA & Business Workflows primary; BitSafe Decentralization Challenge secondary).
 
 ```
 Composition-Protocol/
@@ -39,23 +39,28 @@ Composition-Protocol/
 
 ## 2. Status Matrix: What Has Been Done vs. What Hasn't
 
-### What HAS Been Built and Verified (Production Ready)
+### What HAS Been Built (and how it is proven)
 
-| Feature / Subsystem | Status | Verification Gate |
+Two layers are tested separately: **Daml Script** tests prove the contracts; **Node** tests prove the in-memory demo engine that the hosted site runs. The hosted site is **not** connected to a Canton ledger.
+
+| Feature / Subsystem | Status | Proof |
 | :--- | :---: | :--- |
-| **Daml Smart Contracts** | Complete | [Composition.daml](daml/daml/Composition.daml), [Governance.daml](daml/daml/Governance.daml), [ComposableAsset.daml](daml/daml/ComposableAsset.daml), [MockToken.daml](daml/daml/MockToken.daml) |
-| **Single-Tx Atomicity (`R-ATOM-1/2`)** | Complete | Verified: All transfer legs execute in 1 transaction; failed legs abort with zero half-states (`testAtomicSwap`, `testAtomicRevert`). |
-| **Canton Sub-Transaction Privacy (`R-PRIV-1/2/3`)** | Complete | Verified: Regulator Active Contract Set contains `visibleTokens: []` and only `SettlementReceipt` (`testAuditorCannotSeeLegs`). |
-| **BitSafe M-of-N Governance (`R-GOV-1/2`)** | Complete | Verified: 2-of-3 committee rejects below threshold and executes once threshold is met (`testGovernedBelowThreshold`, `testGovernedAtThreshold`). |
-| **Institutional Safety (Veto & Circuit Breaker)** | Complete | Verified: `EmergencyVeto` choice allows governors to abort deals; `ProtocolCircuitBreaker` pauses settlements during halts. |
-| **Cryptographic Deal Digests & LTV Engine** | Complete | Verified: 64-char SHA-256 deal hash computed for every deal; automated LTV and 1300% collateral coverage calculation. |
-| **Canton JSON Ledger API v2 Client** | Complete | [backend/src/ledger.ts](backend/src/ledger.ts) handles `/v2/commands/submit-and-wait`, active-contracts queries, and Keycloak OIDC caching. |
-| **Mission Control Admin Console** | Complete | [frontend/app/admin/page.tsx](frontend/app/admin/page.tsx) with live latency ping, mode toggles, treasury minting, and state resets. |
-| **Commodity Oracle & Attestation Service** | Complete | [mocks/oracle/server.mjs](mocks/oracle/server.mjs) serving dynamic spot prices and HMAC-SHA256 signed inspection certificates. |
-| **Automated Test Gates** | 22/22 Passing | `npm test` (or `cd backend && npm test`) — includes allocation mismatch + allocate→settle. |
-| **Live E2E Socket Suite** | 13/13 Passing | `npm run test:e2e` verifying live integration across backend & oracle. |
-| **Frontend Production Build** | 11/11 Static Routes | `npm run build` compiled with 0 errors. |
-| **Operational Manuals** | Complete | [DEPLOYMENT.md](DEPLOYMENT.md) & [TESTING.md](TESTING.md) available in root. |
+| **Daml Smart Contracts** | Complete | [Composition.daml](daml/daml/Composition.daml), [Governance.daml](daml/daml/Governance.daml), [ComposableAsset.daml](daml/daml/ComposableAsset.daml), [MockToken.daml](daml/daml/MockToken.daml) — 27/27 Daml Script tests (`cd daml && daml test`). |
+| **Single-Tx Atomicity (`R-ATOM-1/2`)** | Ledger-enforced | All legs transfer in one transaction; a failed leg aborts all (`testAtomicSwap`, `testAtomicRevert`). |
+| **Allocation Matching (`R-ALLOC`)** | Ledger-enforced | Every pledge is matched field by field and re-checked against the live asset at settle (`testAllocHappyPath3PartyDvp`, partial / withdrawn / unauthorized tests). Note: an allocation does not lock the asset; if the provider moves it, settlement reverts. |
+| **Regulator-Blind Receipts (`R-PRIV-3`)** | Ledger-enforced | Regulator ACS holds `SettlementReceipt` only, no tokens, amounts or asset IDs (`testAuditorCannotSeeLegs`). Counterparties on a deal *do* see every leg's terms. |
+| **BitSafe M-of-N Governance (`R-GOV-1/2`)** | Ledger-enforced | Approvals are governor-signed `GovernorApproval` contracts; governed agreements settle only via `SettleGoverned` at threshold (`testGovernedBelowThreshold`, `testGovernedAtThreshold`, `testGovernedCannotSkipGovernance`, `testOperatorCannotForgeApproval`, `testDuplicateApprovalCountsOnce`). |
+| **Emergency Veto** | Ledger-enforced | Any one governor's veto archives the agreement; it cannot be settled afterwards (`testEmergencyVeto`). |
+| **Circuit Breaker** | Ledger-enforced | Every settle path checks the live breaker (co-signed by operator + governors) and aborts while halted (`testCircuitBreaker`, `testHaltedBreakerBlocksSettle`). |
+| **Proposal lifecycle** | Ledger-enforced | Cancelled, rejected or expired proposals cannot become agreements (`testCancelledProposalCannotFinalize`, `testExpiredProposalCannotFinalize`). |
+| **Deal Digests & LTV** | Demo engine | SHA-256 deal hash and collateral cover computed in `demoStore.ts` (off-ledger). |
+| **Canton JSON Ledger API v2 Client** | Implemented, not hosted | [backend/src/ledger.ts](backend/src/ledger.ts) / [ledgerWorkflow.ts](backend/src/ledgerWorkflow.ts): `/v2/commands/submit-and-wait`, ACS queries, Keycloak OIDC. Not exercised by the hosted demo. |
+| **Mission Control Admin Console** | Complete | [frontend/app/admin/page.tsx](frontend/app/admin/page.tsx): latency ping, mode display, treasury minting (demo), state resets. |
+| **Commodity Oracle** | Mock | [mocks/oracle/server.mjs](mocks/oracle/server.mjs): simulated spot prices and HMAC-SHA256 signed inspection certificates. |
+| **Demo-engine Test Gates** | 42/42 passing | `cd backend && npm test` |
+| **Smoke test** | 17/17 passing | `npm run test:smoke` against a running API |
+| **Frontend Production Build** | Passing | `npm run build` |
+| **Operational Manuals** | Complete | [DEPLOYMENT.md](DEPLOYMENT.md) & [TESTING.md](TESTING.md) |
 
 ---
 
@@ -63,10 +68,15 @@ Composition-Protocol/
 
 | Roadmap Item | Priority | Target Milestone | Description |
 | :--- | :---: | :---: | :--- |
+| **Host the demo on a Canton ledger** | High | Post-Hackathon v1.0 | Run the hosted backend in `ledger` mode against a DevNet participant with the DAR uploaded (Mode C). |
+| **Real CIP-56 assets** | High | Post-Hackathon v1.0 | Replace `MockToken` with Splice token-standard holdings / allocations (today they are mocks behind a CIP-56-shaped interface). |
+| **Per-leg privacy between counterparties** | Medium | Post-Hackathon v1.1 | Today every counterparty observes the whole agreement (all leg amounts); split disclosure per leg. |
+| **Asset locking on allocation** | Medium | Post-Hackathon v1.1 | Lock the pledged holding when a leg is allocated (today settlement re-checks the live asset and reverts if it moved). |
+| **Wallet (CIP-103) & 5N ID KYC** | Medium | Post-Hackathon v1.1 | The navbar identity panel is simulated; integrate real wallet connection and KYC credentials. |
 | **Hardware Security Module (HSM) KMS Signer** | High | Post-Hackathon v1.1 | Integrate AWS KMS / Vault for institutional party signing keys rather than software OIDC passwords. |
 | **Dynamic Canton Sequencer Failover** | Medium | Post-Hackathon v1.2 | Multi-sequencer Canton domain client to automatically route around degraded sequencer nodes. |
 | **Formal Property-Based Daml Verification** | Medium | Post-Hackathon v1.2 | QuickCheck / Daml property tests for unbounded multi-leg permutations ($>10$ legs). |
-| **On-Chain Legal Agreement Wrapper** | Low | Post-Hackathon v2.0 | Standardized ISDA/EFET Master Agreement hash anchoring in `CompositionProposal`. |
+| **On-Chain Legal Agreement Wrapper** | Low | Post-Hackathon v2.0 | Standardized ISDA/EFET Master Agreement hash anchoring in `WorkflowProposal`. |
 | **Native Mobile App (iOS / Android)** | Low | Post-Hackathon v2.0 | React Native companion app for field commodity warehouse inspectors. |
 
 ---
@@ -76,13 +86,13 @@ Composition-Protocol/
 When writing code or submitting Pull Requests, every contributor must uphold the **Core Protocol Invariants**:
 
 1. **`R-ATOM-1` (Single Transaction Settlement):**
-   All asset transfers in a deal must execute inside a single Daml transaction choice (`CompositionAgreement.Settle` or `SettleWithRegulator`). Never split transfers across multiple asynchronous transactions.
+   All asset transfers in a deal must execute inside a single Daml transaction choice (`WorkflowAgreement.Settle`, `SettleWithRegulator` or `SettleGoverned`, via `runSettlement`). Never split transfers across multiple asynchronous transactions.
 2. **`R-ATOM-2` (Zero Half-States):**
    If any leg fails (due to insufficient balance, spent contract, or invalid controller), the entire transaction must abort and revert cleanly. Counterparties must retain their original assets.
-3. **`R-PRIV-1/2/3` (Observer Scoping / The Money Shot):**
-   Privacy is enforced via Canton `signatory` and `observer` boundaries. The regulator's Active Contract Set (ACS) must contain the `SettlementReceipt` and **strictly 0 token contracts (`visibleTokens: []`)**. Never use UI-layer filtering as a privacy mechanism.
+3. **`R-PRIV-3` (Observer Scoping / The Money Shot):**
+   Visibility is enforced via Canton `signatory` and `observer` boundaries. Counterparties on a deal observe all its legs; only the regulator is blinded. The regulator's Active Contract Set (ACS) must contain the `SettlementReceipt` and **strictly 0 token contracts (`visibleTokens: []`)**. Never use UI-layer filtering as a privacy mechanism.
 4. **`R-GOV-1/2` (BitSafe M-of-N Governance):**
-   Governed settlements must strictly reject execution if approved signatures are less than threshold $M$, and execute atomically once the threshold is satisfied.
+   Governed agreements must settle only through `SettleGoverned`, which counts distinct governor-signed `GovernorApproval` contracts: reject below threshold $M$, execute atomically at $M$. Never let the operator record approvals on a governor's behalf.
 5. **Dual-Mode Graceful Fallback:**
    The backend must support both Live Canton Ledger mode (`LEDGER_MODE=ledger`) and the local high-fidelity engine (`demoStore`) for instant offline testing.
 

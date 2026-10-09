@@ -59,7 +59,7 @@ export function Navbar() {
             <BrandMark size={30} />
             <span className="nav-brand-text">
               <span className="nav-brand-name">Settle Flow</span>
-              <span className="nav-brand-tag">Canton DvP</span>
+              <span className="nav-brand-tag">Settlement demo</span>
             </span>
           </Link>
 
@@ -212,7 +212,7 @@ export function Navbar() {
             <div className="mobile-drawer-footer">
               <div className="mobile-drawer-network-status">
                 <span className="live-pulse-dot" />
-                <span>Canton DevNet Node · Synchronized</span>
+                <span>Demo mode · in-memory engine (not a ledger)</span>
               </div>
               <div className="mobile-drawer-ext-links">
                 <a

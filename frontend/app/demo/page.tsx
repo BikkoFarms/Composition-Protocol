@@ -415,7 +415,7 @@ export default function SettlementDeskPage() {
                                 className="ghost sm"
                                 disabled={busy !== null}
                                 onClick={() => tryWrongAmount(leg)}
-                                aria-label="Try to lock the wrong amount and watch the ledger refuse it"
+                                aria-label="Try to lock the wrong amount and watch it be refused"
                               >
                                 {busy === `check-${leg.legId}` ? "Checking…" : "Try wrong amount"}
                               </button>

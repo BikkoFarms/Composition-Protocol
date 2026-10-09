@@ -165,11 +165,11 @@ export default function GovernancePage() {
           BitSafe · 2-of-3
           <span className="pill-arrow">→</span>
         </span>
-        <h1 className="page-title">No single key can settle a high-value trade</h1>
+        <h1 className="page-title">High-value trades need 2 of 3 governors</h1>
         <p className="lede">
           Normally one operator presses Settle. For trades the Exporter marks as
-          high-value, settlement needs 2 of 3 independent governors instead.
-          One approval is refused on-ledger, and any governor can veto.
+          high-value, settlement also needs 2 of 3 independent governors.
+          One approval is not enough, and any governor can veto.
         </p>
       </div>
 
@@ -178,16 +178,18 @@ export default function GovernancePage() {
           <h2>What BitSafe adds to the flow</h2>
           <ul className="proof-list">
             <li>
-              <strong>No single point of failure.</strong> A mistaken or compromised operator
-              can&apos;t push money out alone. (Citibank wired $894M by mistake in 2020 as a
-              single loan agent.)
+              <strong>No single point of failure.</strong> The operator cannot settle a
+              governed trade alone, and cannot forge a governor&apos;s approval: each approval is
+              a contract signed by that governor.
             </li>
             <li>
-              <strong>Enforced, not advisory.</strong> Execution below the threshold is
-              rejected by the ledger (R-GOV-1). At the threshold it settles atomically (R-GOV-2).
+              <strong>Enforced in the Daml contracts.</strong> A governed agreement can
+              only settle through the threshold check (R-GOV-1 / R-GOV-2), proven by Daml Script
+              tests. This page runs the demo engine, which mirrors those rules.
             </li>
             <li>
-              <strong>Veto.</strong> Any named governor can stop a deal before it settles.
+              <strong>Veto.</strong> Any named governor can stop a deal before it settles;
+              the agreement is archived, so nothing can settle it afterwards.
             </li>
           </ul>
         </div>
@@ -312,7 +314,7 @@ export default function GovernancePage() {
                     </button>
                     {gov.approvals.length < gov.threshold && (
                       <span className="muted" style={{ fontSize: 13 }}>
-                        Trying early shows the ledger refusing it.
+                        Trying early shows it being refused.
                       </span>
                     )}
                   </div>

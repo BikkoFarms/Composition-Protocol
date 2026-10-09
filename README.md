@@ -1,17 +1,29 @@
 # Settle Flow
 
-**Trade-level settlement coordination on Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, on top of CIP-0056.  
-Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / USDCx / cETH).
+**Trade-level settlement coordination for Canton** — Propose → Accept → Allocate → Settle for multi-party DvP, modelled on CIP-0056 allocations.
+Demonstrated through African commodity trade-finance trades (cocoa, coffee, cashew, gold, shea, sesame, cotton and an FX swap) using **mock tokens shaped like CIP-56 holdings**.
 
 [![HackCanton Season 3](https://img.shields.io/badge/HackCanton-Season%203-blue.svg)](https://hackcanton.devpost.com/)
 [![Track](https://img.shields.io/badge/Track-Track%201%20(RWA%20%26%20Business%20Workflows)-emerald.svg)](#track-details)
 [![Challenge](https://img.shields.io/badge/Secondary-BitSafe%20Decentralization%20Challenge-purple.svg)](#bitsafe-decentralization-challenge)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-> 🚀 **Live Production Deployments on Render**:
+> **Hosted demo (Render) — runs in demo mode.** The hosted backend uses an in-memory engine that mirrors the Daml contracts' rules; it is **not connected to a Canton ledger** (`/health` returns `"mode":"demo"`). The Daml contracts themselves are built and tested with Daml Script (see §6), and a DevNet ledger path is documented in Mode C.
 > - **Web Application**: [https://settleflow-frontend.onrender.com](https://settleflow-frontend.onrender.com)
-> - **API Gateway**: [https://settleflow-backend-zcp7.onrender.com](https://settleflow-backend-zcp7.onrender.com) (`/health`, `/compositions`, `/audit/money-shot`)
-> - **Commodity Oracle**: [https://settleflow-oracle.onrender.com](https://settleflow-oracle.onrender.com) (`/health`, `/price?symbol=COCOA`, `/attest`)
+> - **API (demo mode)**: [https://settleflow-backend-zcp7.onrender.com](https://settleflow-backend-zcp7.onrender.com) (`/health`, `/compositions`, `/audit/money-shot`)
+> - **Mock commodity oracle**: [https://settleflow-oracle.onrender.com](https://settleflow-oracle.onrender.com) (`/health`, `/price?symbol=COCOA`, `/attest`)
+
+### What is real today (honest scope)
+
+| Piece | Status |
+|:---|:---|
+| Daml contracts (`daml/`) | **Real.** 27 Daml Script tests pass, including ledger-enforced BitSafe governance, circuit breaker and veto. |
+| Atomic settlement + field-by-field allocation matching | **Real, on the ledger** (`WorkflowAgreement`, `matchAllocationToLeg`). |
+| Regulator-blind receipts | **Real, on the ledger** (`testAuditorCannotSeeLegs`). |
+| Hosted website + API | **Demo mode** — in-memory engine mirroring the contract rules; not a Canton ledger. |
+| DevNet / Canton ledger path | Code present (`backend/src/ledger.ts`, `ledgerWorkflow.ts`, Mode C); **not what the hosted demo runs**. |
+| Tokens (CBTC, USDCx, cETH, …) | **Mocks** (`MockToken`) behind a CIP-56-shaped interface (`ComposableAsset`); not the Splice token standard. |
+| Wallet / KYC panel in the navbar | **Simulated UI** for demo roles; no wallet SDK or 5N ID integration yet. |
 
 > **"Adopt this instead of writing it."** CIP-0056 owns per-leg allocations; Settle Flow owns the trade. The trade-finance desk is the demo that gives it a face.
 
@@ -23,17 +35,17 @@ Demonstrated through a 3-party African commodity trade-finance specimen (CBTC / 
 
 While **CIP-0056** made digital assets portable and defined **per-leg allocations** (execute / withdraw / cancel), apps still hand-write the **trade**: one deal object, allocation matching, readiness across legs, who may execute or cancel, and failure cleanup. Atomic multi-leg settlement is already a Canton capability — it is not Settle Flow’s differentiator.
 
-**Settle Flow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, BitSafe M-of-N execute/cancel, and ledger-enforced per-party privacy (`SettlementReceipt` for auditors; legs stay off their ACS).
+**Settle Flow** is the reusable coordination package: multi-party accept gating, field-level allocation matching, ledger-enforced BitSafe M-of-N execute/cancel, and regulator-blind receipts (`SettlementReceipt` for auditors; leg contracts never reach their ACS). Counterparties on a deal see that deal's full terms.
 
 ### Hackathon Tracks
 - **Primary Track — Track 1 (RWA & Business Workflows):** Multi-asset atomic settlement primitive solving DvP, trade-finance collateralization, and multi-party asset orchestration without trusted central escrow.
-- **Secondary Challenge — BitSafe Decentralization Challenge:** M-of-N governed multi-sig settlement control (`GovernedSettlement`) ensuring transactions require threshold consensus prior to atomic execution.
+- **Secondary Challenge — BitSafe Decentralization Challenge:** M-of-N governed settlement. Each approval is a `GovernorApproval` contract signed by the governor itself, and a governed agreement can only settle through `SettleGoverned` once the threshold of distinct signed approvals is met.
 - **Team:** Revotoken Africa.
 
 ### Reference Use Case: African Commodity Trade Finance (3 Legs)
 ```
              ┌─────────────────────────┐
-             │       Settleflow        │
+             │       Settle Flow       │
              └───────────┬─────────────┘
                          │
      ┌───────────────────┼───────────────────┐
@@ -73,11 +85,11 @@ The protocol is structured across four decoupled architectural tiers:
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Canton JSON Ledger API v2 (:7575)
 ┌───────────────────────────────────▼────────────────────────────────────┐
-│ L3: Canton Ledger & Daml Smart Contracts (Daml 3.x / Target 2.1)       │
-│  • ComposableAsset (CIP-0056 Interface) & MockToken                    │
-│  • CompositionProposal, AcceptanceTracker, CompositionAgreement        │
-│  • SettlementReceipt (scopable observer proof)                         │
-│  • GovernedSettlement & GovernanceFactory (BitSafe M-of-N)             │
+│ L3: Daml Smart Contracts (Daml 3.x / Target 2.1)                       │
+│  • ComposableAsset (CIP-56-shaped interface) & MockToken (demo tokens) │
+│  • WorkflowProposal, AcceptanceTracker, WorkflowAgreement              │
+│  • SettlementReceipt (regulator-blind proof)                           │
+│  • GovernedSettlement, GovernorApproval, ProtocolCircuitBreaker        │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Event / HTTP
 ┌───────────────────────────────────▼────────────────────────────────────┐
@@ -90,28 +102,35 @@ The protocol is structured across four decoupled architectural tiers:
 ### Layer Details
 1. **L1 UI (Client Layer):** Role-tailored dashboards built with Next.js 15, React, and CSS variables. Emphasizes live state polling, clear stakeholder role separation, and the regulator "money shot".
 2. **L2 Backend (Acceptance Tracker & Bridge):** Express server on port `:4000`. Tracks counterparties' acceptances before settlement eligibility. Includes `ledger.ts` (JSON Ledger API v2 client) with graceful fallback to `demoStore.ts` for rapid local testing without a Canton node.
-3. **L3 Canton Ledger (Smart Contracts):** Daml 3.x contracts deployed on Canton. Executes atomic multi-leg transfers in a single transaction choice (`Settle`) and emits observer-partitioned receipts.
-4. **L4 Mocks (Ecosystem Services):** Node.js Oracle service on port `:4002` publishing live price and inspection grade feeds; mock token contracts implementing `ComposableAsset`.
+3. **L3 Daml Contracts:** Daml 3.x contracts, built and tested with Daml Script and deployable to a Canton participant (Mode C). They execute atomic multi-leg transfers in a single transaction and emit regulator-blind receipts. The hosted demo does not run against them; its in-memory engine mirrors their rules.
+4. **L4 Mocks (Ecosystem Services):** Mock oracle service on port `:4002` with simulated price feeds and HMAC-signed attestations; mock token contracts implementing `ComposableAsset`.
 
 ---
 
 ## 3. Core Technical Guarantees
 
 ### 3.1 Absolute Atomicity (`R-ATOM-1`, `R-ATOM-2`)
-- **Single Daml Transaction (`R-ATOM-1`):** All settlement legs are executed in a single atomic Daml choice (`CompositionAgreement.Settle`).
+- **Single Daml Transaction (`R-ATOM-1`):** All settlement legs are executed in a single atomic Daml choice (`WorkflowAgreement.Settle` / `SettleWithRegulator` / `SettleGoverned`, all via one shared `runSettlement`).
 - **Zero Half-Settled States (`R-ATOM-2`):** Daml transaction semantics ensure that if any transfer choice within the loop fails (e.g., token already spent, insufficient authorization, contract mismatch), the **entire transaction reverts**. No party loses their assets, and intermediate states cannot persist on ledger.
 
-### 3.2 Per-Leg Stakeholder Privacy (`R-PRIV-1`, `R-PRIV-2`, `R-PRIV-3`)
-- **Cryptographic Exclusion (`R-PRIV-1` / `R-PRIV-2`):** Privacy is enforced at the sub-transaction protocol level using Canton's `signatory` and `observer` rules—**never via UI filtering**.
-- **The "Money Shot" (`R-PRIV-3`):** Auditors and regulators are granted observer rights solely to `SettlementReceipt` (verifying settlement occurred, timestamps, and aggregate leg IDs). Their Active Contract Set (ACS) contains **zero** leg payloads or token contracts:
+### 3.2 Regulator-Blind Receipts and Stakeholder Scoping (`R-PRIV-2`, `R-PRIV-3`)
+- **How visibility works:** Canton's `signatory` / `observer` rules decide who receives each contract — not UI filtering.
+- **The "Money Shot" (`R-PRIV-3`):** Auditors and regulators observe only `SettlementReceipt` (settlement happened, when, leg IDs, instruments and status — no amounts, no asset IDs). Their Active Contract Set holds **zero** leg payloads or token contracts:
   $$\text{Regulator ACS} \implies \texttt{visibleTokens: []}, \quad \texttt{settlementReceipts: [receipt]}$$
+- **Parties outside the deal** see nothing about it.
+- **What is *not* private (yet):** every counterparty on a deal (and its governors, for governed deals) observes the `WorkflowAgreement`, which carries every leg's terms — for example the Oracle can see the cash leg's amount. Per-leg privacy *between counterparties* would need per-leg disclosure and is on the roadmap.
 
-### 3.3 BitSafe M-of-N Decentralized Governance (`R-GOV-1`, `R-GOV-2`)
-- **Below-Threshold Rejection (`R-GOV-1`):** Settlement wrapped in `GovernedSettlement` strictly fails if attempted with fewer than $M$ approvals.
-- **Threshold Execution (`R-GOV-2`):** Once $M$ of $N$ designated governors approve, execution completes atomically and dispatches `SettlementReceipt`.
+### 3.3 BitSafe M-of-N Governance (`R-GOV-1`, `R-GOV-2`) — enforced on the ledger
+- **Governance is part of the deal:** the proposal can carry `GovernanceTerms` (governors, threshold), which flow into the `WorkflowAgreement`. A governed agreement **refuses** plain `Settle` / `SettleWithRegulator`; it can only settle via `SettleGoverned` (`testGovernedCannotSkipGovernance`).
+- **Approvals are signed by governors:** each approval is a `GovernorApproval` contract whose only signatory is the governor, so the operator cannot create one on a governor's behalf (`testOperatorCannotForgeApproval`). Duplicate approvals from one governor count once (`testDuplicateApprovalCountsOnce`).
+- **Below-Threshold Rejection (`R-GOV-1`):** fewer than $M$ distinct signed approvals → settlement is rejected (`testGovernedBelowThreshold`).
+- **Threshold Execution (`R-GOV-2`):** at $M$ of $N$, settlement completes atomically (`testGovernedAtThreshold`). Cancel uses the same M-of-N rule.
+- **Emergency veto:** any single governor's `EmergencyVeto` archives the agreement, so it can no longer be settled by any path (`testEmergencyVeto`).
+- **Circuit breaker:** every settle path must present the live `ProtocolCircuitBreaker` and aborts while it is halted. The breaker is co-signed by the operator and its governors (so the operator cannot mint a fresh "not halted" one), any single governor can halt it, and for governed deals its governors must match the deal's (`testCircuitBreaker`, `testHaltedBreakerBlocksSettle`).
+- **Known limit:** the operator remains a required co-signer of settlement (it cannot settle alone, but it can refuse to). Ungoverned deals accept any breaker co-signed by this operator and its governors.
 
 ### 3.4 Multi-Party Entity Co-Signing & Independent Confirmation Workflow
-In Settle Flow, **every participant is an autonomous cryptographic identity** on Canton:
+On a Canton ledger each role is its own party and must sign for itself. In the hosted demo the roles are simulated and you switch between them in the UI:
 - **Exporter (`Alice`):** Originates the deal terms and proposes the composition.
 - **Lender (`Bob`):** Institutional credit provider who must independently review terms and collateral before committing cash.
 - **Oracle (`Oracle`):** Price & inspection authority who validates commodity grade and valuation.
@@ -121,25 +140,22 @@ In Settle Flow, **every participant is an autonomous cryptographic identity** on
    - **Step 1 (Propose):** Alice proposes on the Exporter Desk (`/proposer`). The deal enters `proposed` status.
    - **Step 2 (Lender Review & Co-Sign):** Bob inspects the trade on the Lender Desk (`/counterparty`) and clicks **`[Accept as Bob]`** (or **`[Reject Trade]`**). Status updates to `partially_accepted`.
    - **Step 3 (Oracle Attestation):** Oracle inspects the trade on `/counterparty` (or an automated bot daemon) and clicks **`[Accept as Oracle]`**.
-   - **Step 4 (Agreement Formation):** Only once **all** counterparties have signed does the Daml ledger form the legally binding `CompositionAgreement`.
-   - **Step 5 (Lock & Settle):** Parties lock their pledged assets (`LegAllocation`), and atomic settlement (`Settle`) is unlocked.
-2. **Accelerated Evaluation Shortcut (`/demo`):**
-   - The Settlement Desk (`/demo`) contains an automated evaluation runner (`/compositions/demo/open-desk`) built specifically for evaluators and hackathon judges to experience atomic allocation matching without having to switch browser sessions across 3 roles.
+   - **Step 4 (Agreement Formation):** Only once **all** counterparties have signed — and the proposal is still live (not cancelled, rejected or expired) — is the `WorkflowAgreement` formed.
+   - **Step 5 (Lock & Settle):** On the Settlement desk (`/demo`), each party posts its `LegAllocation`; atomic settlement is unlocked once every leg matches. Governed trades go to the BitSafe desk (`/governance`).
+2. **API shortcuts (load tests only):**
+   - `POST /compositions/demo/open-desk` and `/demo/run-full` sign on behalf of every party. They exist for the Activity page's load test and automated scripts; the desks never use them.
 
-### 3.5 Canton Web3 Wallet & Identity Management (CIP-103)
-Aligned with the official [Canton Developer Hub](https://dev-hub.canton.foundation/) and [Canton Documentation](https://docs.canton.network/):
-- **CIP-0103 dApp API Integration:** Connect using official browser extensions including **PartyLayer (CIP-103)**, **PixelPlex Console Wallet** (`@console-wallet/dapp-sdk`), **5North Loop Wallet**, **Splice Wallet Kernel**, or **WalletConnect**.
-- **Canton Multihash Party IDs:** Full support for deterministic Canton party identifiers (`hint::1220<sha256>`) with 1-click clipboard copy.
-- **Participant User Management:** Real-time party switcher in the top navigation allowing instant switching between Alice, Bob, Oracle, Operator, and Regulator.
-- **Live Node Telemetry:** Live round-trip millisecond latency ping against Canton Ledger API v2 participant nodes (`/v2/state/ledger-end`) and Keycloak OIDC direct-grant status.
-- **On-Chain KYC Credentials:** Integrated with **Five North ID SDK (5N ID)** for verifiable institutional compliance.
+### 3.5 Identity panel (simulated in demo mode)
+- **Role switcher:** the navbar panel switches the demo role (Alice, Bob, Oracle, Operator, Regulator) and shows Canton-style party IDs (`hint::1220<sha256>`).
+- **Node ping:** the Admin page measures round-trip latency to a Canton Ledger API v2 endpoint (`/v2/state/ledger-end`).
+- **Not integrated yet (roadmap):** CIP-103 wallet connection (PartyLayer, Console Wallet, Loop, Splice Wallet Kernel, WalletConnect) and Five North ID KYC. The panel links to these projects; the "verified/cleared" badges are demo placeholders.
 
 ---
 
 ## 4. Repository Structure
 
 ```
-composition-protcol/          # repo root (Settleflow)
+composition-protcol/          # repo root (Settle Flow; Daml package name: composition)
 ├── .ai/                      # AI agent rules, capabilities, skill definitions
 ├── daml/                     # Daml 3.x contracts + Script gates
 │   └── daml/
@@ -152,12 +168,12 @@ composition-protcol/          # repo root (Settleflow)
 ├── backend/                  # Express API & Ledger API v2 bridge (:4000)
 │   └── src/
 │       ├── demoStore.ts      # Demo ACS + allocation matching
-│       ├── demoStore.test.ts # Node test gates (22)
+│       ├── demoStore.test.ts # Node test gates (42)
 │       ├── ledger.ts
 │       └── routes/
-├── frontend/                 # Next.js 15 App Router (:3000)
+├── frontend/                 # Next.js 15 App Router (:3100)
 │   ├── app/demo/             # Allocation matching centerpiece
-│   ├── components/BrandMark.tsx  # Settleflow SF mark
+│   ├── components/BrandMark.tsx  # Settle Flow SF mark
 │   └── lib/api.ts
 ├── examples/                 # Builder LOC proof
 │   ├── with-layer/ThreePartyDvp.daml      # ~99 LOC
@@ -183,7 +199,7 @@ composition-protcol/          # repo root (Settleflow)
 ## 5. Quick Start & Local Setup
 
 ### Mode A: Demo Mode (No Canton Node Required)
-In Demo Mode, the backend runs an in-memory simulation engine that faithfully enforces multi-party state transitions, acceptance gates, atomic reverts, and Canton party visibility.
+In Demo Mode (what the hosted site runs), the backend uses an in-memory engine that mirrors the contracts' rules: multi-party acceptance gates, allocation matching, atomic reverts, governance and per-party views. It is a simulation, not a Canton ledger.
 
 ```bash
 # 1. Start the Backend API (Port 4000)
@@ -191,7 +207,7 @@ cd backend
 npm install
 npm run dev
 
-# 2. Start the Frontend UI (Port 3000)
+# 2. Start the Frontend UI (Port 3100)
 cd ../frontend
 npm install
 npm run dev
@@ -201,10 +217,12 @@ node mocks/oracle/server.mjs
 ```
 
 Open your browser to:
-- **Settlement desk:** [http://localhost:3000/demo](http://localhost:3000/demo) — **Run allocation matching demo** (Propose → Allocate → mismatch reject → Settle; LOC adopt panel)
-- **Observer Money Shot:** [http://localhost:3000/observer](http://localhost:3000/observer) (Verify `visibleTokens: []` + receipt)
-- **BitSafe Governance:** [http://localhost:3000/governance](http://localhost:3000/governance) (2-of-3 threshold demo)
-- **Load Metrics:** [http://localhost:3000/metrics](http://localhost:3000/metrics) (Settle 50+ batch deals)
+- **Exporter desk:** [http://localhost:3100/proposer](http://localhost:3100/proposer) — propose a trade (optionally require BitSafe 2-of-3)
+- **Lender desk:** [http://localhost:3100/counterparty](http://localhost:3100/counterparty) — Lender and Oracle each sign
+- **Settlement desk:** [http://localhost:3100/demo](http://localhost:3100/demo) — lock legs (wrong amounts are refused), settle atomically
+- **Auditor view:** [http://localhost:3100/observer](http://localhost:3100/observer) — per trade: regulator `visibleTokens: []` + receipt
+- **BitSafe desk:** [http://localhost:3100/governance](http://localhost:3100/governance) — 2-of-3 approvals, early execute refused, veto
+- **Activity:** [http://localhost:3100/metrics](http://localhost:3100/metrics) — load test (50 settlements)
 
 ---
 
@@ -256,14 +274,14 @@ To connect the backend to an active Canton participant node via the JSON Ledger 
 
 ## 6. Verification & Automated Test Gates
 
-All core protocol guarantees are verified across multi-layer test gates (see [**TESTING.md**](TESTING.md) for complete guide):
+Two independent test layers: Daml Script tests check the contracts; Node tests check the demo engine that the hosted site runs (see [**TESTING.md**](TESTING.md)):
 
 ### 1. Backend Automated Gate Suite
-Verifies atomicity, revert integrity, regulator privacy, BitSafe M-of-N threshold logic, failure paths, reusability, and SRS §12 gates:
+Checks the in-memory demo engine (not the ledger): atomicity, revert integrity, regulator view, BitSafe M-of-N, failure paths, reusability, and SRS §12 gates:
 ```bash
 npm test
 ```
-**Automated Gate Results (33/33 Passing):**
+**Automated Gate Results (42/42 passing):**
 - `testAtomicSwap` — 2+ legs settle all-or-nothing (`R-ATOM-1`) **[Pass]**
 - `testAtomicRevert` — failed leg leaves no half-state (`R-ATOM-2`) **[Pass]**
 - `testAuditorCannotSeeLegs` — regulator `visibleTokens: []` + receipt present (`R-PRIV-1/2/3`) **[Pass]**
@@ -286,7 +304,7 @@ npm test
 - `SRS §12: testWorkflowAcceptance` — confirms acceptance and state progression **[Pass]**
 - `SRS §12: testWorkflowExpiryOrCancel` — confirms stalled workflows resolve cleanly **[Pass]**
 - `SRS §12: testWorkflowSettlement` — confirms settlement completes end to end **[Pass]**
-- `FR-8: demo assets issuance` — tokenized asset & payment tokens as CIP-56 holdings **[Pass]**
+- `FR-8: demo assets issuance` — mock tokenized asset & payment tokens shaped like CIP-56 holdings **[Pass]**
 - `FR-9: audit trail per party` — per-party scoped history without privacy leakage **[Pass]**
 - `FR-10: failure path — wrong executor rejected` — blocks unauthorized caller from settlement **[Pass]**
 - `FR-10: failure path — cancelled trade releases allocations` — clean lock release **[Pass]**
@@ -299,22 +317,16 @@ npm test
 - `FR-19: policy hooks` — sanctions eligibility, transaction limits, and fees **[Pass]**
 
 ### 2. Daml Script Test Suite
-Verifies on-ledger sub-transaction semantics, Canton stakeholder visibility, and SRS §12 gates (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
+Checks the contracts themselves: atomicity, stakeholder visibility, allocation matching, ledger-enforced governance, circuit breaker and veto (requires [Daml SDK 3.3.x](https://docs.daml.com/)):
 ```bash
 cd daml
 daml build
 daml test
 ```
-**Tests Covered (9 Passing Scripts):**
-- `Test.daml:testAtomicSwap`
-- `Test.daml:testAtomicRevert`
-- `Test.daml:testAuditorCannotSeeLegs`
-- `Test.daml:testWorkflowProposal` (SRS §12)
-- `Test.daml:testWorkflowAcceptance` (SRS §12)
-- `Test.daml:testWorkflowExpiryOrCancel` (SRS §12)
-- `Test.daml:testWorkflowSettlement` (SRS §12)
-- `TestGovernance.daml:testGovernedBelowThreshold`
-- `TestGovernance.daml:testGovernedAtThreshold`
+**27 Daml Script tests passing**, including:
+- `Test.daml`: `testAtomicSwap`, `testAtomicRevert`, `testAuditorCannotSeeLegs`, `testAllocHappyPath3PartyDvp`, `testAllocPartialAllocation`, `testAllocWithdrawnLeg`, `testAllocUnauthorizedExecutor`, `testAllocExpiryBeforeAccept`, SRS §12 workflow tests
+- `Test.daml` (safety): `testHaltedBreakerBlocksSettle`, `testCancelledProposalCannotFinalize`, `testExpiredProposalCannotFinalize`
+- `TestGovernance.daml`: `testGovernedBelowThreshold`, `testGovernedAtThreshold`, `testGovernedCannotSkipGovernance`, `testOperatorCannotForgeApproval`, `testDuplicateApprovalCountsOnce`, `testGovernedCancelBelowThreshold`, `testGovernedCancelAtThreshold`, `testEmergencyVeto`, `testCircuitBreaker`
 
 ### 3. Live E2E Integration Suite (13 Tests)
 Runs full network socket tests across backend (:4000) and oracle (:4002):
@@ -334,15 +346,16 @@ npm run demo:scenario
 
 | Component | Status | Verification / Artifact |
 | :--- | :--- | :--- |
-| **Daml Smart Contracts** | Complete | `ComposableAsset`, `Composition`, `Governance`, `Workflow`, `DisclosedContract` |
-| **Daml Script Test Gates** | Complete (9/9) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-PRIV, R-GOV, and SRS §12 |
+| **Daml Smart Contracts** | Complete | `ComposableAsset`, `MockToken`, `Composition`, `Governance` |
+| **Daml Script Test Gates** | Passing (27/27) | `Test.daml` and `TestGovernance.daml` covering R-ATOM, R-ALLOC, R-PRIV-3, ledger-enforced R-GOV, breaker, veto, SRS §12 |
+| **Hosted deployment** | Demo mode | Render hosts the in-memory demo engine; not connected to a Canton ledger |
 | **Backend Express API** | Complete | REST routes for assets, compositions, audit, governance, circuit-breaker, admin |
-| **JSON Ledger API v2 Client** | Complete | `ledger.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts |
-| **Backend Test Gates** | Passing (33/33) | `npm test` — covers atomicity, privacy, BitSafe M-of-N, failure paths, deadlines, withdrawn legs, and PRD FR-1..19 |
+| **JSON Ledger API v2 Client** | Implemented, not hosted | `ledger.ts` / `ledgerWorkflow.ts` supporting `submit-and-wait` and ACS queries with Keycloak OIDC & Disclosed Contracts (Mode C) |
+| **Backend Test Gates** | Passing (42/42) | `npm test` — covers atomicity, privacy, BitSafe M-of-N, failure paths, deadlines, withdrawn legs, and PRD FR-1..19 |
 | **Live E2E Socket Tests** | Passing (13/13) | `npm run test:e2e` verifying live integration across ports :4000 and :4002 |
 | **PRD Demo Scenario Runner** | Passing (8/8) | `npm run demo:scenario` verifying PRD §7 8-step sequence |
 | **Frontend Next.js Views** | Complete (12/12 routes) | 8 interactive role views (`/demo`, `/proposer`, `/counterparty`, `/observer`, `/governance`, `/metrics`, `/readiness`, `/admin`) |
-| **Commodity Oracle Service** | Complete | `mocks/oracle/server.mjs` serving live spot prices & HMAC attestations on `:4002` |
+| **Commodity Oracle Service** | Mock | `mocks/oracle/server.mjs` serving simulated spot prices & HMAC attestations on `:4002` |
 | **Documentation & Runbooks** | Complete | `DEPLOYMENT.md`, `TESTING.md`, PRD, SRS, Architecture, API, Risk assessment |
 
 ---
@@ -350,11 +363,11 @@ npm run demo:scenario
 ## 8. Documentation Hub & Deep Dives
 
 - [**CONTRIBUTIONS_REPORT.md**](CONTRIBUTIONS_REPORT.md) — Comprehensive engineering contribution report detailing code, architectures, test suites, and commits delivered by John Okyere (`mhiskall282`) and Demiladepy.
-- [**SettleFlow_PRD.docx**](SettleFlow_PRD.docx) / [**docs/SettleFlow_PRD.md**](docs/SettleFlow_PRD.md) — Authoritative SettleFlow PRD (October 2026 Edition for HackCanton S3).
+- [**SettleFlow_PRD.docx**](SettleFlow_PRD.docx) / [**docs/SettleFlow_PRD.md**](docs/SettleFlow_PRD.md) — Authoritative Settle Flow PRD (October 2026 Edition for HackCanton S3).
 - [**SettleFlow_Differentiation.docx**](SettleFlow_Differentiation.docx) / [**docs/SettleFlow_Differentiation.md**](docs/SettleFlow_Differentiation.md) — Authoritative differentiation matrix against CIP-0056, Daml Finance, and CIP-112.
 - [**DEPLOYMENT.md**](DEPLOYMENT.md) — Step-by-step deployment guide covering LocalNet, Docker Compose, Canton Sandbox, and Shared HackCanton DevNet.
 - [**TESTING.md**](TESTING.md) — Testing manual: Daml scripts, 27 backend gates, E2E, browser allocation walkthrough.
-- [**docs/POSITIONING.md**](docs/POSITIONING.md) — How Settleflow differs from CIP-0056 / Daml Finance / engines.
+- [**docs/POSITIONING.md**](docs/POSITIONING.md) — How Settle Flow differs from CIP-0056 / Daml Finance / engines.
 - [**docs/SIDE_BY_SIDE.md**](docs/SIDE_BY_SIDE.md) — ~99 vs ~192 LOC builder proof (`examples/`).
 - [**PRODUCT REQUIREMENTS DOCUMENT-PRD - Updated.docx**](PRODUCT%20REQUIREMENTS%20DOCUMENT-PRD%20-%20Updated.docx) — Historical PRD archive.
 - [**Technical Specification- H.docx**](Technical%20Specification-%20H.docx) — Updated SRS.
@@ -370,6 +383,7 @@ npm run demo:scenario
 - [**docs/DEVNET.md**](docs/DEVNET.md) — Shared HackCanton DevNet node connection, Keycloak OIDC token flow, and DAR deployment.
 - [**docs/DAML_SETUP.md**](docs/DAML_SETUP.md) — Daml SDK 3.3.x environment setup, compilation, and script testing.
 - [**docs/INTERVIEWS.md**](docs/INTERVIEWS.md) — Builder interviews, qualitative evidence, and validation metrics for Criterion 3.
+- [**docs/DEMO_SCRIPT.md**](docs/DEMO_SCRIPT.md) — Timed demo-video script for the current desks, with voiceover.
 - [**docs/PITCH_SCRIPT.md**](docs/PITCH_SCRIPT.md) — 3-minute video pitch presentation script, voiceover dialogue, and recording checklist.
 - [**context.md**](context.md) — System background, African commodity trade finance topology, and ecosystem token registry.
 - [**ai.md**](ai.md) — AI agent engineering directives, operating rules, and invariant checklists.
@@ -379,7 +393,7 @@ npm run demo:scenario
 
 ## 9. Pre-existing Code Disclosure
 
-Per HackCanton Season 3 official guidelines: Any contracts or code created prior to **September 18, 2026** must be disclosed.  
+Per HackCanton Season 3 official guidelines: Any contracts or code created prior to **September 18, 2026** must be disclosed.
 **This repository's initial delivery-phase commit represents the first public codebase**—no prior private DAR or codebase is claimed as in-window work. The evaluation window runs from **September 18 to October 9, 2026**.
 
 ---

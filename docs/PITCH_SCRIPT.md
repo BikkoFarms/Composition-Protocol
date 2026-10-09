@@ -1,16 +1,20 @@
-# Settleflow — HackCanton Season 3 Video Pitch Script & Judge Guide
+# Settle Flow — HackCanton Season 3 Video Pitch Script & Judge Guide
 
 **Duration:** Under 3 minutes (Target: 175 seconds)  
 **Track:** Track 1: Real-World Assets (RWA) & Business Workflows  
 **Challenge:** BitSafe Decentralization Challenge (M-of-N Threshold Multi-Sig)  
 **Team:** Revotoken Africa  
 
+> **Recording the submission video?** Use the current desk walkthrough:  
+> **[DEMO_SCRIPT.md](./DEMO_SCRIPT.md)** (roles: Exporter → Lender → Settlement lock/settle → Auditor → BitSafe → Metrics).  
+> Sections below retain framing and checklists; button names in the old scene table may be stale.
+
 ---
 
 ## 1. Executive Framing for Judges
 
 > **What it is:**  
-> Settleflow is a reusable, wallet-compatible Daml package for structured settlement workflows on Canton, starting with a concrete 3-party Delivery-versus-Payment (DvP) pattern. It packages the repeated workflow logic around settlement (pre-atomic authorization, propose/accept coordination, disclosed contract handling, expiry/cancel paths, and reusable settlement completion) so builders do not have to rebuild it from scratch for each new use case.
+> Settle Flow is a reusable Daml package for structured settlement workflows on Canton, starting with a concrete 3-party Delivery-versus-Payment (DvP) pattern. It packages the repeated workflow logic around settlement (pre-atomic authorization, propose/accept coordination, disclosed contract handling, expiry/cancel paths, and reusable settlement completion) so builders do not have to rebuild it from scratch for each new use case.
 
 > **What it is NOT:**  
 > - Not a general Canton execution layer  
@@ -28,7 +32,7 @@
 
 | Segment | Timing | Visual Action (Screen) | Spoken Audio Voiceover Script |
 | :--- | :---: | :--- | :--- |
-| **Opening** | 0:00 – 0:25 | Landing page (`/`), displaying the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Settleflow is a reusable Daml package for structured settlement workflows on Canton. The problem is that builders keep rewriting the same workflow plumbing for every new use case. We start with a 3-party DvP pattern to show how that logic can be reused instead of rebuilt."* |
+| **Opening** | 0:00 – 0:25 | Landing page (`/`), displaying the architecture diagram and the composability gap between isolated CIP-0056 tokens. | *"Settle Flow is a reusable Daml package for structured settlement workflows on Canton. The problem is that builders keep rewriting the same workflow plumbing for every new use case. We start with a 3-party DvP pattern to show how that logic can be reused instead of rebuilt."* |
 | **Step 1 — Setup** | 0:25 – 0:45 | `/demo`: CBTC / USDCx / **cETH** legs; **Why builders adopt this** (~99 vs ~192 LOC). | *"Alice posts CBTC collateral, Bob posts USDCx cash, Oracle posts cETH as the sponsor leg. Builders adopt this layer instead of hand-rolling ~2× the Daml for every deal."* |
 | **Step 2 — Propose + Accept** | 0:45 – 1:00 | Click **Run allocation matching demo**. Show agreement + commit IDs. | *"Propose and accept form the agreement — multi-party co-sign that teams normally rewrite per app."* |
 | **Step 3 — Allocate + mismatch** | 1:00 – 1:45 | Watch Allocate CBTC match, then wrong USDCx amount **rejected** with verbatim reason; correct pledges → all-ready. | *"Here’s the headline: each allocation is matched to trade terms. A wrong amount is rejected — the deal stays not ready — then correct allocations unlock settle."* |
@@ -38,13 +42,13 @@
 
 ---
 
-## 3. Test Checklist for the Team (100% Verified)
+## 3. Test Checklist for the Team (covered by automated tests)
 
 ### Core Flow Tests
 - [x] **Workflow Creation:** Workflow proposals are generated successfully with unique SHA-256 deal digests.
-- [x] **Proposal Generation:** `CompositionProposal` accurately specifies multi-party legs, expiration dates, and stakeholder scoping.
+- [x] **Proposal Generation:** `WorkflowProposal` accurately specifies multi-party legs, expiration dates, and stakeholder scoping.
 - [x] **Accept / Confirm Step:** `AcceptanceTracker` collects co-signatures and gates agreement finalization until all required counterparties accept.
-- [x] **End-to-End Settlement:** Atomic settlement executes all legs simultaneously inside one Daml choice (`CompositionAgreement.Settle`).
+- [x] **End-to-End Settlement:** Atomic settlement executes all legs simultaneously inside one Daml choice (`WorkflowAgreement.Settle`).
 - [x] **Final State Recording:** `SettlementReceipt` is emitted and permanently recorded on-ledger with immutable timestamps and leg summaries.
 
 ### Failure-Path Tests

@@ -1,6 +1,6 @@
-# Settleflow — Risk Assessment & Status Audit
+# Settle Flow — Risk Assessment & Status Audit
 
-**Project:** Settleflow  
+**Project:** Settle Flow  
 **Repository:** [https://github.com/BikkoFarms/Composition-Protocol.git](https://github.com/BikkoFarms/Composition-Protocol.git)  
 **Hackathon:** HackCanton Season 3 (Track 1: RWA & Business Workflows | BitSafe Decentralization Challenge)  
 **Date:** September 2026  
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary
 
-Settleflow is an atomic, private, multi-asset settlement primitive built natively on the Canton Network. This document provides a transparent, rigorous technical and operational risk assessment for judges, contributors, and institutional operators.
+Settle Flow is an atomic, private, multi-asset settlement primitive built natively on the Canton Network. This document provides a transparent, rigorous technical and operational risk assessment for judges, contributors, and institutional operators.
 
 Every protocol subsystem is evaluated across two axes:
 1. **Mathematical / Protocol-Level Guarantees:** Invariants enforced strictly by Daml semantics and Canton's distributed consensus engine.
@@ -20,7 +20,7 @@ Every protocol subsystem is evaluated across two axes:
 
 ## 2. Complete Status Inventory
 
-### 2.1 What HAS Been Done (Production-Verified)
+### 2.1 What HAS Been Done (Verified by tests)
 
 | Subsystem / Feature | Implementation Location | Verification Status | Verification Evidence |
 | :--- | :--- | :---: | :--- |
@@ -70,7 +70,7 @@ Every protocol subsystem is evaluated across two axes:
 The following security properties are **mathematically and cryptographically guaranteed** by the protocol design and Canton's underlying architecture:
 
 ### 1. Settlement Atomicity (`R-ATOM-1/2`) — NOT AT RISK
-- **Why:** In Daml, all leg transfers within `CompositionAgreement.Settle` execute in a single atomic transaction choice.
+- **Why:** In Daml, all leg transfers within `WorkflowAgreement.Settle` execute in a single atomic transaction choice.
 - **Guarantee:** If party $A$ transfers Cocoa to party $B$, and party $B$ transfers USDCx to party $A$, both contract archival and creation operations happen in the exact same ledger update. If leg 2 fails (e.g., token already spent or insufficient balance), Daml aborts the entire transaction. Zero half-states can ever be committed to the ledger.
 
 ### 2. Sub-Transaction Privacy (`R-PRIV-1/2/3`) — NOT AT RISK
@@ -116,7 +116,7 @@ While the smart contract logic is mathematically secure, institutional operation
 - **Mitigation Implemented:**
   - Upgraded [mocks/oracle/server.mjs](file:///c:/Users/user/Desktop/Composition-Protocol/mocks/oracle/server.mjs) to issue **HMAC-SHA256 digital signatures** over the canonical payload (`warehouseId`, `assetType`, `grade`, `moisturePercent`, `validUntil`).
   - The backend verifies oracle signatures before any warehouse receipt can be accepted into a composition deal (`POST /attest` and `POST /verify`).
-  - Counterparty (Lender Bob) reviews the signed cryptographic attestation before co-signing the `CompositionAgreement`.
+  - Counterparty (Lender Bob) reviews the signed cryptographic attestation before co-signing the `WorkflowAgreement`.
 
 ### Risk 4: Private Key Compromise of Participant Node
 - **Threat:** A single operator's API credentials or private keys are compromised.

@@ -1,45 +1,53 @@
 # HackCanton Season 3 — Judging & Evaluation Guide
 
-This guide assists judges in evaluating **Settleflow** against HackCanton Season 3's official criteria and prize categories.
+This guide assists judges in evaluating **Settle Flow** against HackCanton Season 3's official criteria and prize categories.
 
 **Team:** Revotoken Africa  
 **Primary Track:** Track 1 (RWA & Business Workflows)  
 **Secondary Challenge:** BitSafe Decentralization Challenge (contribution-pool / LocalNet target)  
 **Live Submission Window:** September 18 – October 9, 2026  
-**Positioning (what already exists vs Settleflow):** [POSITIONING.md](./POSITIONING.md)  
+**Positioning (what already exists vs Settle Flow):** [POSITIONING.md](./POSITIONING.md)  
+**Video / pitch walkthrough (current desks):** [DEMO_SCRIPT.md](./DEMO_SCRIPT.md)  
 **Grofty:** Deferred (P3) — do not contort the architecture for wallet signing this sprint.
+
+
+> **Honest scope (please read first).** The hosted site runs in **demo mode**: an in-memory engine that mirrors the Daml contracts' rules; it is not connected to a Canton ledger (`/health` → `"mode":"demo"`). The **Daml contracts** are the ledger implementation and are proven by 27 Daml Script tests (`cd daml && daml test`), including ledger-enforced BitSafe governance (governor-signed approvals; governed deals cannot skip governance), circuit breaker and veto. Tokens are **mocks** shaped like CIP-56 holdings. Counterparties on a deal see all its legs; the regulator sees only the receipt.
 
 ---
 
 ## 1. Quick Judge Walkthrough (Under 3 Minutes)
 
+Full timed script with voiceover: **[DEMO_SCRIPT.md](./DEMO_SCRIPT.md)**. Short path:
+
 1. **Start the Stack (Demo Mode):**
    ```bash
    # Terminal 1: API (:4000)
    cd backend && npm run dev
-   # Terminal 2: Web App (:3100 locally, or :3000)
+   # Terminal 2: Web App (:3100)
    cd frontend && npm run dev
    ```
-2. **Allocation matching (headline — `/demo`):**
-   - Open `/demo`.
-   - Click **Run allocation matching demo**: Propose → Accept → Allocate CBTC → **wrong USDCx amount rejected** → correct USDCx + cETH → Settle + receipt commits.
-   - Same viewport: **Why builders adopt this** (~99 LOC with Settleflow vs ~192 hand-rolled).
-   - Optional secondary: **One-click settle** (no mismatch beat).
-3. **Money shot (observer sees nothing):**
-   - Open `/observer` (or click **Prove money shot** after settle).
-   - Split-screen: participant tokens; regulator **`visibleTokens: []`** + `SettlementReceipt` (`R-PRIV-3`).
-4. **BitSafe refuse → settle:**
-   - Open `/governance`.
-   - Click **Camera beat: refuse → settle** (or: Open governed deal → Sign Gov1 → Try execute early → Sign Gov2 → Execute).
-   - Witness `R-GOV-1` below threshold, then `R-GOV-2` at 2-of-3.
-5. **Metrics evidence:**
-   - Open `/metrics` or **Settle 50 tickets** on `/demo`.
+2. **Exporter proposes (`/proposer`):**
+   - Trade dropdown → **Cocoa export finance** → **Propose trade**.
+   - Exporter cannot settle — only propose / cancel.
+3. **Lender + Oracle sign (`/counterparty`):**
+   - **Accept as Lender** → switch to Oracle → **Accept as Oracle**.
+4. **Allocation matching + atomic settle (`/demo`):**
+   - Select the signed cocoa trade.
+   - **Try wrong amount** on the cash leg → refused, leg stays unlocked.
+   - **Lock as Alice / Bob / Oracle** → **Settle all 3 legs at once**.
+5. **Money shot (`/observer`):**
+   - Lender tokens vs regulator **`visibleTokens: []`** + receipt.
+6. **BitSafe (`/governance`):**
+   - Pre-stage a **Gold doré** trade with BitSafe ticked (see DEMO_SCRIPT prep).
+   - **Approve as Gov1** → **Try to execute with 1 of 2** (refused) → **Approve as Gov2** → **Execute settlement**.
+7. **Metrics (`/metrics`):**
+   - **Run 50 settlements** once for load evidence.
 
 ---
 
 ## 2. Alignment with HackCanton Season 3 Track 1: RWA & Business Workflows
 
-| Track 1 Pillar | Official HackCanton Focus | Settleflow Implementation | Verification Reference |
+| Track 1 Pillar | Official HackCanton Focus | Settle Flow Implementation | Verification Reference |
 | :--- | :--- | :--- | :--- |
 | **1. Issuance** | Tokenization of RWAs, registry models, CIP-0056. | `ComposableAsset` wrapping commodities and sponsor assets (**CBTC, USDCx, cETH**). Treasury mint via Admin. | [ComposableAsset.daml](../daml/daml/ComposableAsset.daml), [admin.ts](../backend/src/routes/admin.ts) |
 | **2. Transfers** | Multi-asset exchange, atomic DvP/PvP. | Single-transaction multi-leg settlement (`R-ATOM-1/2`). | [Composition.daml](../daml/daml/Composition.daml) |
@@ -62,7 +70,7 @@ This guide assists judges in evaluating **Settleflow** against HackCanton Season
 
 ## 4. Judging Matrix Alignment
 
-| Criterion | How Settleflow Excels |
+| Criterion | How Settle Flow Excels |
 | :--- | :--- |
 | **1. Value** | Removes repeated propose/accept/disclose/expiry/settle plumbing. |
 | **2. ICP** | Builders (venues calling the package) and trade-finance operators. |

@@ -15,7 +15,7 @@ This document cross-references every Functional Requirement (FR), System Require
 | **`FR-5`** | **On-Ledger Readiness Tracking:** Track readiness of all legs and counterparties before execution is permitted. | PRD §8 | `backend/src/demoStore.ts`<br>`GET /compositions/:id/readiness` | `demoStore.test.ts` (test 5, 27)<br>`scripts/run-demo-scenario.mjs` (Step 5) | **VERIFIED & PASSING** |
 | **`FR-6`** | **Atomic Execution:** Single Daml transaction choice (`Settle`) ensuring all-or-nothing settlement across all legs. | PRD §8 (`R-ATOM-1`) | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`settle`) | `Test.daml:testAtomicSwap`<br>`demoStore.test.ts` (test 1, 22) | **VERIFIED & PASSING** |
 | **`FR-7`** | **Clean Cancellation & Lock Release:** Cancelled trade releases all committed allocations back to parties without residual lock. | PRD §8 | `daml/daml/Composition.daml`<br>`backend/src/demoStore.ts` (`cancel`) | `demoStore.test.ts` (test 9, 21, 26)<br>`scripts/run-demo-scenario.mjs` (Step 7) | **VERIFIED & PASSING** |
-| **`FR-8`** | **Demo Assets (CIP-56 Holdings):** Custodian tokenized asset (`CBTC`) and payment token (`USDCx`) issued as CIP-56 holdings. | PRD §8, §7 | `backend/src/routes/assets.ts` (`POST /assets/issue`)<br>`daml/daml/MockToken.daml` | `demoStore.test.ts` (test 23)<br>`scripts/run-demo-scenario.mjs` (Step 1) | **VERIFIED & PASSING** |
+| **`FR-8`** | **Demo Assets (CIP-56 Holdings):** Custodian tokenized asset (`CBTC`) and payment token (`USDCx`) issued as mock holdings shaped like CIP-56 (MockToken). | PRD §8, §7 | `backend/src/routes/assets.ts` (`POST /assets/issue`)<br>`daml/daml/MockToken.daml` | `demoStore.test.ts` (test 23)<br>`scripts/run-demo-scenario.mjs` (Step 1) | **VERIFIED & PASSING** |
 | **`FR-9`** | **Per-Party Audit Trail View:** History of authorizations and outcomes scoped per party; auditor sees receipts with `visibleTokens: []`. | PRD §8, §7 | `backend/src/routes/audit.ts`<br>`frontend/app/observer/page.tsx` | `demoStore.test.ts` (test 3, 24)<br>`scripts/run-demo-scenario.mjs` (Step 8) | **VERIFIED & PASSING** |
 | **`FR-10`** | **Automated Failure-Path Tests:** Suite covering partial allocation, withdrawn leg, mismatched leg, and wrong executor. | PRD §8 | `backend/src/demoStore.ts` (`withdrawLeg`)<br>`backend/src/routes/compositions.ts` | `demoStore.test.ts` (tests 4, 14, 15, 16, 25, 26, 27, 28) | **VERIFIED & PASSING** |
 | **`FR-11`** | **Shared Readiness View:** Minimal readiness status view (web page, API, & CLI) detailing outstanding parties and legs. | PRD §8 | `frontend/app/readiness/page.tsx`<br>`GET /compositions/:id/readiness` | `demoStore.test.ts` (test 27)<br>`frontend` Next.js route `/readiness` | **VERIFIED & PASSING** |
@@ -35,7 +35,7 @@ This document cross-references every Functional Requirement (FR), System Require
 ### Backend Unit & Integration Gates (`npm test` — 33/33 Passing)
 ```
 TAP version 13
-# Subtest: Settleflow demo gates
+# Subtest: Settle Flow demo gates
     ok 1 - testAtomicSwap — 2+ legs settle all-or-nothing
     ok 2 - testAtomicRevert — failed leg leaves no half-state
     ok 3 - testAuditorCannotSeeLegs — regulator visibleTokens [] + receipt

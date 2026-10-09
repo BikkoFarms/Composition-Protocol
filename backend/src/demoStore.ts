@@ -516,6 +516,11 @@ export class DemoStore {
     if (!c.counterparties.includes(acceptor)) {
       throw new Error(`${acceptor} is not a counterparty`);
     }
+    // Mirrors FinalizeAgreement: a cancelled / rejected / expired proposal
+    // cannot be accepted into an agreement.
+    if (["cancelled", "rejected", "expired", "reverted", "settled"].includes(c.status)) {
+      throw new Error(`cannot accept: proposal is ${c.status}`);
+    }
     if (c.accepted.includes(acceptor)) return c;
     c.accepted = [...c.accepted, acceptor];
     const allAccepted = c.counterparties.every((p) => c.accepted.includes(p));

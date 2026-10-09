@@ -13,3 +13,6 @@ daml/dist/
 Thumbs.db
 docs/interviews/
 *.dar
+.claude/
+# Stale nested copy — live app lives at repo root
+Composition-Protocol/
