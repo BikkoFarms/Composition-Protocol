@@ -31,7 +31,7 @@
 ## 2026-09-26
 - **Git Synchronization:** Pulled mainline commits `4da5b7e` and `41310a2` without conflicts. Verified working tree is clean and aligned with `origin/main`.
 - **Collaborator Assets Integrated:** Verified custom SVG `BrandMark.tsx`, `Skeleton.tsx` loading states, high-resolution desk preview captures (`frontend/preview/*.png`), and the refreshed product desk flow.
-- **Team Follow-Up Guide & Solutions Architecture Alignment:** Ingested team guide for the Settleflow:
+- **Team Follow-Up Guide & Solutions Architecture Alignment:** Ingested team guide for the Settle Flow:
   - Validated explicit framing: reusable Daml package for structured settlement workflows, starting with a concrete 3-party DvP pattern.
   - Implemented Disclosed Contract handling (`disclosedContracts`) across `ledger.ts` and `demoStore.ts` matching Canton Ledger API v2 explicit disclosure standards.
   - Enhanced failure paths with clean stalled proposal resolution: `ExpireProposal` (`/expire`), `CancelProposal` (`/cancel`), and `RejectProposal` (`/reject`).

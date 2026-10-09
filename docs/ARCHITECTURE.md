@@ -1,9 +1,9 @@
-# Settleflow — Architectural Specification and Technical Blueprint
+# Settle Flow — Architectural Specification and Technical Blueprint
 
 > **Version:** October 2026 Edition · HackCanton Season 3  
-> **Status:** Production-Ready Architecture and In-Memory / Ledger v2 Implementation
+> **Status:** Hackathon prototype: Daml contracts (tested) + in-memory demo engine (hosted) + Ledger API v2 client (not hosted)
 
-This document details the complete architectural design, security properties, transaction mechanics, stakeholder privacy boundaries, and failure-mode guarantees of **Settleflow** — an atomic, private, multi-asset settlement coordination primitive built natively on Canton (Daml 3.x).
+This document details the complete architectural design, security properties, transaction mechanics, stakeholder privacy boundaries, and failure-mode guarantees of **Settle Flow** — an atomic, private, multi-asset settlement coordination primitive built natively on Canton (Daml 3.x).
 
 ---
 
@@ -26,7 +26,7 @@ This document details the complete architectural design, security properties, tr
 
 ## 1. System Overview and Decomposition
 
-Settleflow separates concerns into four distinct, loosely coupled layers:
+Settle Flow separates concerns into four distinct, loosely coupled layers:
 
 ```mermaid
 graph TD
@@ -49,9 +49,9 @@ graph TD
     end
 
     subgraph L3["L3: Canton Ledger and Smart Contracts (Daml 3.x)"]
-        CONTRACT_PROP["CompositionProposal - Proposal and Expiry"]
+        CONTRACT_PROP["WorkflowProposal - Proposal and Expiry"]
         CONTRACT_TRACK["AcceptanceTracker - Multi-Party Gate"]
-        CONTRACT_AGREE["CompositionAgreement - Atomic Settle Choice"]
+        CONTRACT_AGREE["WorkflowAgreement - Atomic Settle Choice"]
         CONTRACT_RCPT["SettlementReceipt - Scoped Audit Proof"]
         CONTRACT_GOV["GovernedSettlement - M-of-N Consensus Gate"]
         IFACE_ASSET["ComposableAsset (Interface) - CIP-0056 Transfer Choice"]
@@ -122,7 +122,7 @@ sequenceDiagram
     participant Ledger as Canton Ledger / Engine
 
     Note over Alice,Ledger: Phase 1: Propose Trade
-    Alice->>Ledger: create CompositionProposal (legs: CBTC, USDCx, cETH)
+    Alice->>Ledger: create WorkflowProposal (legs: CBTC, USDCx, cETH)
     Ledger-->>Bob: Disclose proposal via observer role
     Ledger-->>Oracle: Disclose proposal via observer role
 
@@ -131,7 +131,7 @@ sequenceDiagram
     Ledger->>Ledger: create AcceptanceTracker (accepted: [Bob])
     Oracle->>Ledger: exercise proposal AcceptProposal (Oracle)
     Ledger->>Ledger: update AcceptanceTracker (accepted: [Bob, Oracle])
-    Ledger->>Ledger: create CompositionAgreement (status: accepted)
+    Ledger->>Ledger: create WorkflowAgreement (status: accepted)
 
     Note over Desk,Ledger: Phase 3: Leg Matching and Allocation
     Desk->>Ledger: lockLeg(cash: Bob -> Alice, 18500 USDCx)
@@ -159,7 +159,7 @@ sequenceDiagram
 
 ## 4. Role-Based Desk Architecture
 
-Each stakeholder in Settleflow operates within a purpose-built workspace adhering strictly to their permission boundaries:
+Each stakeholder in Settle Flow operates within a purpose-built workspace adhering strictly to their permission boundaries:
 
 ```mermaid
 graph LR
@@ -199,9 +199,9 @@ Traditional blockchains require complex zero-knowledge (ZK) circuits to hide tra
 
 | Contract / Payload | Signatories | Observers | Cryptographically Excluded Parties |
 |:---|:---|:---|:---|
-| **`CompositionProposal`** | Proposer, Operator | All required counterparties | Unrelated third parties, Regulators |
+| **`WorkflowProposal`** | Proposer, Operator | All required counterparties | Unrelated third parties, Regulators |
 | **`AcceptanceTracker`** | Operator | Required counterparties | Regulators, non-participating nodes |
-| **`CompositionAgreement`** | Operator | Proposer, All counterparties | Regulators, public network |
+| **`WorkflowAgreement`** | Operator | Proposer, All counterparties | Regulators, public network |
 | **Leg 1: `CBTC` Token** | Operator, Exporter (Alice) | Lender (Bob) | Oracle, Regulator |
 | **Leg 2: `USDCx` Token** | Operator, Lender (Bob) | Exporter (Alice) | Oracle, Regulator |
 | **Leg 3: `cETH` Token** | Operator, Quality Oracle | Lender (Bob) | Exporter (Alice), Regulator |
@@ -249,7 +249,7 @@ graph TD
 - **Audit Outcome:**
   ```text
   Regulator Active Contract Set (ACS) Query Result:
-  ├── visibleTokens:        []        (0 token contracts disclosed — cryptographic exclusion)
+  ├── visibleTokens:        []        (0 token contracts disclosed — excluded by stakeholder rules)
   └── settlementReceipts:   [Receipt] (Immutable audit proof with timestamp and leg statuses)
   ```
 
@@ -337,7 +337,7 @@ graph TD
   ```
   Calling `ExecuteGoverned` when approvals $< M$ triggers an explicit transaction failure.
 - **`R-GOV-2` (Execution at Threshold):**
-  Once approvals $\ge M$, `ExecuteGoverned` transitions the deal directly into `CompositionAgreement.SettleWithRegulator`, maintaining single-transaction atomicity.
+  Once approvals $\ge M$, `ExecuteGoverned` transitions the deal directly into `WorkflowAgreement.SettleWithRegulator`, maintaining single-transaction atomicity.
 
 ---
 
@@ -379,11 +379,11 @@ sequenceDiagram
 
 ## 9. Data Flow and API Integration Map
 
-The Settleflow bridge service exposes clean REST endpoints abstracting Daml choices:
+The Settle Flow bridge service exposes clean REST endpoints abstracting Daml choices:
 
 ```mermaid
 graph TD
-    CLI["Frontend / Client"] -->|POST /compositions| EP1["createComposition() - -> daml: CompositionProposal"]
+    CLI["Frontend / Client"] -->|POST /compositions| EP1["createComposition() - -> daml: WorkflowProposal"]
     CLI -->|POST /compositions/:id/accept| EP2["acceptComposition() - -> daml: AcceptProposal"]
     CLI -->|POST /compositions/:id/allocate| EP3["allocateLeg() - -> locks asset in ACS"]
     CLI -->|POST /compositions/:id/settle| EP4["settleComposition() - -> daml: SettleWithRegulator"]
@@ -416,7 +416,7 @@ When `LEDGER_MODE=ledger`, the backend dynamically acquires an access token from
 
 ## 11. Deployment Topology
 
-Settleflow deploys cleanly across heterogeneous environments, from local developer stacks to Canton DevNet:
+Settle Flow deploys cleanly across heterogeneous environments, from local developer stacks to Canton DevNet:
 
 ```mermaid
 graph TD
@@ -448,12 +448,12 @@ graph TD
 
 ## 12. Security Threat Model
 
-A systematic STRIDE analysis demonstrates how Canton and Settleflow mitigate common decentralized finance vulnerabilities:
+A systematic STRIDE analysis demonstrates how Canton and Settle Flow mitigate common decentralized finance vulnerabilities:
 
-| Threat Category | Attack Vector | Settleflow Mitigation |
+| Threat Category | Attack Vector | Settle Flow Mitigation |
 |:---|:---|:---|
 | **Spoofing** | Impersonating Alice to propose rogue trades | Canton cryptographic party allocation with OIDC bearer JWTs. Only authentic holder of private key can act as party. |
-| **Tampering** | Modifying trade amounts after Bob's approval | Daml immutability. Once accepted, `CompositionAgreement` parameters are frozen; changing terms requires recreating proposal. |
+| **Tampering** | Modifying trade amounts after Bob's approval | Daml immutability. Once accepted, `WorkflowAgreement` parameters are frozen; changing terms requires recreating proposal. |
 | **Repudiation** | Denying participation in settled DvP deal | `SettlementReceipt` signed by Operator with explicit participant list permanently logged on Canton ACS. |
 | **Information Disclosure** | Front-running trade or spying on balances | Canton sub-transaction privacy. Observers receive only `SettlementReceipt`; token contracts are never synced to third parties. |
 | **Denial of Service** | Flooding proposals or locking counterparties | Expiry deadlines (`allocateBy`, `settleBy`) and proposer cancellation endpoints allow clean liquidation of stalled negotiations. |

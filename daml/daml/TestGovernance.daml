@@ -1,8 +1,8 @@
--- | BitSafe LocalNet demos: below-threshold reject, at-threshold accept/cancel.
+-- | BitSafe LocalNet gates: M-of-N enforced on the ledger.
 --
 -- Named controllers: Gov1, Gov2, Gov3 (BitSafe contribution pool).
--- Threshold: 2-of-3 — ExecuteGoverned / CancelGoverned require two distinct
--- governor approvals before the operator may complete the governed action.
+-- Threshold: 2-of-3 — a governed agreement settles (or cancels) only with two
+-- distinct GovernorApproval contracts, each signed by the governor itself.
 --
 -- Reproduce on LocalNet:
 --   cd daml && daml test --test-pattern testGoverned
@@ -16,18 +16,34 @@ import MockToken
 import Daml.Script
 import qualified DA.Set as Set
 import DA.Date (datetime, Month(..))
+import DA.Text (isInfixOf)
 import ComposableAsset ()
 
 farDeadline : Time
 farDeadline = datetime 2099 Jan 1 0 0 0
 
-setupSwap :
-  Script (Party, Party, Party, Party, ContractId WorkflowAgreement, [LegSpec])
-setupSwap = do
+data GovFixture = GovFixture with
+    operator : Party
+    alice : Party
+    bob : Party
+    regulator : Party
+    g1 : Party
+    g2 : Party
+    g3 : Party
+    agreementCid : ContractId WorkflowAgreement
+    legs : [LegSpec]
+    breakerCid : ContractId ProtocolCircuitBreaker
+
+-- | Two-leg swap whose agreement REQUIRES 2-of-3 governor approval.
+setupGovernedSwap : Script GovFixture
+setupGovernedSwap = do
   operator <- allocateParty "Operator"
   alice <- allocateParty "Alice"
   bob <- allocateParty "Bob"
   regulator <- allocateParty "Regulator"
+  g1 <- allocateParty "Gov1"
+  g2 <- allocateParty "Gov2"
+  g3 <- allocateParty "Gov3"
   aliceUsd <- submit operator do
     createCmd MockToken with
       owner = alice
@@ -68,13 +84,22 @@ setupSwap = do
       legs
       description = "gov demo"
       expiresAt = farDeadline
+      governance = Some GovernanceTerms with
+        governors = [g1, g2, g3]
+        threshold = 2
   trackerCid <- submitMulti [operator, bob] [] do
     exerciseCmd proposalCid AcceptProposal with
       acceptor = bob
       trackerCid = None
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
-  pure (operator, alice, bob, regulator, agreementCid, legs)
+  breakerCid <- submitMulti [operator, g1, g2, g3] [] do
+    createCmd ProtocolCircuitBreaker with
+      operator
+      governors = Set.fromList [g1, g2, g3]
+      isHalted = False
+      haltReason = None
+  pure GovFixture with ..
 
 allocateFromLeg :
   Party -> ContractId WorkflowAgreement -> LegSpec ->
@@ -92,142 +117,192 @@ allocateFromLeg operator agreementCid leg =
       reference = leg.reference
       deadline = leg.deadline
 
--- | R-GOV-1 failure: Execute below threshold must fail.
--- Controllers: Gov1, Gov2, Gov3. Threshold = 2.
--- Only Gov1 has approved → |approvals| = 1 < 2 → reject; no settlement.
+openGoverned : GovFixture -> Script (ContractId GovernedSettlement)
+openGoverned f = do
+  factory <- submit f.operator do
+    createCmd GovernanceFactory with operator = f.operator
+  submit f.operator do
+    exerciseCmd factory OpenGovernedSettlement with
+      agreementCid = f.agreementCid
+      regulator = f.regulator
+
+approve : ContractId GovernedSettlement -> Party -> Script (ContractId GovernorApproval)
+approve govCid governor =
+  submit governor do
+    exerciseCmd govCid ApproveGoverned with governor
+
+expectFailureContaining : Text -> Either SubmitError a -> Script ()
+expectFailureContaining needle r = case r of
+  Right _ -> assertMsg ("expected rejection containing: " <> needle) False
+  Left err ->
+    assertMsg ("rejection missing [" <> needle <> "]; got: " <> show err)
+      (needle `isInfixOf` show err)
+
+-- | R-GOV-1: execute below threshold (1 of 2) is rejected; nothing settles.
 testGovernedBelowThreshold : Script ()
 testGovernedBelowThreshold = do
-  (operator, alice, bob, regulator, agreementCid, _legs) <- setupSwap
-  g1 <- allocateParty "Gov1"
-  g2 <- allocateParty "Gov2"
-  g3 <- allocateParty "Gov3"
-  factory <- submit operator do
-    createCmd GovernanceFactory with operator
-  govCid <- submit operator do
-    exerciseCmd factory OpenGovernedSettlement with
-      agreementCid
-      governors = [g1, g2, g3]
-      threshold = 2
-      regulator
-  govCid2 <- submitMulti [operator, g1] [] do
-    exerciseCmd govCid ApproveGoverned with governor = g1
-  submitMultiMustFail [operator, alice, bob] [] do
-    exerciseCmd govCid2 ExecuteGoverned with allocationCids = []
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  a1 <- approve govCid f.g1
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  r <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd govCid ExecuteGoverned with
+      allocationCids = allocs
+      approvalCids = [a1]
+      breakerCid = f.breakerCid
+  expectFailureContaining "below threshold: 1/2" r
+  Some _ <- queryContractId f.operator f.agreementCid
   pure ()
 
--- | R-GOV-1 success: at threshold Execute succeeds.
--- Controllers: Gov1, Gov2, Gov3. Threshold = 2.
--- Gov1 + Gov2 approve → |approvals| = 2 ≥ 2 → SettleWithRegulator commits.
+-- | R-GOV-2: at threshold (Gov1 + Gov2 signed) execute settles atomically.
 testGovernedAtThreshold : Script ()
 testGovernedAtThreshold = do
-  (operator, alice, bob, regulator, agreementCid, legs) <- setupSwap
-  g1 <- allocateParty "Gov1"
-  g2 <- allocateParty "Gov2"
-  g3 <- allocateParty "Gov3"
-  factory <- submit operator do
-    createCmd GovernanceFactory with operator
-  govCid <- submit operator do
-    exerciseCmd factory OpenGovernedSettlement with
-      agreementCid
-      governors = [g1, g2, g3]
-      threshold = 2
-      regulator
-  gov1 <- submitMulti [operator, g1] [] do
-    exerciseCmd govCid ApproveGoverned with governor = g1
-  gov2 <- submitMulti [operator, g2] [] do
-    exerciseCmd gov1 ApproveGoverned with governor = g2
-  allocs <- mapA (allocateFromLeg operator agreementCid) legs
-  receiptCid <- submitMulti [operator, alice, bob] [] do
-    exerciseCmd gov2 ExecuteGoverned with allocationCids = allocs
-  Some _ <- queryContractId operator receiptCid
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  a1 <- approve govCid f.g1
+  a2 <- approve govCid f.g2
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  receiptCid <- submitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd govCid ExecuteGoverned with
+      allocationCids = allocs
+      approvalCids = [a1, a2]
+      breakerCid = f.breakerCid
+  Some _ <- queryContractId f.operator receiptCid
   pure ()
 
--- | R-GOV-2 failure: Cancel below threshold must fail.
--- Controllers: Gov1, Gov2, Gov3. Threshold = 2. Only Gov1 cancel-approved.
+-- | Reviewer #3: the operator cannot forge a governor's approval.
+testOperatorCannotForgeApproval : Script ()
+testOperatorCannotForgeApproval = do
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  -- Direct create in the governor's name: needs the governor's authority.
+  submitMustFail f.operator do
+    createCmd GovernorApproval with
+      operator = f.operator
+      governor = f.g1
+      agreementCid = f.agreementCid
+      action = ApproveSettlement
+  -- The approve choice is controlled by the governor alone.
+  submitMustFail f.operator do
+    exerciseCmd govCid ApproveGoverned with governor = f.g1
+  pure ()
+
+-- | Reviewer #2: a governed agreement cannot bypass governance via plain Settle.
+testGovernedCannotSkipGovernance : Script ()
+testGovernedCannotSkipGovernance = do
+  f <- setupGovernedSwap
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  r1 <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd f.agreementCid Settle with
+      allocationCids = allocs
+      breakerCid = f.breakerCid
+  expectFailureContaining "governed agreement: settle via SettleGoverned" r1
+  r2 <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd f.agreementCid SettleWithRegulator with
+      regulator = f.regulator
+      allocationCids = allocs
+      breakerCid = f.breakerCid
+  expectFailureContaining "governed agreement: settle via SettleGoverned" r2
+  -- Calling SettleGoverned directly still needs the signed approvals.
+  r3 <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd f.agreementCid SettleGoverned with
+      regulator = f.regulator
+      allocationCids = allocs
+      approvalCids = []
+      breakerCid = f.breakerCid
+  expectFailureContaining "below threshold: 0/2" r3
+  pure ()
+
+-- | The same governor approving twice counts once.
+testDuplicateApprovalCountsOnce : Script ()
+testDuplicateApprovalCountsOnce = do
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  a1 <- approve govCid f.g1
+  a1again <- approve govCid f.g1
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  r <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd govCid ExecuteGoverned with
+      allocationCids = allocs
+      approvalCids = [a1, a1again]
+      breakerCid = f.breakerCid
+  expectFailureContaining "below threshold: 1/2" r
+  pure ()
+
+-- | R-GOV-2 cancel: below threshold rejected; agreement stays live.
 testGovernedCancelBelowThreshold : Script ()
 testGovernedCancelBelowThreshold = do
-  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
-  g1 <- allocateParty "Gov1"
-  g2 <- allocateParty "Gov2"
-  g3 <- allocateParty "Gov3"
-  factory <- submit operator do
-    createCmd GovernanceFactory with operator
-  govCid <- submit operator do
-    exerciseCmd factory OpenGovernedSettlement with
-      agreementCid
-      governors = [g1, g2, g3]
-      threshold = 2
-      regulator
-  gov1 <- submitMulti [operator, g1] [] do
-    exerciseCmd govCid ApproveCancelGoverned with governor = g1
-  submitMustFail operator do
-    exerciseCmd gov1 CancelGoverned with reason = "too early"
-  Some _agr <- queryContractId operator agreementCid
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  c1 <- submit f.g1 do
+    exerciseCmd govCid ApproveCancelGoverned with governor = f.g1
+  submitMustFail f.operator do
+    exerciseCmd govCid CancelGoverned with reason = "too early", approvalCids = [c1]
+  Some _agr <- queryContractId f.operator f.agreementCid
   pure ()
 
--- | R-GOV-2 success: Cancel at threshold archives the agreement cleanly.
--- Controllers: Gov1, Gov2, Gov3. Threshold = 2. Gov1 + Gov2 cancel-approve.
+-- | R-GOV-2 cancel at threshold archives the agreement.
 testGovernedCancelAtThreshold : Script ()
 testGovernedCancelAtThreshold = do
-  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
-  g1 <- allocateParty "Gov1"
-  g2 <- allocateParty "Gov2"
-  g3 <- allocateParty "Gov3"
-  factory <- submit operator do
-    createCmd GovernanceFactory with operator
-  govCid <- submit operator do
-    exerciseCmd factory OpenGovernedSettlement with
-      agreementCid
-      governors = [g1, g2, g3]
-      threshold = 2
-      regulator
-  c1 <- submitMulti [operator, g1] [] do
-    exerciseCmd govCid ApproveCancelGoverned with governor = g1
-  c2 <- submitMulti [operator, g2] [] do
-    exerciseCmd c1 ApproveCancelGoverned with governor = g2
-  submit operator do
-    exerciseCmd c2 CancelGoverned with reason = "pool consensus cancel"
-  None <- queryContractId operator agreementCid
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  c1 <- submit f.g1 do
+    exerciseCmd govCid ApproveCancelGoverned with governor = f.g1
+  c2 <- submit f.g2 do
+    exerciseCmd govCid ApproveCancelGoverned with governor = f.g2
+  submit f.operator do
+    exerciseCmd govCid CancelGoverned with reason = "pool consensus cancel", approvalCids = [c1, c2]
+  None <- queryContractId f.operator f.agreementCid
   pure ()
 
--- | Institutional Safety: Emergency Veto by authorized governor
+-- | Reviewer #4: a single governor's veto archives the agreement, so the
+-- parties can no longer settle it by any path.
 testEmergencyVeto : Script ()
 testEmergencyVeto = do
-  (operator, _alice, _bob, regulator, agreementCid, _legs) <- setupSwap
-  g1 <- allocateParty "Gov1"
-  g2 <- allocateParty "Gov2"
-  factory <- submit operator do
-    createCmd GovernanceFactory with operator
-  govCid <- submit operator do
-    exerciseCmd factory OpenGovernedSettlement with
-      agreementCid
-      governors = [g1, g2]
-      threshold = 2
-      regulator
-  submitMulti [operator, g1] [] do
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  a1 <- approve govCid f.g1
+  a2 <- approve govCid f.g2
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  submit f.g3 do
     exerciseCmd govCid EmergencyVeto with
-      governor = g1
+      governor = f.g3
       reason = "Malicious counterparty detected"
+  None <- queryContractId f.operator f.agreementCid
+  -- Even with two approvals, nothing can settle any more.
+  submitMultiMustFail [f.operator, f.alice, f.bob] [] do
+    exerciseCmd f.agreementCid SettleGoverned with
+      regulator = f.regulator
+      allocationCids = allocs
+      approvalCids = [a1, a2]
+      breakerCid = f.breakerCid
   pure ()
 
--- | Institutional Safety: Circuit Breaker emergency halt and resume
+-- | Reviewer #4: a halted breaker blocks governed settlement even at threshold.
 testCircuitBreaker : Script ()
 testCircuitBreaker = do
-  operator <- allocateParty "Operator"
-  g1 <- allocateParty "Gov1"
-  cbCid <- submit operator do
-    createCmd ProtocolCircuitBreaker with
-      operator
-      governors = Set.fromList [g1]
-      isHalted = False
-      haltReason = None
-  cbHaltedCid <- submitMulti [operator, g1] [] do
-    exerciseCmd cbCid TriggerEmergencyHalt with
-      governor = g1
+  f <- setupGovernedSwap
+  govCid <- openGoverned f
+  a1 <- approve govCid f.g1
+  a2 <- approve govCid f.g2
+  allocs <- mapA (allocateFromLeg f.operator f.agreementCid) f.legs
+  halted <- submit f.g1 do
+    exerciseCmd f.breakerCid TriggerEmergencyHalt with
+      governor = f.g1
       reason = "Oracle anomaly"
-  cbResumedCid <- submitMulti [operator, g1] [] do
-    exerciseCmd cbHaltedCid ResumeProtocol with
-      governor = g1
-  Some resumed <- queryContractId operator cbResumedCid
-  assertMsg "circuit breaker must be resumed" (not resumed.isHalted)
+  r <- trySubmitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd govCid ExecuteGoverned with
+      allocationCids = allocs
+      approvalCids = [a1, a2]
+      breakerCid = halted
+  expectFailureContaining "circuit breaker: settlement halted" r
+  resumed <- submitMulti [f.operator, f.g1] [] do
+    exerciseCmd halted ResumeProtocol with governor = f.g1
+  Some b <- queryContractId f.operator resumed
+  assertMsg "circuit breaker must be resumed" (not b.isHalted)
+  _ <- submitMulti [f.operator, f.alice, f.bob] [] do
+    exerciseCmd govCid ExecuteGoverned with
+      allocationCids = allocs
+      approvalCids = [a1, a2]
+      breakerCid = resumed
   pure ()

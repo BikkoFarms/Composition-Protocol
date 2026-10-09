@@ -1,6 +1,6 @@
 # Design system — Lattice
 
-Settleflow UI follows the **Lattice** style reference: botanical field journal on warm parchment.
+Settle Flow UI follows the **Lattice** style reference: botanical field journal on warm parchment.
 
 **Locked direction:** Parchment canvas `#f7f6f2` · Forest Ink `#001f1f` primary text/CTA · pastel specimen cards (mint / lime / lavender) · DM Sans as Matter substitute · 29px pill buttons · soft forest-tinted elevation.
 

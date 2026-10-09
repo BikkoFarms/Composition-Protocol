@@ -3,20 +3,23 @@
 -- Named controllers (LocalNet / Script fixtures):
 --   Gov1, Gov2, Gov3  — BitSafe contribution-pool governors
 -- Threshold (LocalNet demos):
---   threshold = 2     — 2-of-3 must co-sign before ExecuteGoverned or CancelGoverned
+--   threshold = 2     — 2-of-3 must approve before ExecuteGoverned or CancelGoverned
 --
--- Settlement MUST NOT execute below the threshold of named controllers and
--- MUST succeed once the threshold co-signs. Same gate applies to cancel.
--- Permissioning beyond stock Canton options: named M-of-N execute/cancel set.
+-- What the ledger enforces:
+--   * Approvals are GovernorApproval contracts signed by the governor alone —
+--     the operator cannot create one on a governor's behalf.
+--   * A governed WorkflowAgreement can only settle via SettleGoverned, which
+--     counts distinct signed approvals (plain Settle is refused).
+--   * Any single governor can veto: the agreement is archived, nothing can settle.
+--   * Every settle path checks the ProtocolCircuitBreaker (see Composition.daml).
 module Governance where
 
 import Composition
 import DA.Set (Set)
 import qualified DA.Set as Set
 
--- | Gates Settle / Cancel behind an M-of-N approval set of named governors.
--- Controllers who may approve execute or cancel: exactly the `governors` set
--- (e.g. Gov1, Gov2, Gov3). Operator co-signs Approve* / Execute / Cancel.
+-- | Coordinates one governed agreement. Gives the governors a contract they can
+-- act on (approve / veto); the threshold itself is enforced on the agreement.
 template GovernedSettlement
   with
     operator : Party
@@ -24,8 +27,6 @@ template GovernedSettlement
     settlementParties : Set Party
     governors : Set Party
     threshold : Int
-    approvals : Set Party
-    cancelApprovals : Set Party
     regulator : Party
   where
     signatory operator
@@ -35,81 +36,80 @@ template GovernedSettlement
       && threshold <= Set.size governors
       && Set.size governors >= 1
 
-    -- | One named governor co-signs toward the execute threshold.
-    -- Controllers: operator + that governor (must be ∈ governors).
-    choice ApproveGoverned : ContractId GovernedSettlement
+    -- | A governor signs an approval to settle. Controller is the governor
+    -- alone, so only that governor can produce its approval.
+    nonconsuming choice ApproveGoverned : ContractId GovernorApproval
       with
         governor : Party
-      controller operator, governor
+      controller governor
       do
         assertMsg "not a named governor" (Set.member governor governors)
-        assertMsg "already approved" (not (Set.member governor approvals))
-        create GovernedSettlement with
+        create GovernorApproval with
           operator
+          governor
           agreementCid
-          settlementParties
-          governors
-          threshold
-          approvals = Set.insert governor approvals
-          cancelApprovals
-          regulator
+          action = ApproveSettlement
 
-    -- | R-GOV-1 execute: rejects when |approvals| < threshold (e.g. 1 < 2).
-    -- Controllers: operator + all settlement parties (nested SettleWithRegulator auth).
-    -- Succeeds only once threshold co-sign is met (e.g. Gov1 + Gov2 of {Gov1,Gov2,Gov3}).
+    -- | R-GOV-1: rejects unless >= threshold distinct governors signed approvals
+    -- (checked by WorkflowAgreement.SettleGoverned). R-GOV-2: settles at threshold.
     choice ExecuteGoverned : ContractId SettlementReceipt
       with
         allocationCids : [ContractId LegAllocation]
+        approvalCids : [ContractId GovernorApproval]
+        breakerCid : ContractId ProtocolCircuitBreaker
       controller operator, Set.toList settlementParties
       do
-        assertMsg "below threshold — governed action must not execute"
-          (Set.size approvals >= threshold)
-        exercise agreementCid SettleWithRegulator with
+        exercise agreementCid SettleGoverned with
           regulator
           allocationCids
+          approvalCids
+          breakerCid
 
-    -- | One named governor co-signs toward the cancel threshold (same M-of-N set).
-    choice ApproveCancelGoverned : ContractId GovernedSettlement
+    -- | A governor signs an approval to cancel (same M-of-N set).
+    nonconsuming choice ApproveCancelGoverned : ContractId GovernorApproval
       with
         governor : Party
-      controller operator, governor
+      controller governor
       do
         assertMsg "not a named governor" (Set.member governor governors)
-        assertMsg "already approved cancel" (not (Set.member governor cancelApprovals))
-        create GovernedSettlement with
+        create GovernorApproval with
           operator
+          governor
           agreementCid
-          settlementParties
-          governors
-          threshold
-          approvals
-          cancelApprovals = Set.insert governor cancelApprovals
-          regulator
+          action = ApproveCancel
 
-    -- | R-GOV-2 cancel: MUST NOT cancel below threshold; MUST cancel once met.
-    -- Controllers: operator. Gate: |cancelApprovals| >= threshold (same 2-of-3).
+    -- | Cancel needs >= threshold distinct governor-signed cancel approvals.
     choice CancelGoverned : ()
       with
         reason : Text
+        approvalCids : [ContractId GovernorApproval]
       controller operator
       do
-        assertMsg "below threshold — governed cancel must not execute"
-          (Set.size cancelApprovals >= threshold)
+        agr <- fetch agreementCid
+        case agr.governance of
+          None -> abort "agreement is not governed"
+          Some terms -> do
+            n <- countApprovals agreementCid terms ApproveCancel approvalCids
+            assertMsg
+              ("below threshold: " <> show n <> "/" <> show terms.threshold <>
+                " cancel approvals — governed cancel must not execute")
+              (n >= terms.threshold)
         exercise agreementCid CancelAgreement with reason
-        pure ()
 
-    -- | Institutional Emergency Veto: any single named governor aborts the deal
-    -- (BitSafe safety valve; distinct from M-of-N CancelGoverned).
+    -- | Emergency veto: any single named governor stops the deal. The agreement
+    -- is archived, so neither the parties nor the operator can still settle it.
     choice EmergencyVeto : ()
       with
         governor : Party
         reason : Text
-      controller operator, governor
+      controller governor
       do
         assertMsg "not a named governor" (Set.member governor governors)
-        pure ()
+        exercise agreementCid CancelAgreement with
+          reason = "Emergency veto by governor: " <> reason
 
--- | Factory: wrap an agreement in governed settlement control.
+-- | Factory: wrap a governed agreement in a GovernedSettlement coordinator.
+-- Governors and threshold come from the agreement itself (agreed at proposal).
 template GovernanceFactory
   with
     operator : Party
@@ -119,53 +119,17 @@ template GovernanceFactory
     nonconsuming choice OpenGovernedSettlement : ContractId GovernedSettlement
       with
         agreementCid : ContractId WorkflowAgreement
-        governors : [Party]
-        threshold : Int
         regulator : Party
       controller operator
       do
-        let govSet = Set.fromList governors
-        assertMsg "threshold out of range"
-          (threshold >= 1 && threshold <= Set.size govSet)
         agr <- fetch agreementCid
-        create GovernedSettlement with
-          operator
-          agreementCid
-          settlementParties = agr.parties
-          governors = govSet
-          threshold
-          approvals = Set.empty
-          cancelApprovals = Set.empty
-          regulator
-
--- | Institutional Safety: Protocol Circuit Breaker for emergency halts.
-template ProtocolCircuitBreaker
-  with
-    operator : Party
-    governors : Set Party
-    isHalted : Bool
-    haltReason : Optional Text
-  where
-    signatory operator
-    observer Set.toList governors
-
-    choice TriggerEmergencyHalt : ContractId ProtocolCircuitBreaker
-      with
-        governor : Party
-        reason : Text
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        create this with
-          isHalted = True
-          haltReason = Some reason
-
-    choice ResumeProtocol : ContractId ProtocolCircuitBreaker
-      with
-        governor : Party
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        create this with
-          isHalted = False
-          haltReason = None
+        case agr.governance of
+          None -> abort "agreement is not governed: nothing to open"
+          Some terms ->
+            create GovernedSettlement with
+              operator
+              agreementCid
+              settlementParties = agr.parties
+              governors = Set.fromList terms.governors
+              threshold = terms.threshold
+              regulator

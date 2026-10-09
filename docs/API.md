@@ -1,6 +1,6 @@
-# Settleflow — REST API Reference & Integration Guide
+# Settle Flow — REST API Reference & Integration Guide
 
-The Settleflow backend exposes a high-performance Express REST API on port `:4000` (configurable via `PORT` environment variable). The API operates in **dual-mode**:
+The Settle Flow backend exposes a high-performance Express REST API on port `:4000` (configurable via `PORT` environment variable). The API operates in **dual-mode**:
 1. **Live Ledger Mode (`mode: "ledger"`):** Dispatches commands directly to Canton JSON Ledger API v2 (`:7575`) with Keycloak OIDC token injection.
 2. **Demo Mode (`mode: "demo"`):** Runs an in-memory simulation engine (`demoStore`) faithfully mimicking Canton party ACS visibility and atomicity rules.
 

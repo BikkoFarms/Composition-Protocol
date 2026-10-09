@@ -224,6 +224,7 @@ export async function runLedgerE2E(ledger: LedgerClient, parties: PartyMap) {
       legs,
       description: "DevNet E2E 3-party DvP",
       expiresAt: farDeadline,
+      governance: null, // ungoverned trade; governed trades settle via SettleGoverned
     },
   );
   const proposalCid = extractContractIds(proposeRes).at(-1)!;
@@ -281,13 +282,24 @@ export async function runLedgerE2E(ledger: LedgerClient, parties: PartyMap) {
     allocCids.push(extractContractIds(a).at(-1)!);
   }
 
+  // Every settle path must present a live circuit breaker. It is co-signed by the
+  // operator and its governors (here the regulator acts as the safety governor),
+  // so the operator alone cannot mint a fresh "not halted" breaker.
+  const breakerRes = await ledger.create([operator, regulator], "Composition", "ProtocolCircuitBreaker", {
+    operator,
+    governors: [regulator],
+    isHalted: false,
+    haltReason: null,
+  });
+  const breakerCid = extractContractIds(breakerRes)[0];
+
   const settleRes = await ledger.exercise(
     [operator, alice, bob, oracle],
     "Composition",
     "WorkflowAgreement",
     agreementCid,
     "SettleWithRegulator",
-    { regulator, allocationCids: allocCids },
+    { regulator, allocationCids: allocCids, breakerCid },
   );
   const receiptCid = extractContractIds(settleRes).at(-1)!;
   const updateId = extractUpdateId(settleRes);
@@ -309,6 +321,7 @@ export async function runLedgerE2E(ledger: LedgerClient, parties: PartyMap) {
       agreementCid,
       allocationCids: allocCids,
       receiptCid,
+      breakerCid,
       minted: { cbtc, usdc, ceth },
     },
     steps: {

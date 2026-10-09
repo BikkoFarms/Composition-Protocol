@@ -1,6 +1,6 @@
 # Daml SDK setup (Windows)
 
-Settleflow targets **Daml SDK 3.3.x** (`daml/daml.yaml`).
+Settle Flow targets **Daml SDK 3.3.x** (`daml/daml.yaml`).
 
 ## Install
 

@@ -13,8 +13,9 @@ export default function HomePage() {
           <p className="lede">
             A reusable Daml package for structured settlement on Canton. Pick a
             trade (cocoa, coffee, cashew, gold, shea, sesame, cotton or an FX
-            swap) and every leg settles in one atomic transaction. Each party
-            sees only its own leg. Auditors get a receipt, not the payloads.
+            swap) and every leg settles in one atomic transaction. Parties
+            outside the deal see nothing; auditors get a receipt, not the
+            payloads.
           </p>
           <div className="row" style={{ marginTop: 8 }}>
             <Link className="btn primary" href="/proposer">
@@ -31,7 +32,7 @@ export default function HomePage() {
             </div>
             <div>
               <p className="stat-label">Privacy</p>
-              <p className="stat-value">Per-leg ACS</p>
+              <p className="stat-value">Regulator-blind</p>
             </div>
             <div>
               <p className="stat-label">Governance</p>
@@ -178,9 +179,10 @@ export default function HomePage() {
           <article className="card">
             <h3 className="card-title">signatory + observer</h3>
             <p className="card-body">
-              Per-leg visibility comes from Canton&apos;s stakeholder model. We
-              do not bolt on a custom ZK circuit for every asset-type and privacy
-              config.
+              Who sees which contract comes from Canton&apos;s stakeholder
+              model: the regulator observes only the settlement receipt, and
+              parties outside the deal see nothing. No custom ZK circuit
+              needed.
             </p>
           </article>
           <article className="card">

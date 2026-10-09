@@ -270,7 +270,7 @@ export function CantonWalletManager() {
                         ? WALLETS.find((w) => w.id === connectedWallet)?.name
                         : "Direct Participant Session"}
                     </span>
-                    <span className="canton-active-status">● Synchronized</span>
+                    <span className="canton-active-status">● Demo identity</span>
                   </div>
                   <div className="canton-active-id-row">
                     <code>{currentCantonId}</code>
@@ -293,7 +293,7 @@ export function CantonWalletManager() {
                 </div>
                 <div className="canton-stat">
                   <span className="canton-stat-label">KYC / 5North ID</span>
-                  <span className="canton-stat-val text-success">✓ Cleared</span>
+                  <span className="canton-stat-val">Not integrated (demo)</span>
                 </div>
               </div>
             </div>
@@ -552,7 +552,7 @@ export function CantonWalletManager() {
                         <p>Direct HTTP/JSON &amp; gRPC synchronization layer for Settle Flow</p>
                       </div>
                       <span className={`canton-mode-pill ${runtimeMode}`}>
-                        {runtimeMode === "ledger" ? "Live Ledger Mode" : "High-Fidelity Engine"}
+                        {runtimeMode === "ledger" ? "Ledger mode" : "Demo mode (in-memory, no ledger)"}
                       </span>
                     </div>
 
@@ -572,12 +572,12 @@ export function CantonWalletManager() {
                       </div>
                       <div className="canton-field-row">
                         <span className="k">Daml Package ID</span>
-                        <code>composition-v1.0.0-f8e9a2c410b3</code>
+                        <code>{runtimeMode === "ledger" ? "set via DAML_PACKAGE_ID" : "not deployed (demo mode)"}</code>
                       </div>
                       <div className="canton-field-row">
                         <span className="k">Identity Verification</span>
-                        <span className="text-success">
-                          Five North ID (5N ID) Verified · KYC Tier 3 Multi-Sig
+                        <span>
+                          Five North ID (5N ID) — not integrated yet (roadmap)
                         </span>
                       </div>
                     </div>

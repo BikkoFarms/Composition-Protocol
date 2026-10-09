@@ -3,10 +3,18 @@
 --            WorkflowAgreement, LegAllocation, SettlementReceipt.
 -- Lifecycle: Propose → Accept (tracker gates) → Allocate → Settle (atomic match) → Expire/Cancel.
 -- Privacy: SettlementReceipt observers include regulator; leg payloads stay off-receipt.
+--          Counterparties observe the agreement (and therefore every leg's terms);
+--          only the regulator is blinded.
+-- Governance: an agreement may carry GovernanceTerms (M-of-N). Governed agreements
+--          can ONLY settle via SettleGoverned, which counts GovernorApproval
+--          contracts signed by the governors themselves.
+-- Safety:  every settle path must present the live ProtocolCircuitBreaker and
+--          aborts while it is halted.
 module Composition where
 
 import ComposableAsset
 import DA.Foldable (forA_)
+import DA.Optional (isNone)
 import DA.Set (Set)
 import qualified DA.Set as Set
 
@@ -33,6 +41,108 @@ data LegSummary = LegSummary with
     instrumentId : Text
     status : LegStatus
   deriving (Eq, Show)
+
+-- | M-of-N settlement control carried on the proposal -> tracker -> agreement.
+-- When present, plain Settle / SettleWithRegulator are refused.
+data GovernanceTerms = GovernanceTerms with
+    governors : [Party]
+    threshold : Int
+  deriving (Eq, Show)
+
+validGovernance : Optional GovernanceTerms -> Bool
+validGovernance None = True
+validGovernance (Some t) =
+  let n = Set.size (Set.fromList t.governors)
+  in n >= 1 && t.threshold >= 1 && t.threshold <= n
+
+governorsOf : Optional GovernanceTerms -> [Party]
+governorsOf None = []
+governorsOf (Some t) = t.governors
+
+data GovernanceAction = ApproveSettlement | ApproveCancel
+  deriving (Eq, Show)
+
+-- | One governor's approval of one action on one agreement.
+-- The governor is the ONLY signatory, so the operator cannot create
+-- (forge) an approval on a governor's behalf.
+template GovernorApproval
+  with
+    operator : Party
+    governor : Party
+    agreementCid : ContractId WorkflowAgreement
+    action : GovernanceAction
+  where
+    signatory governor
+    observer operator
+
+    choice RevokeApproval : ()
+      controller governor
+      do pure ()
+
+-- | Count DISTINCT governors who signed `action` for `agreementCid`.
+-- Every approval must belong to this agreement, this action, and a named governor.
+countApprovals :
+    ContractId WorkflowAgreement -> GovernanceTerms -> GovernanceAction
+    -> [ContractId GovernorApproval] -> Update Int
+countApprovals agreementCid terms action approvalCids = do
+    approvals <- forA approvalCids fetch
+    forA_ approvals $ \a -> do
+      assertMsg "governance: approval is for a different agreement"
+        (a.agreementCid == agreementCid)
+      assertMsg "governance: approval is for a different action" (a.action == action)
+      assertMsg "governance: approval signed by a party that is not a named governor"
+        (a.governor `elem` terms.governors)
+    pure (Set.size (Set.fromList (map (.governor) approvals)))
+
+-- | Institutional safety: protocol-wide emergency halt.
+-- Co-signed by the operator AND every governor, so the operator cannot mint a
+-- fresh "not halted" breaker on its own. Any single governor may halt.
+template ProtocolCircuitBreaker
+  with
+    operator : Party
+    governors : Set Party
+    isHalted : Bool
+    haltReason : Optional Text
+  where
+    signatory operator, Set.toList governors
+    ensure not (Set.null governors)
+
+    choice TriggerEmergencyHalt : ContractId ProtocolCircuitBreaker
+      with
+        governor : Party
+        reason : Text
+      controller governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        create this with
+          isHalted = True
+          haltReason = Some reason
+
+    choice ResumeProtocol : ContractId ProtocolCircuitBreaker
+      with
+        governor : Party
+      controller operator, governor
+      do
+        assertMsg "not a named governor" (Set.member governor governors)
+        create this with
+          isHalted = False
+          haltReason = None
+
+-- | Every settle path calls this. Aborts while the breaker is halted.
+-- For governed agreements the breaker must be co-signed by exactly that
+-- agreement's governors (so a breaker the governors halted cannot be swapped out).
+assertNotHalted :
+    Party -> Optional GovernanceTerms -> ContractId ProtocolCircuitBreaker -> Update ()
+assertNotHalted operator governance breakerCid = do
+    b <- fetch breakerCid
+    assertMsg "circuit breaker: belongs to a different operator" (b.operator == operator)
+    case governance of
+      None -> pure ()
+      Some t -> assertMsg "circuit breaker: governors do not match the agreement's governors"
+        (b.governors == Set.fromList t.governors)
+    assertMsg
+      ("circuit breaker: settlement halted (" <> optional "no reason given" identity b.haltReason <> ")")
+      (not b.isHalted)
 
 -- | Posted pledge against one WorkflowAgreement leg. Consumed on successful Settle.
 -- Allocator (provider) may WithdrawAllocation before settlement.
@@ -76,6 +186,7 @@ template ComposableWorkflow
         legs : [LegSpec]
         description : Text
         expiresAt : Time
+        governance : Optional GovernanceTerms
       controller operator, proposer
       do
         assertMsg "at least two legs required" (length legs >= 2)
@@ -87,6 +198,7 @@ template ComposableWorkflow
           legs
           description
           expiresAt
+          governance
 
 -- | Proposed multi-leg deal. Accept builds/fills AcceptanceTracker;
 -- Reject / Expire / Cancel resolve stalled workflows cleanly.
@@ -98,12 +210,14 @@ template WorkflowProposal
     legs : [LegSpec]
     description : Text
     expiresAt : Time
+    governance : Optional GovernanceTerms
   where
     signatory proposer, operator
     observer counterparties
     ensure
       length legs >= 2
       && length counterparties >= 1
+      && validGovernance governance
 
     choice RejectProposal : ()
       with
@@ -145,6 +259,7 @@ template WorkflowProposal
               accepted = Set.fromList [acceptor]
               legs
               description
+              governance
           Some cid -> do
             exercise cid RecordAcceptance with acceptor
 
@@ -158,6 +273,7 @@ template AcceptanceTracker
     accepted : Set Party
     legs : [LegSpec]
     description : Text
+    governance : Optional GovernanceTerms
   where
     signatory operator
     observer Set.toList required
@@ -169,14 +285,7 @@ template AcceptanceTracker
       controller operator, acceptor
       do
         assertMsg "not a required party" (Set.member acceptor required)
-        create AcceptanceTracker with
-          operator
-          proposalCid
-          proposer
-          required
-          accepted = Set.insert acceptor accepted
-          legs
-          description
+        create this with accepted = Set.insert acceptor accepted
 
     -- | Only when every required party has accepted may the agreement be formed.
     choice FinalizeAgreement : ContractId WorkflowAgreement
@@ -184,12 +293,18 @@ template AcceptanceTracker
       do
         assertMsg "not all counterparties have accepted"
           (Set.isSubsetOf required accepted)
+        -- The proposal must still be live: a cancelled, rejected or expired
+        -- (archived) proposal cannot become an agreement.
+        proposal <- fetch proposalCid
+        now <- getTime
+        assertMsg "proposal expired — cannot form agreement" (now < proposal.expiresAt)
         create WorkflowAgreement with
           operator
           parties = Set.insert proposer required
           legs
           description
           acceptedBy = accepted
+          governance
 
 -- | Match one posted LegAllocation against one agreed LegSpec.
 -- ANY failed assert aborts the enclosing Settle transaction (no partial commit).
@@ -290,10 +405,13 @@ template WorkflowAgreement
     legs : [LegSpec]
     description : Text
     acceptedBy : Set Party
+    governance : Optional GovernanceTerms
   where
     signatory operator
-    observer Set.toList parties
-    ensure length legs >= 2
+    -- Every party sees every leg's terms; governors (if any) see them too so
+    -- they can judge what they approve. Only the regulator is blinded.
+    observer Set.toList parties ++ governorsOf governance
+    ensure length legs >= 2 && validGovernance governance
 
     -- | Provider posts a pledge that Settle will match field-by-field.
     nonconsuming choice AllocateLeg : ContractId LegAllocation
@@ -325,64 +443,51 @@ template WorkflowAgreement
           reference
           deadline
 
+    -- | Ungoverned settlement. Refused for governed agreements.
     choice Settle : ContractId SettlementReceipt
       with
         allocationCids : [ContractId LegAllocation]
+        breakerCid : ContractId ProtocolCircuitBreaker
       controller operator, Set.toList parties
       do
-        now <- getTime
-        matched <- fetchAllocationsByLeg legs allocationCids
-        -- R-ALLOC: every allocation must match agreed terms before any Transfer.
-        forA_ matched $ \(leg, _allocCid, alloc) -> do
-          assertMsg
-            ("allocation match failed: allocation not bound to this agreement on leg " <>
-              leg.legId)
-            (alloc.agreementCid == self)
-          matchAllocationToLeg now leg alloc
-        -- R-ATOM-1/2: consume pledges then Transfer; any failure aborts all.
-        forA_ matched $ \(leg, allocCid, _alloc) -> do
-          archive allocCid
-          exercise leg.assetCid Transfer with newOwner = leg.receiver
-        let summaries = map (\l -> LegSummary with
-              legId = l.legId
-              instrumentId = l.instrumentId
-              status = LegSettled) legs
-        create SettlementReceipt with
-          operator
-          participants = parties
-          settledAt = now
-          description
-          legSummaries = summaries
-          regulators = Set.empty
+        assertMsg "governed agreement: settle via SettleGoverned with governor approvals"
+          (isNone governance)
+        assertNotHalted operator governance breakerCid
+        runSettlement self this Set.empty allocationCids
 
+    -- | Ungoverned settlement with a blinded regulator receipt.
     choice SettleWithRegulator : ContractId SettlementReceipt
       with
         regulator : Party
         allocationCids : [ContractId LegAllocation]
+        breakerCid : ContractId ProtocolCircuitBreaker
       controller operator, Set.toList parties
       do
-        now <- getTime
-        matched <- fetchAllocationsByLeg legs allocationCids
-        forA_ matched $ \(leg, _allocCid, alloc) -> do
-          assertMsg
-            ("allocation match failed: allocation not bound to this agreement on leg " <>
-              leg.legId)
-            (alloc.agreementCid == self)
-          matchAllocationToLeg now leg alloc
-        forA_ matched $ \(leg, allocCid, _alloc) -> do
-          archive allocCid
-          exercise leg.assetCid Transfer with newOwner = leg.receiver
-        let summaries = map (\l -> LegSummary with
-              legId = l.legId
-              instrumentId = l.instrumentId
-              status = LegSettled) legs
-        create SettlementReceipt with
-          operator
-          participants = parties
-          settledAt = now
-          description
-          legSummaries = summaries
-          regulators = Set.fromList [regulator]
+        assertMsg "governed agreement: settle via SettleGoverned with governor approvals"
+          (isNone governance)
+        assertNotHalted operator governance breakerCid
+        runSettlement self this (Set.fromList [regulator]) allocationCids
+
+    -- | R-GOV: the ONLY settle path for governed agreements. Requires at least
+    -- `threshold` distinct GovernorApproval contracts, each signed by a governor.
+    choice SettleGoverned : ContractId SettlementReceipt
+      with
+        regulator : Party
+        allocationCids : [ContractId LegAllocation]
+        approvalCids : [ContractId GovernorApproval]
+        breakerCid : ContractId ProtocolCircuitBreaker
+      controller operator, Set.toList parties
+      do
+        case governance of
+          None -> abort "agreement is not governed: use Settle / SettleWithRegulator"
+          Some terms -> do
+            n <- countApprovals self terms ApproveSettlement approvalCids
+            assertMsg
+              ("below threshold: " <> show n <> "/" <> show terms.threshold <>
+                " governor approvals — governed settlement must not execute")
+              (n >= terms.threshold)
+            assertNotHalted operator governance breakerCid
+            runSettlement self this (Set.fromList [regulator]) allocationCids
 
     choice CancelAgreement : ()
       with
@@ -390,6 +495,36 @@ template WorkflowAgreement
       controller operator
       do
         pure ()
+
+-- | Match every allocation to its agreed leg, then consume pledges and transfer
+-- every asset in this one transaction (R-ATOM-1/2: any failure aborts all).
+runSettlement :
+    ContractId WorkflowAgreement -> WorkflowAgreement -> Set Party
+    -> [ContractId LegAllocation] -> Update (ContractId SettlementReceipt)
+runSettlement agreementCid agr regulators allocationCids = do
+    now <- getTime
+    matched <- fetchAllocationsByLeg agr.legs allocationCids
+    -- R-ALLOC: every allocation must match agreed terms before any Transfer.
+    forA_ matched $ \(leg, _allocCid, alloc) -> do
+      assertMsg
+        ("allocation match failed: allocation not bound to this agreement on leg " <>
+          leg.legId)
+        (alloc.agreementCid == agreementCid)
+      matchAllocationToLeg now leg alloc
+    forA_ matched $ \(leg, allocCid, _alloc) -> do
+      archive allocCid
+      exercise leg.assetCid Transfer with newOwner = leg.receiver
+    let summaries = map (\l -> LegSummary with
+          legId = l.legId
+          instrumentId = l.instrumentId
+          status = LegSettled) agr.legs
+    create SettlementReceipt with
+      operator = agr.operator
+      participants = agr.parties
+      settledAt = now
+      description = agr.description
+      legSummaries = summaries
+      regulators
 
 -- | Proof settlement occurred.
 -- signatory: operator

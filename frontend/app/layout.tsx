@@ -23,8 +23,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="en">
       <body>
         <div className="announce">
-          Live on Canton · Settle Flow · Cocoa, coffee, cashew, gold, shea,
-          sesame, cotton &amp; FX trades
+          Settle Flow · Demo mode: an in-memory engine mirroring the tested
+          Daml contracts · Cocoa, coffee, cashew, gold, shea, sesame, cotton
+          &amp; FX trades
           {" · "}
           <Link href="/proposer">Propose a trade →</Link>
         </div>

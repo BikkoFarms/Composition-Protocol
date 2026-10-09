@@ -1,6 +1,6 @@
-# Settleflow — Protocol Interface (PI) & Daml Specification
+# Settle Flow — Protocol Interface (PI) & Daml Specification
 
-The **Settleflow** is a native, reusable smart contract primitive on Canton that provides **atomic, private, multi-asset settlement**. This document specifies the Protocol Interface (PI), Daml contract schemas, Canton participant integration patterns, and cryptographic privacy guarantees.
+The **Settle Flow** is a native, reusable smart contract primitive on Canton that provides **atomic, private, multi-asset settlement**. This document specifies the Protocol Interface (PI), Daml contract schemas, Canton participant integration patterns, and cryptographic privacy guarantees.
 
 ---
 
@@ -10,7 +10,7 @@ The **Settleflow** is a native, reusable smart contract primitive on Canton that
 | :--- | :--- | :--- |
 | **R-ATOM-1** | Atomicity | All transfer legs execute within a single Daml transaction. If any leg fails, the entire transaction aborts. |
 | **R-ATOM-2** | Revert Integrity | Aborted transactions produce zero state changes; no escrow locks or partial transfers exist on ledger. |
-| **R-PRIV-1** | Per-Leg Privacy | Transferred asset tokens are only disclosed to the specific leg provider and receiver. |
+| **R-PRIV-1** | Token visibility | Token contracts are visible only to their owner and issuer. Note: every counterparty observes the agreement, so all leg *terms* are visible to all parties on the deal; only the regulator is blinded. |
 | **R-PRIV-2** | Scoped Audit | Regulators observe `SettlementReceipt` metadata and leg statuses, but never underlying asset contract payloads. |
 | **R-PRIV-3** | Money-Shot Invariant | In audit queries, the regulator Active Contract Set (ACS) has `visibleTokens: []`. |
 | **R-GOV-1** | Governed Safety | Governed deals strictly reject execution when approved signatures are strictly less than threshold $M$. |
@@ -79,18 +79,18 @@ data LegSpec = LegSpec with
 
 ```mermaid
 stateDiagram-v2
-    [*] --> CompositionProposal: Proposer submits deal
-    CompositionProposal --> AcceptanceTracker: Counterparty accepts
+    [*] --> WorkflowProposal: Proposer submits deal
+    WorkflowProposal --> AcceptanceTracker: Counterparty accepts
     AcceptanceTracker --> AcceptanceTracker: Remaining counterparties co-sign
-    AcceptanceTracker --> CompositionAgreement: FinalizeAgreement (All signed)
-    CompositionAgreement --> GovernedSettlement: If BitSafe Governance required
+    AcceptanceTracker --> WorkflowAgreement: FinalizeAgreement (All signed)
+    WorkflowAgreement --> GovernedSettlement: If BitSafe Governance required
     GovernedSettlement --> GovernedSettlement: Governors sign (M-of-N)
     GovernedSettlement --> SettlementReceipt: ExecuteGoverned (Threshold met)
-    CompositionAgreement --> SettlementReceipt: Atomic Settle (Single Tx)
+    WorkflowAgreement --> SettlementReceipt: Atomic Settle (Single Tx)
     SettlementReceipt --> [*]
 ```
 
-#### Template: `CompositionProposal`
+#### Template: `WorkflowProposal`
 Proposes an atomic composition among $N$ counterparties.
 - **Signatories:** `proposer`, `operator`
 - **Observers:** `counterparties`
@@ -103,7 +103,7 @@ Accumulates cryptographic co-signatures from each required counterparty.
 - **Choice:** `RecordAcceptance` (adds counterparty to `accepted` set).
 - **Choice:** `FinalizeAgreement` (requires `Set.isSubsetOf required accepted`).
 
-#### Template: `CompositionAgreement`
+#### Template: `WorkflowAgreement`
 Co-signed multi-lateral deal ready for atomic ledger execution.
 - **Signatories:** `operator`
 - **Observers:** `parties` (proposer + all counterparties)
@@ -138,91 +138,81 @@ Immutable proof of successful atomic execution.
 
 ---
 
-### 2.4 BitSafe M-of-N Governance (`Governance.daml`)
+### 2.4 BitSafe M-of-N Governance (`Composition.daml` + `Governance.daml`)
 
-For institutional or high-value settlements, settlement authority is gated behind an $M$-of-$N$ threshold multi-signature committee:
+For high-value settlements the proposal carries `GovernanceTerms` (governors, threshold), which flow into the `WorkflowAgreement`. What the ledger enforces:
+
+1. **Governance cannot be skipped.** A governed agreement refuses `Settle` and `SettleWithRegulator`; it can only settle through `SettleGoverned`.
+2. **Approvals cannot be forged.** Each approval is a `GovernorApproval` contract whose only signatory is the governor. `SettleGoverned` counts *distinct* governor-signed approvals for this agreement and this action, and rejects below the threshold.
+3. **Veto stops settlement.** `EmergencyVeto` (any single governor) archives the agreement.
+4. **Halt stops settlement.** Every settle path fetches the live `ProtocolCircuitBreaker` (co-signed by the operator and its governors) and aborts while it is halted. For governed deals, the breaker's governors must equal the deal's governors.
 
 ```daml
-template GovernedSettlement
+-- Composition.daml
+data GovernanceTerms = GovernanceTerms with
+    governors : [Party]
+    threshold : Int
+
+template GovernorApproval
   with
     operator : Party
-    agreementCid : ContractId CompositionAgreement
+    governor : Party
+    agreementCid : ContractId WorkflowAgreement
+    action : GovernanceAction          -- ApproveSettlement | ApproveCancel
+  where
+    signatory governor                 -- the operator cannot create one
+    observer operator
+
+-- on WorkflowAgreement (which carries `governance : Optional GovernanceTerms`)
+    choice SettleGoverned : ContractId SettlementReceipt
+      with
+        regulator : Party
+        allocationCids : [ContractId LegAllocation]
+        approvalCids : [ContractId GovernorApproval]
+        breakerCid : ContractId ProtocolCircuitBreaker
+      controller operator, Set.toList parties
+      do
+        case governance of
+          None -> abort "agreement is not governed: use Settle / SettleWithRegulator"
+          Some terms -> do
+            n <- countApprovals self terms ApproveSettlement approvalCids
+            assertMsg "below threshold ..." (n >= terms.threshold)
+            assertNotHalted operator governance breakerCid
+            runSettlement self this (Set.fromList [regulator]) allocationCids
+
+-- Governance.daml
+template GovernedSettlement      -- coordinator the governors act on
+  with
+    operator : Party
+    agreementCid : ContractId WorkflowAgreement
+    settlementParties : Set Party
     governors : Set Party
     threshold : Int
-    approvals : Set Party
     regulator : Party
   where
     signatory operator
-    observer Set.toList governors
-    ensure
-      threshold >= 1
-      && threshold <= Set.size governors
-      && Set.size governors >= 1
+    observer (Set.toList governors ++ Set.toList settlementParties)
 
-    choice ApproveGoverned : ContractId GovernedSettlement
-      with
-        governor : Party
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        assertMsg "already approved" (not (Set.member governor approvals))
-        create GovernedSettlement with
-          operator
-          agreementCid
-          governors
-          threshold
-          approvals = Set.insert governor approvals
-          regulator
+    nonconsuming choice ApproveGoverned : ContractId GovernorApproval
+      with governor : Party
+      controller governor                        -- governor alone
+      do create GovernorApproval with operator; governor; agreementCid; action = ApproveSettlement
 
     choice ExecuteGoverned : ContractId SettlementReceipt
-      controller operator
-      do
-        assertMsg "below threshold — governed action must not execute"
-          (Set.size approvals >= threshold)
-        exercise agreementCid SettleWithRegulator with regulator
+      with
+        allocationCids : [ContractId LegAllocation]
+        approvalCids : [ContractId GovernorApproval]
+        breakerCid : ContractId ProtocolCircuitBreaker
+      controller operator, Set.toList settlementParties
+      do exercise agreementCid SettleGoverned with regulator; allocationCids; approvalCids; breakerCid
 
-    -- | Institutional Emergency Veto: Allows named governor to abort an open deal
     choice EmergencyVeto : ()
-      with
-        governor : Party
-        reason : Text
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        pure ()
-
--- | Institutional Safety: Protocol Circuit Breaker for emergency halts
-template ProtocolCircuitBreaker
-  with
-    operator : Party
-    governors : Set Party
-    isHalted : Bool
-    haltReason : Optional Text
-  where
-    signatory operator
-    observer Set.toList governors
-
-    choice TriggerEmergencyHalt : ContractId ProtocolCircuitBreaker
-      with
-        governor : Party
-        reason : Text
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        create this with
-          isHalted = True
-          haltReason = Some reason
-
-    choice ResumeProtocol : ContractId ProtocolCircuitBreaker
-      with
-        governor : Party
-      controller operator, governor
-      do
-        assertMsg "not a named governor" (Set.member governor governors)
-        create this with
-          isHalted = False
-          haltReason = None
+      with governor : Party; reason : Text
+      controller governor
+      do exercise agreementCid CancelAgreement with reason   -- agreement archived
 ```
+
+Tests: `testGovernedBelowThreshold`, `testGovernedAtThreshold`, `testGovernedCannotSkipGovernance`, `testOperatorCannotForgeApproval`, `testDuplicateApprovalCountsOnce`, `testGovernedCancelBelowThreshold`, `testGovernedCancelAtThreshold`, `testEmergencyVeto`, `testCircuitBreaker`, `testHaltedBreakerBlocksSettle`.
 
 ---
 
@@ -250,7 +240,7 @@ Authorization: Bearer <Keycloak_JWT_Token>
           "templateId": {
             "packageId": "<composition_dar_package_id>",
             "moduleName": "Composition",
-            "entityName": "CompositionAgreement"
+            "entityName": "WorkflowAgreement"
           },
           "contractId": "<agreement_contract_id>",
           "choice": "SettleWithRegulator",

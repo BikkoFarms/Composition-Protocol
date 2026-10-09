@@ -6,6 +6,7 @@ import ComposableAsset
 import Composition
 import MockToken
 import Daml.Script
+import qualified DA.Set as Set
 import DA.Date (datetime, Month(..))
 import DA.Time (addRelTime, hours)
 import DA.Text (isInfixOf)
@@ -77,12 +78,23 @@ proposeViaFactory operator proposer counterparties legs description expiresAt = 
       legs
       description
       expiresAt
+      governance = None
 
 proposeDefault :
   Party -> Party -> [Party] -> [LegSpec] -> Text ->
   Script (ContractId WorkflowProposal)
 proposeDefault operator proposer counterparties legs description =
   proposeViaFactory operator proposer counterparties legs description farDeadline
+
+-- | Live, not-halted circuit breaker every settle path must present.
+freshBreaker : Party -> Script (ContractId ProtocolCircuitBreaker)
+freshBreaker operator =
+  submit operator do
+    createCmd ProtocolCircuitBreaker with
+      operator
+      governors = Set.fromList [operator]
+      isHalted = False
+      haltReason = None
 
 -- | Provider + operator post an allocation that mirrors the agreed LegSpec.
 allocateFromLeg :
@@ -125,8 +137,9 @@ testAtomicSwap = do
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
   allocs <- allocateAll operator agreementCid legs
+  breaker <- freshBreaker operator
   receiptCid <- submitMulti [operator, alice, bob] [] do
-    exerciseCmd agreementCid Settle with allocationCids = allocs
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = breaker
   Some receipt <- queryContractId operator receiptCid
   assertMsg "both legs settled" (length receipt.legSummaries == 2)
   pure ()
@@ -149,8 +162,9 @@ testAtomicRevert = do
   agreementCid <- submit operator do
     exerciseCmd trackerCid FinalizeAgreement
   allocs <- allocateAll operator agreementCid legs
+  breaker <- freshBreaker operator
   submitMultiMustFail [operator, alice, bob] [] do
-    exerciseCmd agreementCid Settle with allocationCids = allocs
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = breaker
   Some tok <- queryContractId bob bobCbtc
   assertMsg "bob still holds CBTC after revert" (tok.instrumentId == "CBTC" && tok.amount == 1.0)
   pure ()
@@ -175,10 +189,12 @@ testAuditorCannotSeeLegs = do
   agreementCid <- submit operator do
     exerciseCmd tracker2 FinalizeAgreement
   allocs <- allocateAll operator agreementCid legs
+  breaker <- freshBreaker operator
   receiptCid <- submitMulti [operator, alice, bob, oracle] [] do
     exerciseCmd agreementCid SettleWithRegulator with
       regulator
       allocationCids = allocs
+      breakerCid = breaker
   regTokens <- query @MockToken regulator
   assertMsg "regulator visibleTokens must be []" (null regTokens)
   Some receipt <- queryContractId regulator receiptCid
@@ -282,8 +298,9 @@ testAllocHappyPath3PartyDvp = do
   agreementCid <- submit operator do
     exerciseCmd t2 FinalizeAgreement
   allocs <- allocateAll operator agreementCid legs
+  breaker <- freshBreaker operator
   receiptCid <- submitMulti [operator, alice, bob, oracle] [] do
-    exerciseCmd agreementCid Settle with allocationCids = allocs
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = breaker
   Some receipt <- queryContractId operator receiptCid
   assertMsg "3-party DvP settled" (length receipt.legSummaries == 3)
   -- No leftover allocations; assets moved.
@@ -313,8 +330,9 @@ testAllocPartialAllocation = do
     exerciseCmd t2 FinalizeAgreement
   -- Only allocate the first leg.
   onlyOne <- allocateFromLeg operator agreementCid (mkLeg "l1" "CBTC" 2.0 alice bob cbtc "partial-l1")
+  breaker <- freshBreaker operator
   partialResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
-    exerciseCmd agreementCid Settle with allocationCids = [onlyOne]
+    exerciseCmd agreementCid Settle with allocationCids = [onlyOne], breakerCid = breaker
   _ <- expectRejectionContaining "allocation match failed: expected 3 allocations, got 1" partialResult
   -- Clean rejection: agreement still active; CBTC still with Alice.
   Some _agr <- queryContractId operator agreementCid
@@ -381,12 +399,14 @@ testAllocWithdrawnLeg = do
   -- Oracle withdraws the cETH allocation.
   submit oracle do
     exerciseCmd a3 WithdrawAllocation
+  breaker <- freshBreaker operator
   withdrawnResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
-    exerciseCmd agreementCid Settle with allocationCids = [a1, a2, a3]
+    exerciseCmd agreementCid Settle with allocationCids = [a1, a2, a3], breakerCid = breaker
   _ <- expectRejectionContaining "Could not find contract" withdrawnResult
   -- Also fails if the withdrawn CID is omitted (partial set).
+  breaker <- freshBreaker operator
   omittedResult <- trySubmitMulti [operator, alice, bob, oracle] [] do
-    exerciseCmd agreementCid Settle with allocationCids = [a1, a2]
+    exerciseCmd agreementCid Settle with allocationCids = [a1, a2], breakerCid = breaker
   _ <- expectRejectionContaining "allocation match failed: expected 3 allocations, got 2" omittedResult
   Some tok <- queryContractId oracle ceth
   assertMsg "withdrawn: oracle still holds cETH" (tok.amount == 1.0)
@@ -414,14 +434,106 @@ testAllocUnauthorizedExecutor = do
     exerciseCmd t2 FinalizeAgreement
   allocs <- allocateAll operator agreementCid legs
   -- Regulator cannot see/exercise the agreement (not a party) → ContractNotFound.
+  breaker <- freshBreaker operator
   unauthReg <- trySubmit regulator do
-    exerciseCmd agreementCid Settle with allocationCids = allocs
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = breaker
   _ <- expectRejectionContaining "Could not find contract" unauthReg
   -- Operator alone lacks the required party controllers of Settle.
+  breaker <- freshBreaker operator
   unauthOp <- trySubmit operator do
-    exerciseCmd agreementCid Settle with allocationCids = allocs
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = breaker
   _ <- expectRejectionContaining "Authorization failure" unauthOp
   Some tok <- queryContractId alice cbtc
   assertMsg "unauthorized: alice still holds CBTC" (tok.amount == 2.0)
   Some _agr <- queryContractId operator agreementCid
   pure ()
+
+---------------------------------------------------------------------------
+-- Reviewer-driven enforcement gates
+---------------------------------------------------------------------------
+
+-- | A cancelled proposal cannot become an agreement, even if a counterparty
+-- accepted before the cancel (the tracker survives the cancel).
+testCancelledProposalCannotFinalize : Script ()
+testCancelledProposalCannotFinalize = do
+  (operator, alice, bob, _oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 1.0
+  usdc <- mintToken operator bob "USDCx" 1000.0
+  let legs =
+        [ mkLeg "l1" "CBTC" 1.0 alice bob cbtc "cxl-l1"
+        , mkLeg "l2" "USDCx" 1000.0 bob alice usdc "cxl-l2"
+        ]
+  proposalCid <- proposeDefault operator alice [bob] legs "cancel after accept"
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  submit alice do
+    exerciseCmd proposalCid CancelProposal
+  submitMustFail operator do
+    exerciseCmd t1 FinalizeAgreement
+  agreements <- query @WorkflowAgreement operator
+  assertMsg "cancelled proposal: no agreement formed" (null agreements)
+  pure ()
+
+-- | An expired (but not yet archived) proposal cannot become an agreement.
+testExpiredProposalCannotFinalize : Script ()
+testExpiredProposalCannotFinalize = do
+  (operator, alice, bob, _oracle, _reg) <- allocateParties
+  cbtc <- mintToken operator alice "CBTC" 1.0
+  usdc <- mintToken operator bob "USDCx" 1000.0
+  now <- getTime
+  let legs =
+        [ mkLeg "l1" "CBTC" 1.0 alice bob cbtc "expf-l1"
+        , mkLeg "l2" "USDCx" 1000.0 bob alice usdc "expf-l2"
+        ]
+  proposalCid <- proposeViaFactory operator alice [bob] legs "expires before finalize"
+    (addRelTime now (hours 1))
+  t1 <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  passTime (hours 2)
+  r <- trySubmit operator do
+    exerciseCmd t1 FinalizeAgreement
+  _ <- expectRejectionContaining "proposal expired" r
+  pure ()
+
+-- | A halted circuit breaker blocks settlement on the ledger; resuming allows it.
+testHaltedBreakerBlocksSettle : Script ()
+testHaltedBreakerBlocksSettle = do
+  (operator, alice, bob, _oracle, _reg) <- allocateParties
+  g1 <- allocateParty "Gov1"
+  aliceUsd <- mintToken operator alice "USDCx" 100.0
+  bobCbtc <- mintToken operator bob "CBTC" 1.0
+  let legs =
+        [ mkLeg "cash" "USDCx" 100.0 alice bob aliceUsd "halt-cash"
+        , mkLeg "collateral" "CBTC" 1.0 bob alice bobCbtc "halt-cbtc"
+        ]
+  proposalCid <- proposeDefault operator alice [bob] legs "halt test"
+  trackerCid <- submitMulti [operator, bob] [] do
+    exerciseCmd proposalCid AcceptProposal with acceptor = bob, trackerCid = None
+  agreementCid <- submit operator do
+    exerciseCmd trackerCid FinalizeAgreement
+  allocs <- allocateAll operator agreementCid legs
+  breaker <- submitMulti [operator, g1] [] do
+    createCmd ProtocolCircuitBreaker with
+      operator
+      governors = Set.fromList [g1]
+      isHalted = False
+      haltReason = None
+  -- A single governor halts — no operator signature needed.
+  halted <- submit g1 do
+    exerciseCmd breaker TriggerEmergencyHalt with governor = g1, reason = "oracle anomaly"
+  r <- trySubmitMulti [operator, alice, bob] [] do
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = halted
+  _ <- expectRejectionContaining "circuit breaker: settlement halted" r
+  -- The operator cannot mint a fresh unhalted breaker without the governor.
+  submitMustFail operator do
+    createCmd ProtocolCircuitBreaker with
+      operator
+      governors = Set.fromList [g1]
+      isHalted = False
+      haltReason = None
+  resumed <- submitMulti [operator, g1] [] do
+    exerciseCmd halted ResumeProtocol with governor = g1
+  _ <- submitMulti [operator, alice, bob] [] do
+    exerciseCmd agreementCid Settle with allocationCids = allocs, breakerCid = resumed
+  pure ()
+

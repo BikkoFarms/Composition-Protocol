@@ -99,8 +99,9 @@ export default function ObserverPage() {
         <p className="lede">
           Pick a settled trade. On the left: what the lender&apos;s ledger view
           holds for it. On the right: what the regulator&apos;s holds — a
-          settlement receipt and no leg contents. That&apos;s Canton&apos;s
-          stakeholder model, not a UI filter.
+          settlement receipt and no leg contents. On a Canton ledger this is
+          enforced by the stakeholder model (Daml test
+          testAuditorCannotSeeLegs); this demo mirrors those rules in memory.
         </p>
       </div>
 
